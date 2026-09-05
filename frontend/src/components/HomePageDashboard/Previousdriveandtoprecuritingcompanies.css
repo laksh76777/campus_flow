@@ -1,0 +1,363 @@
+/* ============================= */
+/* PREVIOUS PLACEMENT DRIVES */
+/* ============================= */
+
+.previous-drives-section {
+    padding: 100px 20px;
+    background: #f8fafc;
+}
+
+.previous-drives-container {
+    max-width: 1340px;
+    margin: 0 auto;
+}
+
+.section-heading {
+    text-align: center;
+    margin-bottom: 55px;
+}
+
+.section-tag {
+    display: inline-block;
+    padding: 10px 20px;
+    border-radius: 30px;
+    background: #e8efff;
+    color: #315bb5;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    margin-bottom: 18px;
+}
+
+.section-heading h2 {
+    font-size: 48px;
+    color: #202b40;
+    margin-bottom: 15px;
+}
+
+.section-heading h2 span {
+    color: #3d63c8;
+}
+
+.section-heading p {
+    font-size: 18px;
+    color: #667085;
+    max-width: 650px;
+    margin: 0 auto;
+    line-height: 1.7;
+}
+
+.previous-drives-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 30px;
+}
+
+.previous-drive-card {
+    background: #ffffff;
+    border: 1px solid #dfe6f2;
+    border-radius: 24px;
+    padding: 32px;
+    transition: all 0.3s ease;
+    box-shadow: 0 10px 30px rgba(20, 40, 80, 0.05);
+}
+
+.previous-drive-card:hover {
+    transform: translateY(-8px);
+    border-color: #8fa8e8;
+    box-shadow: 0 20px 45px rgba(30, 60, 120, 0.12);
+}
+
+.previous-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 28px;
+}
+
+.previous-company-logo {
+    width: 64px;
+    height: 64px;
+    border-radius: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    background: linear-gradient(135deg,
+            #315bb5,
+            #5d82df);
+
+    color: white;
+    font-size: 28px;
+    font-weight: 700;
+}
+
+.completed-badge {
+    padding: 9px 14px;
+    border-radius: 20px;
+    background: #eaf8ef;
+    color: #23834a;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.previous-drive-card h3 {
+    font-size: 28px;
+    color: #202b40;
+    margin-bottom: 10px;
+}
+
+.previous-role {
+    color: #667085;
+    font-size: 16px;
+    min-height: 48px;
+    line-height: 1.5;
+}
+
+.previous-package {
+    display: inline-block;
+    margin-top: 24px;
+    padding: 14px 20px;
+    border-radius: 14px;
+
+    background: #edf3ff;
+    color: #315bb5;
+
+    font-size: 22px;
+    font-weight: 700;
+}
+
+.previous-divider {
+    height: 1px;
+    background: #e5eaf2;
+    margin: 28px 0 20px;
+}
+
+.previous-info {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.previous-info p {
+    margin: 0;
+    color: #667085;
+    font-size: 15px;
+
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.previous-info span {
+    font-size: 16px;
+}
+
+
+/* ============================= */
+/* TABLET */
+/* ============================= */
+
+@media (max-width: 900px) {
+    .previous-drives-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .section-heading h2 {
+        font-size: 40px;
+    }
+}
+
+
+/* ============================= */
+/* MOBILE */
+/* ============================= */
+
+@media (max-width: 600px) {
+    .previous-drives-section {
+        padding: 75px 16px;
+    }
+
+    .previous-drives-grid {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+
+    .section-heading {
+        margin-bottom: 40px;
+    }
+
+    .section-heading h2 {
+        font-size: 34px;
+        line-height: 1.2;
+    }
+
+    .section-heading p {
+        font-size: 16px;
+    }
+
+    .previous-drive-card {
+        padding: 25px;
+    }
+
+    .previous-drive-card h3 {
+        font-size: 25px;
+    }
+}
+
+/* ============================= */
+/* TOP RECRUITING COMPANIES */
+/* ============================= */
+
+.recruiting-companies-section {
+    padding: 100px 20px;
+    background: #ffffff;
+}
+
+.recruiting-companies-container {
+    max-width: 1340px;
+    margin: 0 auto;
+}
+
+.companies-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 22px;
+}
+
+.company-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+
+    padding: 22px;
+    background: #ffffff;
+
+    border: 1px solid #dfe6f2;
+    border-radius: 18px;
+
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.company-card:hover {
+    transform: translateY(-5px);
+    border-color: #8fa8e8;
+
+    box-shadow: 0 15px 35px rgba(30, 60, 120, 0.1);
+}
+
+.company-icon {
+    width: 55px;
+    height: 55px;
+
+    flex-shrink: 0;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    border-radius: 16px;
+
+    background: linear-gradient(135deg,
+            #315bb5,
+            #5d82df);
+
+    color: white;
+    font-size: 23px;
+    font-weight: 700;
+}
+
+.company-details h3 {
+    margin: 0 0 5px;
+    font-size: 19px;
+    color: #202b40;
+}
+
+.company-details p {
+    margin: 0;
+    font-size: 14px;
+    color: #667085;
+}
+
+.companies-bottom {
+    margin-top: 50px;
+    text-align: center;
+}
+
+.companies-bottom p {
+    color: #667085;
+    font-size: 16px;
+    margin-bottom: 20px;
+}
+
+.explore-companies-btn {
+    border: none;
+    padding: 15px 28px;
+
+    border-radius: 12px;
+
+    background: #315bb5;
+    color: white;
+
+    font-size: 15px;
+    font-weight: 600;
+
+    cursor: pointer;
+
+    transition: all 0.3s ease;
+}
+
+.explore-companies-btn:hover {
+    background: #25499a;
+    transform: translateY(-2px);
+
+    box-shadow: 0 10px 25px rgba(49, 91, 181, 0.25);
+}
+
+
+/* ============================= */
+/* TABLET */
+/* ============================= */
+
+@media (max-width: 1000px) {
+    .companies-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+
+/* ============================= */
+/* MOBILE */
+/* ============================= */
+
+@media (max-width: 600px) {
+
+    .recruiting-companies-section {
+        padding: 75px 16px;
+    }
+
+    .companies-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+
+    .company-card {
+        padding: 18px;
+    }
+
+    .company-icon {
+        width: 50px;
+        height: 50px;
+        font-size: 21px;
+    }
+
+    .company-details h3 {
+        font-size: 18px;
+    }
+
+    .explore-companies-btn {
+        width: 100%;
+        padding: 16px;
+    }
+}
