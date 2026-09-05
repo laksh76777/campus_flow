@@ -69,10 +69,8 @@ const createCompany = asyncHandler(async (req, res) => {
 });
 
 const getAllCompanies = asyncHandler(async (req, res) => {
-
-    const companies = await Company.find({
-        isActive: true
-    }).sort({
+    const filter = req.user?.role === "admin" ? {} : { isActive: true };
+    const companies = await Company.find(filter).sort({
         createdAt: -1
     });
 

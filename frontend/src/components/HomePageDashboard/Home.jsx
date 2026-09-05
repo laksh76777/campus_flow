@@ -11,8 +11,11 @@ import {
   ShieldCheck,
   Calendar,
 } from "lucide-react";
+import { useAuth } from "../../context/authContextDef";
 
 export default function Home() {
+  const { isAuthenticated, userRole } = useAuth();
+
   return (
     <section id="home" className="relative overflow-hidden pt-8 pb-16 lg:pt-14 lg:pb-24">
       {/* Background ambient lighting */}
@@ -58,21 +61,43 @@ export default function Home() {
                 <ArrowRight className="h-4 w-4" />
               </a>
 
-              <Link
-                to="/student-dashboard"
-                className="flex items-center gap-2 rounded-2xl border border-slate-300/80 bg-white px-6 py-3.5 text-sm font-bold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-50 hover:text-slate-900"
-              >
-                <GraduationCap className="h-4 w-4 text-blue-600" />
-                <span>Student Portal</span>
-              </Link>
+              {isAuthenticated ? (
+                userRole === "admin" ? (
+                  <Link
+                    to="/admin-dashboard"
+                    className="flex items-center gap-2 rounded-2xl border border-slate-300/80 bg-white px-6 py-3.5 text-sm font-bold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-50 hover:text-slate-900"
+                  >
+                    <ShieldCheck className="h-4 w-4 text-indigo-600" />
+                    <span>Admin Console</span>
+                  </Link>
+                ) : (
+                  <Link
+                    to="/student-dashboard"
+                    className="flex items-center gap-2 rounded-2xl border border-slate-300/80 bg-white px-6 py-3.5 text-sm font-bold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-50 hover:text-slate-900"
+                  >
+                    <GraduationCap className="h-4 w-4 text-blue-600" />
+                    <span>My Student Dashboard</span>
+                  </Link>
+                )
+              ) : (
+                <>
+                  <Link
+                    to="/login?role=student&redirect=/student-dashboard"
+                    className="flex items-center gap-2 rounded-2xl border border-slate-300/80 bg-white px-6 py-3.5 text-sm font-bold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-50 hover:text-slate-900"
+                  >
+                    <GraduationCap className="h-4 w-4 text-blue-600" />
+                    <span>Student Portal</span>
+                  </Link>
 
-              <Link
-                to="/login"
-                className="flex items-center gap-1.5 rounded-2xl px-4 py-3.5 text-sm font-semibold text-slate-500 hover:text-slate-800 transition"
-              >
-                <ShieldCheck className="h-4 w-4 text-indigo-500" />
-                <span>Admin Login</span>
-              </Link>
+                  <Link
+                    to="/login?role=admin&redirect=/admin-dashboard"
+                    className="flex items-center gap-1.5 rounded-2xl px-4 py-3.5 text-sm font-semibold text-slate-500 hover:text-slate-800 transition"
+                  >
+                    <ShieldCheck className="h-4 w-4 text-indigo-500" />
+                    <span>Admin Login</span>
+                  </Link>
+                </>
+              )}
             </div>
 
             {/* Live Trust Metrics Ribbon */}

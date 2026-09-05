@@ -8,6 +8,7 @@ import {
   ArrowRight,
   Sparkles,
 } from "lucide-react";
+import { useAuth } from "../../context/authContextDef";
 
 const featuredDrives = [
   {
@@ -26,7 +27,7 @@ const featuredDrives = [
   {
     company: "Microsoft",
     initial: "M",
-    role: "Cloud Solution Architect",
+    role: "Cloud Solution Engineer",
     package: "₹18.5 LPA",
     location: "Hyderabad / Noida",
     type: "Full-Time",
@@ -34,7 +35,7 @@ const featuredDrives = [
     minCGPA: 7.0,
     status: "Active",
     deadline: "8 Days Left",
-    color: "from-emerald-600 to-teal-600",
+    color: "from-cyan-600 to-blue-600",
   },
   {
     company: "Amazon",
@@ -58,39 +59,46 @@ const featuredDrives = [
     type: "Full-Time",
     branches: ["CSE", "IT", "ECE"],
     minCGPA: 8.0,
-    status: "Active",
+    status: "Upcoming",
     deadline: "10 Days Left",
-    color: "from-indigo-600 to-purple-600",
+    color: "from-blue-700 to-indigo-800",
   },
   {
     company: "Goldman Sachs",
     initial: "G",
-    role: "Analyst - Engineering",
-    package: "₹26.0 LPA",
+    role: "Analyst – Technology",
+    package: "₹25.0 LPA",
     location: "Bengaluru",
     type: "Full-Time",
-    branches: ["CSE", "IT", "ECE", "EE"],
+    branches: ["CSE", "IT", "ECE", "EEE"],
+    minCGPA: 8.0,
+    status: "Upcoming",
+    deadline: "14 Days Left",
+    color: "from-slate-700 to-slate-900",
+  },
+  {
+    company: "Adobe",
+    initial: "A",
+    role: "Product Intern & FTE",
+    package: "₹21.0 LPA",
+    location: "Noida / Bengaluru",
+    type: "Full-Time",
+    branches: ["CSE", "IT"],
     minCGPA: 7.8,
     status: "Active",
     deadline: "6 Days Left",
-    color: "from-cyan-600 to-blue-700",
-  },
-  {
-    company: "Infosys",
-    initial: "I",
-    role: "Specialist Programmer",
-    package: "₹9.5 LPA",
-    location: "Pune / Mysuru",
-    type: "Full-Time",
-    branches: ["All Engineering"],
-    minCGPA: 6.5,
-    status: "Completed",
-    deadline: "48 Students Placed",
-    color: "from-slate-700 to-slate-900",
+    color: "from-rose-600 to-red-600",
   },
 ];
 
 export default function PreviousDrives() {
+  const { isAuthenticated, userRole } = useAuth();
+  const portalLink = !isAuthenticated
+    ? "/login?role=student&redirect=/student-dashboard"
+    : userRole === "admin"
+    ? "/admin-dashboard"
+    : "/student-dashboard";
+
   return (
     <section id="drives" className="bg-slate-50/75 py-16 sm:py-24 border-y border-slate-200/60">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -110,7 +118,7 @@ export default function PreviousDrives() {
           </div>
 
           <Link
-            to="/student-dashboard"
+            to={portalLink}
             className="inline-flex items-center gap-2 rounded-xl bg-white border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-700 shadow-xs hover:border-blue-300 hover:text-blue-600 transition self-start md:self-auto"
           >
             <span>View All in Student Portal</span>
@@ -189,7 +197,7 @@ export default function PreviousDrives() {
               {/* Action Button */}
               <div className="mt-5 border-t border-slate-100 pt-4">
                 <Link
-                  to="/student-dashboard"
+                  to={portalLink}
                   className="flex items-center justify-center gap-1.5 rounded-xl bg-slate-50 py-2.5 text-xs font-bold text-slate-700 transition group-hover:bg-blue-600 group-hover:text-white"
                 >
                   <span>Apply via Portal</span>

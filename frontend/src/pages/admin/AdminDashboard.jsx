@@ -19,7 +19,7 @@ import {
   createPlacementDrive,
   deactivatePlacementDrive,
   reactivatePlacementDrive,
-  getApplicationsByDrive,
+  getAllApplications,
   updateApplicationStatus,
   getAllStudentProfiles,
 } from "../../services/adminService";
@@ -359,12 +359,20 @@ export default function AdminDashboard({ initialTab = "overview" }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Role Protection
+  useEffect(() => {
+    if (user && user.role && user.role !== "admin") {
+      toast.error("Administrator privileges required");
+      navigate("/login");
+    }
+  }, [user, navigate]);
+
   // Core Data States
   const [stats, setStats] = useState(null);
-  const [students, setStudents] = useState(fallbackStudents);
-  const [companies, setCompanies] = useState(fallbackCompanies);
-  const [drives, setDrives] = useState(fallbackDrives);
-  const [applications, setApplications] = useState(fallbackApplications);
+  const [students, setStudents] = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [drives, setDrives] = useState([]);
+  const [applications, setApplications] = useState([]);
   const [selectedDriveIdForApps, setSelectedDriveIdForApps] = useState("all");
 
   // Modal triggers
@@ -386,57 +394,59 @@ export default function AdminDashboard({ initialTab = "overview" }) {
       try {
         const statsRes = await getAdminDashboardStats();
         if (statsRes?.data) setStats(statsRes.data);
-      } catch {
-        // Fallback stats are already handled in AdminOverview
+      } catch (err) {
+        console.warn("Failed to fetch dashboard stats:", err.message);
       }
 
       // 2. Fetch Students Cohort
       try {
         const studentsRes = await getAllStudentProfiles();
-        if (studentsRes?.data && studentsRes.data.length > 0) {
+        if (Array.isArray(studentsRes?.data)) {
           setStudents(studentsRes.data);
         }
-      } catch {
-        // Keep fallback students
+      } catch (err) {
+        console.warn("Failed to fetch students:", err.message);
+        setStudents((prev) => (prev.length > 0 ? prev : fallbackStudents));
       }
 
       // 3. Fetch Companies
       try {
         const compRes = await getAllCompanies();
-        if (compRes?.data && compRes.data.length > 0) {
+        if (Array.isArray(compRes?.data)) {
           setCompanies(compRes.data);
         }
-      } catch {
-        // Keep fallback companies
+      } catch (err) {
+        console.warn("Failed to fetch companies:", err.message);
+        setCompanies((prev) => (prev.length > 0 ? prev : fallbackCompanies));
       }
 
       // 4. Fetch Drives
       try {
         const driveRes = await getAllPlacementDrives();
-        if (driveRes?.data && driveRes.data.length > 0) {
+        if (Array.isArray(driveRes?.data)) {
           setDrives(driveRes.data);
         }
-      } catch {
-        // Keep fallback drives
+      } catch (err) {
+        console.warn("Failed to fetch placement drives:", err.message);
+        setDrives((prev) => (prev.length > 0 ? prev : fallbackDrives));
       }
 
-      // 5. Try fetching applications for the first drive if available
+      // 5. Fetch all applications
       try {
-        if (drives.length > 0 && drives[0]._id && !drives[0]._id.startsWith("drive-")) {
-          const appsRes = await getApplicationsByDrive(drives[0]._id);
-          if (appsRes?.data && appsRes.data.length > 0) {
-            setApplications(appsRes.data);
-          }
+        const appsRes = await getAllApplications();
+        if (Array.isArray(appsRes?.data)) {
+          setApplications(appsRes.data);
         }
-      } catch {
-        // Keep fallback applications
+      } catch (err) {
+        console.warn("Failed to fetch applications:", err.message);
+        setApplications((prev) => (prev.length > 0 ? prev : fallbackApplications));
       }
     } catch (err) {
       console.warn("Failed to fetch fresh admin data:", err.message);
     } finally {
       setRefreshing(false);
     }
-  }, [drives]);
+  }, []);
 
   useEffect(() => {
     loadDashboardData();
@@ -577,8 +587,10 @@ export default function AdminDashboard({ initialTab = "overview" }) {
           {activeTab === "overview" && (
             <AdminOverview
               stats={stats}
+              students={students}
               drives={drives}
               companies={companies}
+              applications={applications}
               onNavigateTab={handleTabChange}
               onOpenCreateDrive={() => {
                 setIsCreateDriveOpen(true);

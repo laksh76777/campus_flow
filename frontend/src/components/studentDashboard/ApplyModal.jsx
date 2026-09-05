@@ -7,6 +7,7 @@ import {
   FileText,
   ArrowRight,
 } from "lucide-react";
+import { getResumeViewUrl } from "../../utils/resumeHelper";
 
 export default function ApplyModal({
   isOpen,
@@ -120,7 +121,7 @@ export default function ApplyModal({
           </div>
           {hasResume && (
             <a
-              href={studentProfile.resume.url}
+              href={getResumeViewUrl(studentProfile.resume.url)}
               target="_blank"
               rel="noopener noreferrer"
               className="text-blue-700 font-semibold underline text-[11px]"

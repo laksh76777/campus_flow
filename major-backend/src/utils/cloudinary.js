@@ -7,13 +7,17 @@ cloudinary.config({
     api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-const uploadOnCloudinary = async (localFilePath) => {
+const uploadOnCloudinary = async (localFilePath, options = {}) => {
     try {
         if (!localFilePath) return null;
 
-        const response = await cloudinary.uploader.upload(localFilePath, {
-            resource_type: "auto",
-        });
+        const isPdfOrDoc = /\.(pdf|doc|docx|txt)$/i.test(localFilePath);
+        const uploadOptions = {
+            resource_type: isPdfOrDoc ? "raw" : "auto",
+            ...options
+        };
+
+        const response = await cloudinary.uploader.upload(localFilePath, uploadOptions);
 
         if (fs.existsSync(localFilePath)) {
             fs.unlinkSync(localFilePath);

@@ -14,38 +14,54 @@ import {
 
 export default function AdminOverview({
   stats,
+  students = [],
   drives = [],
   companies = [],
+  applications = [],
   onNavigateTab,
   onOpenCreateDrive,
   onOpenCreateCompany,
 }) {
-  // Aggregate stats from props or default fallback
-  const totalStudents = stats?.students?.total ?? 142;
-  const totalCompanies = stats?.companies?.total ?? (companies.length || 18);
-  const activeCompanies = stats?.companies?.active ?? 15;
-  const totalDrives = stats?.placementDrives?.total ?? (drives.length || 12);
-  const activeDrives = stats?.placementDrives?.active ?? 6;
-  
-  const appStats = stats?.applications || {
-    total: 320,
-    applied: 145,
-    shortlisted: 64,
-    selected: 42,
-    rejected: 58,
-    withdrawn: 11,
+  // Aggregate stats from API stats or directly from live collections - NO hardcoded fake numbers
+  const totalStudents = stats?.students?.total ?? students.length;
+  const totalCompanies = stats?.companies?.total ?? companies.length;
+  const activeCompanies =
+    stats?.companies?.active ??
+    companies.filter((c) => c.isActive !== false).length;
+  const totalDrives = stats?.placementDrives?.total ?? drives.length;
+  const activeDrives =
+    stats?.placementDrives?.active ??
+    drives.filter((d) => d.isActive !== false).length;
+
+  const appStats = {
+    total: stats?.applications?.total ?? applications.length,
+    applied:
+      stats?.applications?.applied ??
+      applications.filter((a) => a.status === "applied").length,
+    shortlisted:
+      stats?.applications?.shortlisted ??
+      applications.filter((a) => a.status === "shortlisted").length,
+    selected:
+      stats?.applications?.selected ??
+      applications.filter((a) => a.status === "selected").length,
+    rejected:
+      stats?.applications?.rejected ??
+      applications.filter((a) => a.status === "rejected").length,
+    withdrawn:
+      stats?.applications?.withdrawn ??
+      applications.filter((a) => a.status === "withdrawn").length,
   };
 
   const placementRatio =
     totalStudents > 0
-      ? Math.min(100, Math.round(((appStats.selected || 42) / totalStudents) * 100))
-      : 74;
+      ? Math.min(100, Math.round(((appStats.selected || 0) / totalStudents) * 100))
+      : 0;
 
   const kpis = [
     {
       title: "Registered Students",
       value: totalStudents,
-      sub: "Eligible cohort",
+      sub: `${totalStudents} registered candidates`,
       icon: Users,
       color: "bg-blue-600 text-white shadow-blue-500/25",
       targetTab: "students",
@@ -53,7 +69,7 @@ export default function AdminOverview({
     {
       title: "Corporate Partners",
       value: totalCompanies,
-      sub: `${activeCompanies} actively hiring`,
+      sub: `${activeCompanies} active of ${totalCompanies} registered`,
       icon: Building2,
       color: "bg-indigo-600 text-white shadow-indigo-500/25",
       targetTab: "companies",
@@ -61,7 +77,7 @@ export default function AdminOverview({
     {
       title: "Placement Drives",
       value: totalDrives,
-      sub: `${activeDrives} ongoing drives`,
+      sub: `${activeDrives} active of ${totalDrives} scheduled`,
       icon: Briefcase,
       color: "bg-emerald-600 text-white shadow-emerald-500/25",
       targetTab: "drives",
@@ -69,7 +85,7 @@ export default function AdminOverview({
     {
       title: "Student Applications",
       value: appStats.total,
-      sub: `${appStats.applied} pending review`,
+      sub: `${appStats.applied} pending review (${appStats.total} total)`,
       icon: FileCheck2,
       color: "bg-amber-500 text-white shadow-amber-500/25",
       targetTab: "applications",
@@ -192,8 +208,14 @@ export default function AdminOverview({
               </div>
               <div className="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden">
                 <div
-                  className="h-full bg-blue-500 rounded-full"
-                  style={{ width: `${Math.min(100, ((appStats.applied || 1) / (appStats.total || 1)) * 100)}%` }}
+                  className="h-full bg-blue-500 rounded-full transition-all duration-500"
+                  style={{
+                    width: `${
+                      appStats.total > 0
+                        ? Math.min(100, Math.round((appStats.applied / appStats.total) * 100))
+                        : 0
+                    }%`,
+                  }}
                 />
               </div>
             </div>
@@ -209,8 +231,14 @@ export default function AdminOverview({
               </div>
               <div className="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden">
                 <div
-                  className="h-full bg-amber-500 rounded-full"
-                  style={{ width: `${Math.min(100, ((appStats.shortlisted || 1) / (appStats.total || 1)) * 100)}%` }}
+                  className="h-full bg-amber-500 rounded-full transition-all duration-500"
+                  style={{
+                    width: `${
+                      appStats.total > 0
+                        ? Math.min(100, Math.round((appStats.shortlisted / appStats.total) * 100))
+                        : 0
+                    }%`,
+                  }}
                 />
               </div>
             </div>
@@ -228,8 +256,14 @@ export default function AdminOverview({
               </div>
               <div className="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden">
                 <div
-                  className="h-full bg-emerald-500 rounded-full"
-                  style={{ width: `${Math.min(100, ((appStats.selected || 1) / (appStats.total || 1)) * 100)}%` }}
+                  className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                  style={{
+                    width: `${
+                      appStats.total > 0
+                        ? Math.min(100, Math.round((appStats.selected / appStats.total) * 100))
+                        : 0
+                    }%`,
+                  }}
                 />
               </div>
             </div>
@@ -245,8 +279,14 @@ export default function AdminOverview({
               </div>
               <div className="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden">
                 <div
-                  className="h-full bg-rose-400 rounded-full"
-                  style={{ width: `${Math.min(100, ((appStats.rejected || 1) / (appStats.total || 1)) * 100)}%` }}
+                  className="h-full bg-rose-400 rounded-full transition-all duration-500"
+                  style={{
+                    width: `${
+                      appStats.total > 0
+                        ? Math.min(100, Math.round((appStats.rejected / appStats.total) * 100))
+                        : 0
+                    }%`,
+                  }}
                 />
               </div>
             </div>

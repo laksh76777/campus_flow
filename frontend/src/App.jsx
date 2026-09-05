@@ -7,6 +7,7 @@ import Login from "./pages/auth/Login";
 import Signup from "./pages/auth/Signup";
 import StudentDashboard from "./pages/student/StudentDashboard";
 import AdminDashboard from "./pages/admin/AdminDashboard";
+import ProtectedRoute from "./components/common/ProtectedRoute";
 
 function App() {
   return (
@@ -28,17 +29,73 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
 
-        {/* Student Portal Routes */}
-        <Route path="/student-dashboard" element={<StudentDashboard />} />
-        <Route path="/placement-drives" element={<StudentDashboard />} />
-        <Route path="/my-applications" element={<StudentDashboard />} />
-        <Route path="/student-profile" element={<StudentDashboard />} />
+        {/* Protected Student Portal Routes */}
+        <Route
+          path="/student-dashboard"
+          element={
+            <ProtectedRoute requiredRole="student">
+              <StudentDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/placement-drives"
+          element={
+            <ProtectedRoute requiredRole="student">
+              <StudentDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/my-applications"
+          element={
+            <ProtectedRoute requiredRole="student">
+              <StudentDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/student-profile"
+          element={
+            <ProtectedRoute requiredRole="student">
+              <StudentDashboard />
+            </ProtectedRoute>
+          }
+        />
 
-        {/* Admin / TPO Portal Routes */}
-        <Route path="/admin-dashboard" element={<AdminDashboard />} />
-        <Route path="/admin/drives" element={<AdminDashboard initialTab="drives" />} />
-        <Route path="/admin/companies" element={<AdminDashboard initialTab="companies" />} />
-        <Route path="/admin/applications" element={<AdminDashboard initialTab="applications" />} />
+        {/* Protected Admin / TPO Portal Routes */}
+        <Route
+          path="/admin-dashboard"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/drives"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminDashboard initialTab="drives" />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/companies"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminDashboard initialTab="companies" />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/applications"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminDashboard initialTab="applications" />
+            </ProtectedRoute>
+          }
+        />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

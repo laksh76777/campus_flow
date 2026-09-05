@@ -97,9 +97,8 @@ const createPlacementDrive = asyncHandler(async (req, res) => {
 });
 
 const getAllPlacementDrives = asyncHandler(async (req, res) => {
-    const placementDrives = await PlacementDrive.find({
-        isActive: true
-    })
+    const filter = req.user?.role === "admin" ? {} : { isActive: true };
+    const placementDrives = await PlacementDrive.find(filter)
         .populate(
             "company",
             "companyName companyDescription companyWebsite companyLogo industry location"

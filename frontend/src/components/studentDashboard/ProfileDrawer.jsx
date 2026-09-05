@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { updateStudentProfile, updateStudentResume } from "../../services/studentService";
+import { getResumeViewUrl } from "../../utils/resumeHelper";
 
 export default function ProfileDrawer({
   isOpen,
@@ -243,7 +244,7 @@ export default function ProfileDrawer({
 
                 {studentProfile?.resume?.url && (
                   <a
-                    href={studentProfile.resume.url}
+                    href={getResumeViewUrl(studentProfile.resume.url)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center justify-between rounded-xl bg-blue-50/60 p-3 text-xs font-semibold text-blue-700 border border-blue-100 transition hover:bg-blue-100/70"

@@ -12,12 +12,13 @@ export default function DashboardStats({
   onTabChange,
   loading = false,
 }) {
-  const activeEligible = stats?.placementDrives?.activeEligible ?? 4;
-  const totalEligible = stats?.placementDrives?.eligible ?? 8;
-  const totalApplications = stats?.applications?.total ?? 2;
-  const shortlistedCount = stats?.applications?.shortlisted ?? 1;
+  const activeEligible = stats?.placementDrives?.activeEligible ?? 0;
+  const totalEligible = stats?.placementDrives?.eligible ?? 0;
+  const totalApplications = stats?.applications?.total ?? 0;
+  const shortlistedCount = stats?.applications?.shortlisted ?? 0;
   const selectedCount = stats?.applications?.selected ?? 0;
-  const cgpa = studentProfile?.cgpa ?? 8.65;
+  const appliedCount = stats?.applications?.applied ?? 0;
+  const cgpa = studentProfile?.cgpa != null ? studentProfile.cgpa : "--";
   const backlogs = studentProfile?.backlogs ?? 0;
 
   const statCards = [
@@ -25,8 +26,8 @@ export default function DashboardStats({
       title: "Eligible Drives",
       value: activeEligible,
       subtext: `${totalEligible} total matched opportunities`,
-      badge: "Open Now",
-      badgeColor: "bg-emerald-50 text-emerald-700 border-emerald-200",
+      badge: activeEligible > 0 ? "Open Now" : "None Open",
+      badgeColor: activeEligible > 0 ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-600 border-slate-200",
       icon: Briefcase,
       iconBg: "bg-blue-600 text-white shadow-blue-500/20",
       actionText: "Browse Drives",
@@ -35,9 +36,9 @@ export default function DashboardStats({
     {
       title: "Applications Sent",
       value: totalApplications,
-      subtext: `${stats?.applications?.applied ?? 1} in active review`,
-      badge: "In Progress",
-      badgeColor: "bg-blue-50 text-blue-700 border-blue-200",
+      subtext: `${appliedCount} in active review`,
+      badge: appliedCount > 0 ? "In Progress" : "No Pending",
+      badgeColor: appliedCount > 0 ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-slate-100 text-slate-600 border-slate-200",
       icon: FileCheck2,
       iconBg: "bg-indigo-600 text-white shadow-indigo-500/20",
       actionText: "View History",
@@ -46,9 +47,9 @@ export default function DashboardStats({
     {
       title: "Shortlisted & Offers",
       value: shortlistedCount + selectedCount,
-      subtext: selectedCount > 0 ? `${selectedCount} offer received` : "1 round cleared",
-      badge: selectedCount > 0 ? "Offered" : "Shortlisted",
-      badgeColor: "bg-amber-50 text-amber-700 border-amber-200",
+      subtext: selectedCount > 0 ? `${selectedCount} offer received` : shortlistedCount > 0 ? `${shortlistedCount} round(s) cleared` : "No offers yet",
+      badge: selectedCount > 0 ? "Offered" : shortlistedCount > 0 ? "Shortlisted" : "In Review",
+      badgeColor: selectedCount > 0 ? "bg-emerald-50 text-emerald-700 border-emerald-200" : shortlistedCount > 0 ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-slate-100 text-slate-600 border-slate-200",
       icon: Trophy,
       iconBg: "bg-amber-500 text-white shadow-amber-500/20",
       actionText: "Check Status",

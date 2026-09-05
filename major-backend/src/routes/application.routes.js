@@ -1,15 +1,23 @@
 import { Router } from "express";
-import { verifyAdmin } from "../middlewares/auth.middleware.js";
+import { verifyAdmin, verifyJWT } from "../middlewares/auth.middleware.js";
 import {
-    applyForPlacement,getMyApplications
-    ,withdrawApplication,getApplicationsByDrive,
-    updateApplicationStatus,getApplicationById
+    applyForPlacement,
+    getMyApplications,
+    withdrawApplication,
+    getApplicationsByDrive,
+    updateApplicationStatus,
+    getApplicationById,
+    getAllApplications
 } from "../controllers/application.controller.js";
 
-import {
-    verifyJWT
-} from "../middlewares/auth.middleware.js";
 const router = Router();
+
+router.route("/all-applications").get(
+    verifyJWT,
+    verifyAdmin,
+    getAllApplications
+);
+
 router
     .route("/:driveId/apply")
     .post(

@@ -10,6 +10,7 @@ import {
   Award,
   RefreshCw,
 } from "lucide-react";
+import { getResumeViewUrl } from "../../utils/resumeHelper";
 
 export default function ManageStudents({
   students = [],
@@ -303,7 +304,7 @@ export default function ManageStudents({
                       <td className="py-3.5 pl-3 pr-5 text-right">
                         {hasResume ? (
                           <a
-                            href={student.resume.url}
+                            href={getResumeViewUrl(student.resume.url)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-1 rounded-xl bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700 border border-blue-200 hover:bg-blue-100 transition"

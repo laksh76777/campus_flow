@@ -14,6 +14,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { getResumeViewUrl } from "../../utils/resumeHelper";
 
 export default function ManageApplications({
   applications = [],
@@ -226,7 +227,8 @@ export default function ManageApplications({
             const branch = student.branch || "CSE";
             const cgpa = student.cgpa ?? "8.2";
             const backlogs = student.activeBacklogs ?? 0;
-            const resumeUrl = student.resume?.url || student.resumeUrl;
+            const rawResumeUrl = student.resume?.url || student.resumeUrl;
+            const resumeUrl = getResumeViewUrl(rawResumeUrl);
 
             const drive = app.placementDrive || {};
             const driveCompName =

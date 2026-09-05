@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import {
   GraduationCap,
@@ -18,7 +18,16 @@ import { loginStudent, loginAdmin } from "../../services/authService";
 import { useAuth } from "../../context/authContextDef";
 
 export default function Login() {
-  const [role, setRole] = useState("student"); // "student" | "admin"
+  const [searchParams] = useSearchParams();
+  const initialRole = searchParams.get("role") === "admin" ? "admin" : "student";
+  const [role, setRole] = useState(initialRole);
+
+  useEffect(() => {
+    const queryRole = searchParams.get("role");
+    if (queryRole === "admin" || queryRole === "student") {
+      setRole(queryRole);
+    }
+  }, [searchParams]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -62,7 +71,10 @@ export default function Login() {
         `Welcome back, ${loggedUser.fullName || (role === "admin" ? "Admin" : "Student")}!`
       );
 
-      if (role === "student") {
+      const redirectPath = searchParams.get("redirect");
+      if (redirectPath) {
+        navigate(redirectPath);
+      } else if (role === "student") {
         navigate("/student-dashboard");
       } else {
         navigate("/admin-dashboard");

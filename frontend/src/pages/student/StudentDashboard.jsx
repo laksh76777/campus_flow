@@ -24,106 +24,11 @@ import {
   applyForDrive,
   withdrawApplication,
 } from "../../services/studentService";
-
-// Clean fallback sample data to ensure the UI is fully functional and previewable
-const sampleFallbackDrives = [
-  {
-    _id: "sample-drive-1",
-    company: {
-      companyName: "Google",
-      isActive: true,
-    },
-    jobTitle: "Software Development Engineer",
-    package: 24,
-    location: "Bengaluru / Hyderabad",
-    jobType: "full-time",
-    eligibleBranches: ["CSE", "IT", "ECE"],
-    minimumCGPA: 7.5,
-    maximumBacklogs: 0,
-    graduationYear: 2026,
-    applicationDeadline: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
-    driveDate: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    _id: "sample-drive-2",
-    company: {
-      companyName: "Microsoft",
-      isActive: true,
-    },
-    jobTitle: "Cloud Solution Engineer",
-    package: 18.5,
-    location: "Hyderabad / Noida",
-    jobType: "full-time",
-    eligibleBranches: ["CSE", "IT", "ECE"],
-    minimumCGPA: 7.0,
-    maximumBacklogs: 1,
-    graduationYear: 2026,
-    applicationDeadline: new Date(Date.now() + 8 * 24 * 60 * 60 * 1000).toISOString(),
-    driveDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    _id: "sample-drive-3",
-    company: {
-      companyName: "Amazon",
-      isActive: true,
-    },
-    jobTitle: "SDE Summer Intern 2026",
-    package: 14,
-    location: "Bengaluru",
-    jobType: "internship",
-    eligibleBranches: ["CSE", "IT"],
-    minimumCGPA: 7.0,
-    maximumBacklogs: 0,
-    graduationYear: 2026,
-    applicationDeadline: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
-    driveDate: new Date(Date.now() + 9 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    _id: "sample-drive-4",
-    company: {
-      companyName: "Atlassian",
-      isActive: true,
-    },
-    jobTitle: "Associate Software Engineer",
-    package: 22,
-    location: "Remote / Bengaluru",
-    jobType: "full-time",
-    eligibleBranches: ["CSE", "IT", "ECE"],
-    minimumCGPA: 8.0,
-    maximumBacklogs: 0,
-    graduationYear: 2026,
-    applicationDeadline: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
-    driveDate: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-];
-
-const sampleFallbackApplications = [
-  {
-    _id: "sample-app-1",
-    placementDrive: {
-      _id: "sample-drive-1",
-      company: { companyName: "Google" },
-      jobTitle: "Software Development Engineer",
-      package: 24,
-    },
-    status: "shortlisted",
-    appliedAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    _id: "sample-app-2",
-    placementDrive: {
-      _id: "sample-drive-3",
-      company: { companyName: "Amazon" },
-      jobTitle: "SDE Summer Intern 2026",
-      package: 14,
-    },
-    status: "applied",
-    appliedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-];
+import { useAuth } from "../../context/authContextDef";
 
 export default function StudentDashboard() {
   const navigate = useNavigate();
+  const { user: authUser, logout, studentProfile: authProfile } = useAuth();
 
   // Navigation and UI state
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -209,9 +114,8 @@ export default function StudentDashboard() {
 
   // Derived drive lists & applied drive IDs
   const appliedDriveIds = useMemo(() => {
-    const list = applications.length > 0 ? applications : sampleFallbackApplications;
     const ids = new Set();
-    list.forEach((app) => {
+    applications.forEach((app) => {
       if (app.placementDrive?._id) {
         ids.add(app.placementDrive._id);
       } else if (app.placementDrive) {
@@ -221,10 +125,8 @@ export default function StudentDashboard() {
     return ids;
   }, [applications]);
 
-  const activeDrivesList =
-    eligibleDrives.length > 0 ? eligibleDrives : sampleFallbackDrives;
-  const activeApplicationsList =
-    applications.length > 0 ? applications : sampleFallbackApplications;
+  const activeDrivesList = eligibleDrives;
+  const activeApplicationsList = applications;
 
   // Compute aggregated stats
   const aggregatedStats = useMemo(() => {
@@ -262,16 +164,6 @@ export default function StudentDashboard() {
     } catch (err) {
       const msg = err.response?.data?.message || "Failed to submit application";
       toast.error(msg);
-      if (driveId.startsWith("sample-")) {
-        const fakeApp = {
-          _id: `fake-${Date.now()}`,
-          placementDrive: activeDrivesList.find((d) => d._id === driveId),
-          status: "applied",
-          appliedAt: new Date().toISOString(),
-        };
-        setApplications((prev) => [fakeApp, ...prev]);
-        toast.success("Application recorded (demo mode)!");
-      }
       throw err;
     }
   };
@@ -290,27 +182,21 @@ export default function StudentDashboard() {
     } catch (err) {
       const msg = err.response?.data?.message || "Failed to withdraw application";
       toast.error(msg);
-      if (applicationId.startsWith("sample-") || applicationId.startsWith("fake-")) {
-        setApplications((prev) =>
-          prev.map((a) => (a._id === applicationId ? { ...a, status: "withdrawn" } : a))
-        );
-        toast.success("Application marked as withdrawn (demo mode)");
-      }
     }
   };
 
   // Logout
-  const handleLogout = () => {
-    localStorage.removeItem("accessToken");
+  const handleLogout = async () => {
+    await logout();
     toast.success("Logged out successfully");
     navigate("/login");
   };
 
   const studentName =
-    user?.fullName || studentProfile?.user?.fullName || "Prakash";
-  const studentBranch = studentProfile?.branch || "Computer Science & Engineering";
-  const studentCgpa = studentProfile?.cgpa ?? 8.65;
-  const graduationYear = studentProfile?.graduationYear ?? 2026;
+    user?.fullName || authUser?.fullName || studentProfile?.user?.fullName || "Student";
+  const studentBranch = studentProfile?.branch || authProfile?.branch || "Department Not Set";
+  const studentCgpa = studentProfile?.cgpa ?? authProfile?.cgpa ?? "--";
+  const graduationYear = studentProfile?.graduationYear ?? authProfile?.graduationYear ?? "----";
 
   return (
     <div className="min-h-screen bg-slate-50/60 text-slate-900 flex antialiased">

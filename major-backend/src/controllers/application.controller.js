@@ -310,11 +310,39 @@ const getApplicationById = asyncHandler(async (req, res) => {
         )
     );
 });
+
+const getAllApplications = asyncHandler(async (req, res) => {
+    const applications = await Application.find()
+        .populate({
+            path: "student",
+            populate: {
+                path: "user",
+                select: "fullName email phone avatar"
+            }
+        })
+        .populate({
+            path: "placementDrive",
+            populate: {
+                path: "company"
+            }
+        })
+        .sort({ createdAt: -1 });
+
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            applications,
+            "All applications fetched successfully"
+        )
+    );
+});
+
 export {
     applyForPlacement,
     getMyApplications,
     withdrawApplication,
     getApplicationsByDrive,
     updateApplicationStatus,
-    getApplicationById
+    getApplicationById,
+    getAllApplications
 };
