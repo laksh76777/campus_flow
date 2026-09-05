@@ -568,7 +568,12 @@ export default function StudentDashboard() {
         onClose={() => setIsProfileDrawerOpen(false)}
         user={user}
         studentProfile={studentProfile}
-        onProfileUpdated={() => loadDashboardData(true)}
+        onProfileUpdated={(updated) => {
+          if (updated) {
+            setStudentProfile((prev) => ({ ...(prev || {}), ...updated }));
+          }
+          loadDashboardData(true);
+        }}
       />
 
       {/* Confirmation Apply Modal */}

@@ -131,14 +131,41 @@ const updateStudentProfile = asyncHandler(async (req, res) => {
     } = req.body;
 
     // Find the logged-in student's profile
-    const studentProfile = await StudentProfile.findOne({
+    let studentProfile = await StudentProfile.findOne({
         user: req.user?._id
     });
 
     if (!studentProfile) {
-        throw new ApiError(
-            404,
-            "Student profile not found"
+        // Auto-initialize profile if it does not exist yet
+        const generatedEnrollment = enrollmentNumber || `ENR-${req.user?._id.toString().slice(-6).toUpperCase()}`;
+        const newProfile = await StudentProfile.create({
+            user: req.user?._id,
+            enrollmentNumber: generatedEnrollment,
+            branch: branch || "Computer Science",
+            semester: semester ? Number(semester) : 6,
+            graduationYear: graduationYear ? Number(graduationYear) : 2026,
+            cgpa: cgpa !== undefined ? Number(cgpa) : 8.5,
+            backlogs: backlogs !== undefined ? Number(backlogs) : 0,
+            skills: Array.isArray(skills)
+                ? skills
+                : typeof skills === "string"
+                ? skills.split(",").map((s) => s.trim()).filter(Boolean)
+                : [],
+            about: about || "",
+            resume: { url: "", publicId: "" }
+        });
+
+        const populatedNew = await StudentProfile.findById(newProfile._id).populate(
+            "user",
+            "-password -refreshToken"
+        );
+
+        return res.status(200).json(
+            new ApiResponse(
+                200,
+                populatedNew,
+                "Student profile created and saved successfully"
+            )
         );
     }
 
@@ -171,23 +198,27 @@ const updateStudentProfile = asyncHandler(async (req, res) => {
     }
 
     if (semester !== undefined) {
-        updateData.semester = semester;
+        updateData.semester = Number(semester);
     }
 
     if (graduationYear !== undefined) {
-        updateData.graduationYear = graduationYear;
+        updateData.graduationYear = Number(graduationYear);
     }
 
     if (cgpa !== undefined) {
-        updateData.cgpa = cgpa;
+        updateData.cgpa = Number(cgpa);
     }
 
     if (backlogs !== undefined) {
-        updateData.backlogs = backlogs;
+        updateData.backlogs = Number(backlogs);
     }
 
     if (skills !== undefined) {
-        updateData.skills = skills;
+        updateData.skills = Array.isArray(skills)
+            ? skills
+            : typeof skills === "string"
+            ? skills.split(",").map((s) => s.trim()).filter(Boolean)
+            : [];
     }
 
     if (about !== undefined) {
@@ -244,14 +275,33 @@ const updateStudentResume = asyncHandler(async (req, res) => {
         );
     }
 
-    const studentProfile = await StudentProfile.findOne({
+    let studentProfile = await StudentProfile.findOne({
         user: req.user?._id
     });
 
     if (!studentProfile) {
-        throw new ApiError(
-            404,
-            "student profile not found"
+        studentProfile = await StudentProfile.create({
+            user: req.user?._id,
+            enrollmentNumber: `ENR-${req.user?._id.toString().slice(-6).toUpperCase()}`,
+            branch: "Computer Science",
+            semester: 6,
+            graduationYear: 2026,
+            cgpa: 8.5,
+            backlogs: 0,
+            skills: [],
+            about: "",
+            resume: {
+                url: resume.url,
+                publicId: resume.public_id
+            }
+        });
+
+        return res.status(200).json(
+            new ApiResponse(
+                200,
+                studentProfile,
+                "Resume uploaded successfully and profile initialized"
+            )
         );
     }
 
@@ -281,9 +331,25 @@ const updateStudentResume = asyncHandler(async (req, res) => {
             )
         );
 });
+
+const getAllStudentProfiles = asyncHandler(async (req, res) => {
+    const students = await StudentProfile.find()
+        .populate("user", "fullName email role")
+        .sort({ createdAt: -1 });
+
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            students,
+            "Student profiles fetched successfully"
+        )
+    );
+});
+
 export {
     createStudentProfile,
     getCurrentStudentProfile,
     updateStudentProfile,
-    updateStudentResume
+    updateStudentResume,
+    getAllStudentProfiles
 };

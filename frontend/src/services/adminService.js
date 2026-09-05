@@ -85,3 +85,9 @@ export const getApplicationById = async (applicationId) => {
   const response = await api.get(`/application/${applicationId}`);
   return response.data;
 };
+
+// 5. Student Cohort Management
+export const getAllStudentProfiles = async () => {
+  const response = await api.get("/studentprofile/all-students");
+  return response.data;
+};

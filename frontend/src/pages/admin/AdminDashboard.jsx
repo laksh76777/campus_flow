@@ -9,6 +9,7 @@ import AdminOverview from "../../components/admin/AdminOverview";
 import ManageDrives from "../../components/admin/ManageDrives";
 import ManageCompanies from "../../components/admin/ManageCompanies";
 import ManageApplications from "../../components/admin/ManageApplications";
+import ManageStudents from "../../components/admin/ManageStudents";
 
 import { useAuth } from "../../context/authContextDef";
 import {
@@ -20,6 +21,7 @@ import {
   reactivatePlacementDrive,
   getApplicationsByDrive,
   updateApplicationStatus,
+  getAllStudentProfiles,
 } from "../../services/adminService";
 
 // Fallback seed data for corporate partners
@@ -292,6 +294,61 @@ const fallbackApplications = [
   },
 ];
 
+// Fallback sample registered students
+const fallbackStudents = [
+  {
+    _id: "stud-1",
+    enrollmentNumber: "1JS23CS104",
+    branch: "Computer Science & Engineering",
+    semester: 6,
+    graduationYear: 2026,
+    cgpa: 8.9,
+    backlogs: 0,
+    skills: ["React.js", "Node.js", "Python", "SQL"],
+    user: {
+      fullName: "Prakash Choyal",
+      email: "prakashchoyal@gmail.com",
+    },
+    resume: {
+      url: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+    },
+  },
+  {
+    _id: "stud-2",
+    enrollmentNumber: "1BI23EC195",
+    branch: "Electronics & Communication",
+    semester: 6,
+    graduationYear: 2027,
+    cgpa: 8.7,
+    backlogs: 0,
+    skills: ["Embedded C", "IoT", "Python", "VLSI"],
+    user: {
+      fullName: "Priya Choudhary",
+      email: "priyachoudhary2323@gmail.com",
+    },
+    resume: {
+      url: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+    },
+  },
+  {
+    _id: "stud-3",
+    enrollmentNumber: "0827CS221045",
+    branch: "Computer Science & Engineering",
+    semester: 6,
+    graduationYear: 2026,
+    cgpa: 8.85,
+    backlogs: 0,
+    skills: ["Java", "Spring Boot", "AWS", "Docker"],
+    user: {
+      fullName: "Aarav Sharma",
+      email: "aarav.sharma@campus.edu",
+    },
+    resume: {
+      url: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+    },
+  },
+];
+
 export default function AdminDashboard({ initialTab = "overview" }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -304,6 +361,7 @@ export default function AdminDashboard({ initialTab = "overview" }) {
 
   // Core Data States
   const [stats, setStats] = useState(null);
+  const [students, setStudents] = useState(fallbackStudents);
   const [companies, setCompanies] = useState(fallbackCompanies);
   const [drives, setDrives] = useState(fallbackDrives);
   const [applications, setApplications] = useState(fallbackApplications);
@@ -311,6 +369,7 @@ export default function AdminDashboard({ initialTab = "overview" }) {
 
   // Modal triggers
   const [isCreateDriveOpen, setIsCreateDriveOpen] = useState(false);
+  const [isCreateCompanyOpen, setIsCreateCompanyOpen] = useState(false);
 
   // Sync tab with URL
   const handleTabChange = (newTab) => {
@@ -331,7 +390,17 @@ export default function AdminDashboard({ initialTab = "overview" }) {
         // Fallback stats are already handled in AdminOverview
       }
 
-      // 2. Fetch Companies
+      // 2. Fetch Students Cohort
+      try {
+        const studentsRes = await getAllStudentProfiles();
+        if (studentsRes?.data && studentsRes.data.length > 0) {
+          setStudents(studentsRes.data);
+        }
+      } catch {
+        // Keep fallback students
+      }
+
+      // 3. Fetch Companies
       try {
         const compRes = await getAllCompanies();
         if (compRes?.data && compRes.data.length > 0) {
@@ -341,7 +410,7 @@ export default function AdminDashboard({ initialTab = "overview" }) {
         // Keep fallback companies
       }
 
-      // 3. Fetch Drives
+      // 4. Fetch Drives
       try {
         const driveRes = await getAllPlacementDrives();
         if (driveRes?.data && driveRes.data.length > 0) {
@@ -351,7 +420,7 @@ export default function AdminDashboard({ initialTab = "overview" }) {
         // Keep fallback drives
       }
 
-      // 4. Try fetching applications for the first drive if available
+      // 5. Try fetching applications for the first drive if available
       try {
         if (drives.length > 0 && drives[0]._id && !drives[0]._id.startsWith("drive-")) {
           const appsRes = await getApplicationsByDrive(drives[0]._id);
@@ -516,8 +585,16 @@ export default function AdminDashboard({ initialTab = "overview" }) {
                 handleTabChange("drives");
               }}
               onOpenCreateCompany={() => {
+                setIsCreateCompanyOpen(true);
                 handleTabChange("companies");
               }}
+            />
+          )}
+
+          {activeTab === "students" && (
+            <ManageStudents
+              students={students}
+              onRefresh={() => loadDashboardData(true)}
             />
           )}
 
@@ -537,6 +614,11 @@ export default function AdminDashboard({ initialTab = "overview" }) {
             <ManageCompanies
               companies={companies}
               drives={drives}
+              isCreateModalOpen={isCreateCompanyOpen}
+              setIsCreateModalOpen={setIsCreateCompanyOpen}
+              onCompanyCreated={(newComp) =>
+                setCompanies((prev) => [newComp, ...prev])
+              }
               onRefresh={() => loadDashboardData(true)}
               onCreateDriveForCompany={(_company) => {
                 setIsCreateDriveOpen(true);

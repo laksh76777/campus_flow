@@ -1,5 +1,6 @@
 import {
   LayoutDashboard,
+  Users,
   Briefcase,
   Building2,
   FileCheck2,
@@ -27,6 +28,12 @@ export default function AdminSidebar({
       label: "Overview & Analytics",
       icon: LayoutDashboard,
       badge: null,
+    },
+    {
+      id: "students",
+      label: "Registered Students",
+      icon: Users,
+      badge: "Cohort",
     },
     {
       id: "drives",

@@ -60,9 +60,7 @@ export default function Navbar() {
               <span className="text-lg font-extrabold tracking-tight text-slate-900">
                 Placement Portal
               </span>
-              <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 border border-blue-100 hidden sm:inline-block">
-                Season 25-26
-              </span>
+              
             </div>
             <p className="text-[11px] font-medium text-slate-500">
               Campus Placement Management System

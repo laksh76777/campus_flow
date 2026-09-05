@@ -1,7 +1,13 @@
 import { Router } from "express";
-import { verifyJWT } from "../middlewares/auth.middleware.js";
+import { verifyJWT, verifyAdmin } from "../middlewares/auth.middleware.js";
 import { upload } from "../middlewares/multer.middleware.js";
-import { createStudentProfile, getCurrentStudentProfile, updateStudentProfile, updateStudentResume } from "../controllers/studentProfile.controller.js";
+import {
+    createStudentProfile,
+    getCurrentStudentProfile,
+    updateStudentProfile,
+    updateStudentResume,
+    getAllStudentProfiles
+} from "../controllers/studentProfile.controller.js";
 
 const router = Router();
 
@@ -15,6 +21,8 @@ router
 router
     .route("/current-student-profile")
     .get(verifyJWT, getCurrentStudentProfile);
-router.route("/update-profile").patch(verifyJWT,updateStudentProfile);
-router.route("/update-resume").patch(verifyJWT,upload.single("resume"),updateStudentResume)
+router.route("/update-profile").patch(verifyJWT, updateStudentProfile);
+router.route("/update-resume").patch(verifyJWT, upload.single("resume"), updateStudentResume);
+router.route("/all-students").get(verifyJWT, verifyAdmin, getAllStudentProfiles);
+
 export default router;

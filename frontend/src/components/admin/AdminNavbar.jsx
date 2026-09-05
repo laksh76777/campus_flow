@@ -37,6 +37,7 @@ export default function AdminNavbar({
 
   const tabTitles = {
     overview: "Dashboard & Analytics",
+    students: "Registered Students Directory",
     drives: "Manage Placement Drives",
     companies: "Corporate Partners Directory",
     applications: "Applicant Review & Shortlisting",

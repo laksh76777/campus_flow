@@ -48,6 +48,7 @@ export default function AdminOverview({
       sub: "Eligible cohort",
       icon: Users,
       color: "bg-blue-600 text-white shadow-blue-500/25",
+      targetTab: "students",
     },
     {
       title: "Corporate Partners",
@@ -55,6 +56,7 @@ export default function AdminOverview({
       sub: `${activeCompanies} actively hiring`,
       icon: Building2,
       color: "bg-indigo-600 text-white shadow-indigo-500/25",
+      targetTab: "companies",
     },
     {
       title: "Placement Drives",
@@ -62,6 +64,7 @@ export default function AdminOverview({
       sub: `${activeDrives} ongoing drives`,
       icon: Briefcase,
       color: "bg-emerald-600 text-white shadow-emerald-500/25",
+      targetTab: "drives",
     },
     {
       title: "Student Applications",
@@ -69,6 +72,7 @@ export default function AdminOverview({
       sub: `${appStats.applied} pending review`,
       icon: FileCheck2,
       color: "bg-amber-500 text-white shadow-amber-500/25",
+      targetTab: "applications",
     },
   ];
 
@@ -109,18 +113,30 @@ export default function AdminOverview({
         </div>
       </div>
 
-      {/* 4 Top KPI Cards */}
+      {/* 4 Top KPI Cards - Clickable Navigators */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {kpis.map((kpi, idx) => {
           const Icon = kpi.icon;
           return (
             <div
               key={idx}
-              className="group relative rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs transition hover:-translate-y-0.5 hover:shadow-md"
+              onClick={() => onNavigateTab && onNavigateTab(kpi.targetTab)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onNavigateTab && onNavigateTab(kpi.targetTab);
+                }
+              }}
+              title={`Click to open ${kpi.title}`}
+              className="group relative cursor-pointer rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs transition-all duration-200 hover:-translate-y-1 hover:border-indigo-300 hover:shadow-lg active:scale-98 select-none"
             >
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500">{kpi.title}</span>
-                <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${kpi.color}`}>
+                <span className="text-xs font-bold text-slate-500 group-hover:text-indigo-600 transition-colors">
+                  {kpi.title}
+                </span>
+                <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${kpi.color} group-hover:scale-110 transition-transform`}>
                   <Icon className="h-5 w-5" />
                 </div>
               </div>
@@ -128,8 +144,12 @@ export default function AdminOverview({
                 <div className="text-3xl font-extrabold text-slate-900 tracking-tight">
                   {kpi.value}
                 </div>
-                <div className="mt-1 text-xs text-slate-500 font-medium">
-                  {kpi.sub}
+                <div className="mt-1 flex items-center justify-between text-xs text-slate-500 font-medium">
+                  <span>{kpi.sub}</span>
+                  <span className="inline-flex items-center gap-1 font-bold text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span>Manage</span>
+                    <ArrowRight className="h-3 w-3" />
+                  </span>
                 </div>
               </div>
             </div>
