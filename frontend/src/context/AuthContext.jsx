@@ -32,14 +32,19 @@ export function AuthProvider({ children }) {
         }
       }
 
-      // Try fetching student profile if student
-      try {
-        const profileRes = await api.get("/studentprofile/current-student-profile");
-        if (profileRes.data?.data) {
-          setStudentProfile(profileRes.data.data);
+      // Try fetching student profile ONLY if student
+      const activeRole = userRes.data?.data?.role || localStorage.getItem("userRole");
+      if (activeRole === "student") {
+        try {
+          const profileRes = await api.get("/studentprofile/current-student-profile");
+          if (profileRes.data?.data) {
+            setStudentProfile(profileRes.data.data);
+          }
+        } catch (err) {
+          // Normal for uninitialized student profiles
         }
-      } catch (err) {
-        // Normal for admins or uninitialized student profiles
+      } else {
+        setStudentProfile(null);
       }
     } catch (error) {
       console.warn("Failed to verify user session:", error.message);
@@ -62,7 +67,8 @@ export function AuthProvider({ children }) {
   const login = (newToken, userData, explicitRole = null) => {
     localStorage.setItem("accessToken", newToken);
     setToken(newToken);
-    const resolvedRole = explicitRole || userData?.role || "student";
+    // Ground-truth database role takes priority over explicit UI tab role
+    const resolvedRole = userData?.role || explicitRole || "student";
     setUserRole(resolvedRole);
     localStorage.setItem("userRole", resolvedRole);
     if (userData) setUser(userData);

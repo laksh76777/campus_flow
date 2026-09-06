@@ -84,13 +84,19 @@ export default function Footer() {
             </h4>
             <ul className="space-y-2 text-xs">
               <li>
-                <Link to="/login" className="hover:text-blue-400 transition flex items-center gap-1.5">
+                <Link
+                  to="/login?role=student&redirect=/student-dashboard"
+                  className="hover:text-blue-400 transition flex items-center gap-1.5"
+                >
                   <GraduationCap className="h-3.5 w-3.5 text-blue-400" />
                   <span>Student Portal</span>
                 </Link>
               </li>
               <li>
-                <Link to="/login" className="hover:text-blue-400 transition flex items-center gap-1.5">
+                <Link
+                  to="/login?role=admin&redirect=/admin-dashboard"
+                  className="hover:text-blue-400 transition flex items-center gap-1.5"
+                >
                   <ShieldCheck className="h-3.5 w-3.5 text-indigo-400" />
                   <span>Admin / TPO Console</span>
                 </Link>

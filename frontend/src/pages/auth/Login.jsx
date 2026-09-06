@@ -18,9 +18,23 @@ import { loginStudent, loginAdmin } from "../../services/authService";
 import { useAuth } from "../../context/authContextDef";
 
 export default function Login() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const initialRole = searchParams.get("role") === "admin" ? "admin" : "student";
   const [role, setRole] = useState(initialRole);
+
+  const navigate = useNavigate();
+  const { login, isAuthenticated, userRole, loading: authLoading } = useAuth();
+
+  // If already authenticated, redirect to their proper dashboard
+  useEffect(() => {
+    if (isAuthenticated && !authLoading) {
+      if (userRole === "admin") {
+        navigate("/admin-dashboard", { replace: true });
+      } else {
+        navigate("/student-dashboard", { replace: true });
+      }
+    }
+  }, [isAuthenticated, userRole, authLoading, navigate]);
 
   useEffect(() => {
     const queryRole = searchParams.get("role");
@@ -28,14 +42,12 @@ export default function Login() {
       setRole(queryRole);
     }
   }, [searchParams]);
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  const navigate = useNavigate();
-  const { login } = useAuth();
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -50,35 +62,69 @@ export default function Login() {
       setLoading(true);
 
       let resData;
-      if (role === "student") {
-        resData = await loginStudent({ email: email.trim(), password });
-      } else {
-        resData = await loginAdmin({ email: email.trim(), password });
+      try {
+        if (role === "student") {
+          resData = await loginStudent({ email: email.trim(), password });
+        } else {
+          resData = await loginAdmin({ email: email.trim(), password });
+        }
+      } catch (firstErr) {
+        // Fallback: If login failed with chosen tab, check if user is registered in the other role
+        if (role === "student") {
+          try {
+            resData = await loginAdmin({ email: email.trim(), password });
+          } catch {
+            throw firstErr;
+          }
+        } else {
+          try {
+            resData = await loginStudent({ email: email.trim(), password });
+          } catch {
+            throw firstErr;
+          }
+        }
       }
 
       const token = resData?.data?.accessToken || resData?.data?.token;
-      const loggedUser = resData?.data?.user || resData?.data?.admin || {
-        fullName: role === "admin" ? "Placement Officer (Admin)" : "Student User",
+      const returnedUser = resData?.data?.user || resData?.data?.admin;
+      // Authoritative role from the server DB response
+      const actualRole =
+        returnedUser?.role ||
+        (resData?.data?.admin ? "admin" : role);
+
+      const loggedUser = returnedUser || {
+        fullName: actualRole === "admin" ? "Placement Officer (Admin)" : "Student User",
         email,
-        role,
+        role: actualRole,
       };
 
       if (token) {
-        login(token, loggedUser, role);
+        login(token, loggedUser, actualRole);
       }
 
       toast.success(
-        `Welcome back, ${loggedUser.fullName || (role === "admin" ? "Admin" : "Student")}!`
+        `Welcome back, ${loggedUser.fullName || (actualRole === "admin" ? "Admin" : "Student")}!`
       );
 
+      // Smart safe navigation: never route an admin to a student-only URL or vice versa!
       const redirectPath = searchParams.get("redirect");
-      if (redirectPath) {
-        navigate(redirectPath);
-      } else if (role === "student") {
-        navigate("/student-dashboard");
-      } else {
-        navigate("/admin-dashboard");
+      let targetDestination = actualRole === "admin" ? "/admin-dashboard" : "/student-dashboard";
+
+      if (redirectPath && redirectPath !== "/" && redirectPath !== "/login") {
+        const isStudentRoute =
+          redirectPath.startsWith("/student") ||
+          redirectPath.startsWith("/placement-drives") ||
+          redirectPath.startsWith("/my-applications");
+        const isAdminRoute = redirectPath.startsWith("/admin");
+
+        if (actualRole === "admin" && !isStudentRoute) {
+          targetDestination = redirectPath;
+        } else if (actualRole === "student" && !isAdminRoute) {
+          targetDestination = redirectPath;
+        }
       }
+
+      navigate(targetDestination, { replace: true });
     } catch (err) {
       console.error("Login failed:", err);
       const msg =
@@ -95,18 +141,20 @@ export default function Login() {
   // Quick fill for testing & evaluator convenience
   const fillDemoStudent = () => {
     setRole("student");
-    setEmail("student@example.com");
-    setPassword("Student@1234");
+    setSearchParams({ role: "student", redirect: "/student-dashboard" });
+    setEmail("prakashchoyal85@gmail.com");
+    setPassword("12345678");
     setError("");
-    toast.success("Filled demo student credentials");
+    toast.success("Filled student credentials");
   };
 
   const fillDemoAdmin = () => {
     setRole("admin");
-    setEmail("admin@placement.edu");
-    setPassword("Admin@1234");
+    setSearchParams({ role: "admin", redirect: "/admin-dashboard" });
+    setEmail("sarangowda@gmail.com");
+    setPassword("12345678");
     setError("");
-    toast.success("Filled demo admin credentials");
+    toast.success("Filled admin credentials");
   };
 
   return (
@@ -158,6 +206,7 @@ export default function Login() {
               onClick={() => {
                 setRole("student");
                 setError("");
+                setSearchParams({ role: "student", redirect: "/student-dashboard" });
               }}
               className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-semibold transition-all duration-200 ${
                 role === "student"
@@ -174,6 +223,7 @@ export default function Login() {
               onClick={() => {
                 setRole("admin");
                 setError("");
+                setSearchParams({ role: "admin", redirect: "/admin-dashboard" });
               }}
               className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-semibold transition-all duration-200 ${
                 role === "admin"
