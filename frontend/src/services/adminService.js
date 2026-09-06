@@ -73,10 +73,16 @@ export const getApplicationsByDrive = async (placementDriveId) => {
   return response.data;
 };
 
-export const updateApplicationStatus = async (applicationId, status, remarks = "") => {
+export const updateApplicationStatus = async (
+  applicationId,
+  status,
+  remarks = "",
+  extraDetails = {}
+) => {
   const response = await api.patch(`/application/${applicationId}/status`, {
     status,
     remarks,
+    ...extraDetails,
   });
   return response.data;
 };

@@ -16,6 +16,7 @@ export default function DashboardStats({
   const totalEligible = stats?.placementDrives?.eligible ?? 0;
   const totalApplications = stats?.applications?.total ?? 0;
   const shortlistedCount = stats?.applications?.shortlisted ?? 0;
+  const interviewCount = stats?.applications?.interview ?? 0;
   const selectedCount = stats?.applications?.selected ?? 0;
   const appliedCount = stats?.applications?.applied ?? 0;
   const withdrawnCount = stats?.applications?.withdrawn ?? 0;
@@ -61,14 +62,40 @@ export default function DashboardStats({
       actionTab: "applications",
     },
     {
-      title: "Shortlisted & Offers",
-      value: shortlistedCount + selectedCount,
-      subtext: selectedCount > 0 ? `${selectedCount} offer received` : shortlistedCount > 0 ? `${shortlistedCount} round(s) cleared` : "No offers yet",
-      badge: selectedCount > 0 ? "Offered" : shortlistedCount > 0 ? "Shortlisted" : "In Review",
-      badgeColor: selectedCount > 0 ? "bg-emerald-50 text-emerald-700 border-emerald-200" : shortlistedCount > 0 ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-slate-100 text-slate-600 border-slate-200",
+      title: "Interviews & Offers",
+      value: interviewCount + shortlistedCount + selectedCount,
+      subtext:
+        selectedCount > 0
+          ? `${selectedCount} offer extended`
+          : interviewCount > 0
+          ? `${interviewCount} interview scheduled`
+          : shortlistedCount > 0
+          ? `${shortlistedCount} round(s) cleared`
+          : "No active stages yet",
+      badge:
+        selectedCount > 0
+          ? "Offer Secured"
+          : interviewCount > 0
+          ? "Interview Live"
+          : shortlistedCount > 0
+          ? "Shortlisted"
+          : "In Pipeline",
+      badgeColor:
+        selectedCount > 0
+          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+          : interviewCount > 0
+          ? "bg-purple-50 text-purple-700 border-purple-200"
+          : shortlistedCount > 0
+          ? "bg-amber-50 text-amber-700 border-amber-200"
+          : "bg-slate-100 text-slate-600 border-slate-200",
       icon: Trophy,
-      iconBg: "bg-amber-500 text-white shadow-amber-500/20",
-      actionText: "Check Status",
+      iconBg:
+        selectedCount > 0
+          ? "bg-emerald-600 text-white shadow-emerald-500/20"
+          : interviewCount > 0
+          ? "bg-purple-600 text-white shadow-purple-500/20"
+          : "bg-amber-500 text-white shadow-amber-500/20",
+      actionText: "View Pipeline",
       actionTab: "applications",
     },
     {

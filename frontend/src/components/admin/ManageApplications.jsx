@@ -12,6 +12,8 @@ import {
   Edit3,
   X,
   AlertCircle,
+  Calendar,
+  DollarSign,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { getResumeViewUrl } from "../../utils/resumeHelper";
@@ -28,6 +30,10 @@ export default function ManageApplications({
   const [activeModalApp, setActiveModalApp] = useState(null);
   const [newStatus, setNewStatus] = useState("shortlisted");
   const [remarks, setRemarks] = useState("");
+  const [interviewDate, setInterviewDate] = useState("");
+  const [interviewRound, setInterviewRound] = useState("Technical Round 1");
+  const [interviewLocation, setInterviewLocation] = useState("Google Meet");
+  const [offeredPackage, setOfferedPackage] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   // Filter applications by drive, search term, and status
@@ -68,6 +74,18 @@ export default function ManageApplications({
     setActiveModalApp(app);
     setNewStatus(presetStatus || app.status || "shortlisted");
     setRemarks(app.remarks || "");
+    setInterviewDate(
+      app.interviewDate
+        ? new Date(app.interviewDate).toISOString().slice(0, 16)
+        : ""
+    );
+    setInterviewRound(app.interviewRound || "Technical Round 1");
+    setInterviewLocation(app.interviewLocation || "Google Meet");
+    setOfferedPackage(
+      app.offeredPackage !== undefined && app.offeredPackage !== null
+        ? String(app.offeredPackage)
+        : app.placementDrive?.package ? String(app.placementDrive.package) : ""
+    );
   };
 
   const handleStatusSubmit = async (e) => {
@@ -76,7 +94,17 @@ export default function ManageApplications({
 
     try {
       setSubmitting(true);
-      await onUpdateStatus(activeModalApp._id, newStatus, remarks);
+      const extraDetails = {};
+      if (newStatus === "interview") {
+        if (interviewDate) extraDetails.interviewDate = interviewDate;
+        if (interviewRound) extraDetails.interviewRound = interviewRound;
+        if (interviewLocation) extraDetails.interviewLocation = interviewLocation;
+      }
+      if (newStatus === "selected") {
+        if (offeredPackage) extraDetails.offeredPackage = Number(offeredPackage);
+      }
+
+      await onUpdateStatus(activeModalApp._id, newStatus, remarks, extraDetails);
       toast.success(`Application updated to "${newStatus}"!`);
       setActiveModalApp(null);
     } catch (err) {
@@ -99,6 +127,12 @@ export default function ManageApplications({
           label: "Shortlisted",
           icon: TrendingUp,
           classes: "bg-amber-50 text-amber-700 border-amber-200",
+        };
+      case "interview":
+        return {
+          label: "Interview Scheduled",
+          icon: Calendar,
+          classes: "bg-purple-50 text-purple-700 border-purple-200",
         };
       case "selected":
         return {
@@ -189,6 +223,7 @@ export default function ManageApplications({
             { id: "all", label: "All" },
             { id: "applied", label: "Applied" },
             { id: "shortlisted", label: "Shortlisted" },
+            { id: "interview", label: "Interview" },
             { id: "selected", label: "Selected" },
             { id: "rejected", label: "Rejected" },
           ].map((tab) => (
@@ -296,13 +331,36 @@ export default function ManageApplications({
                   </div>
 
                   {/* Status Badge */}
-                  <div className="flex flex-col items-start sm:items-end gap-1 shrink-0">
+                  <div className="flex flex-col items-start sm:items-end gap-1.5 shrink-0">
                     <span
                       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold border ${statusObj.classes}`}
                     >
                       <StatusIcon className="h-3.5 w-3.5" />
                       <span>{statusObj.label}</span>
                     </span>
+
+                    {app.status === "interview" && app.interviewDate && (
+                      <div className="flex items-center gap-1 text-[11px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
+                        <Calendar className="h-3 w-3" />
+                        <span>
+                          {app.interviewRound || "Interview"}:{" "}
+                          {new Date(app.interviewDate).toLocaleDateString("en-IN", {
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </div>
+                    )}
+
+                    {app.status === "selected" && (app.offeredPackage || drive.package) && (
+                      <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                        <DollarSign className="h-3 w-3" />
+                        <span>Offered: ₹{app.offeredPackage || drive.package} LPA</span>
+                      </div>
+                    )}
+
                     {app.remarks && (
                       <p className="text-[11px] text-slate-500 italic max-w-xs truncate text-right">
                         "{app.remarks}"
@@ -354,7 +412,7 @@ export default function ManageApplications({
       {/* Update Status Modal */}
       {activeModalApp && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-150 border border-slate-100">
+          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-150 border border-slate-100">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-700">
@@ -381,13 +439,14 @@ export default function ManageApplications({
               {/* Status Selector */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Pipeline Stage
+                  Recruitment Pipeline Stage
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {[
                     { id: "applied", label: "Applied", desc: "Initial state" },
-                    { id: "shortlisted", label: "Shortlisted", desc: "Invited to rounds" },
-                    { id: "selected", label: "Selected", desc: "Job offer issued" },
+                    { id: "shortlisted", label: "Shortlisted", desc: "Screening cleared" },
+                    { id: "interview", label: "Interview", desc: "Rounds scheduled" },
+                    { id: "selected", label: "Selected", desc: "Job offer extended" },
                     { id: "rejected", label: "Rejected", desc: "Not progressed" },
                   ].map((s) => (
                     <button
@@ -409,6 +468,77 @@ export default function ManageApplications({
                 </div>
               </div>
 
+              {/* Conditional: Interview Scheduling Details */}
+              {newStatus === "interview" && (
+                <div className="p-3.5 bg-purple-50/60 rounded-2xl border border-purple-100 space-y-3 animate-in fade-in-50">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-purple-900">
+                    <Calendar className="h-4 w-4 text-purple-600" />
+                    <span>Interview Scheduling Details</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                        Interview Date & Time
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={interviewDate}
+                        onChange={(e) => setInterviewDate(e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs focus:border-purple-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                        Round Title
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Technical Assessment 1"
+                        value={interviewRound}
+                        onChange={(e) => setInterviewRound(e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs focus:border-purple-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      Venue / Video Conference Link
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. https://meet.google.com/xyz or Main Auditorium"
+                      value={interviewLocation}
+                      onChange={(e) => setInterviewLocation(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs focus:border-purple-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Conditional: Offer CTC Details */}
+              {newStatus === "selected" && (
+                <div className="p-3.5 bg-emerald-50/60 rounded-2xl border border-emerald-100 space-y-2 animate-in fade-in-50">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-900">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    <span>Final Placement Offer Details</span>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      Confirmed CTC Package (in LPA)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      placeholder="e.g. 24"
+                      value={offeredPackage}
+                      onChange={(e) => setOfferedPackage(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs focus:border-emerald-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              )}
+
               {/* TPO Remarks */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -416,7 +546,7 @@ export default function ManageApplications({
                 </label>
                 <textarea
                   rows={2}
-                  placeholder="e.g. Cleared technical interview round 1. Technical assessment score: 85%."
+                  placeholder="e.g. Candidate exhibited strong data structures knowledge and problem-solving skills."
                   value={remarks}
                   onChange={(e) => setRemarks(e.target.value)}
                   className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs focus:border-amber-500 focus:outline-none resize-none"

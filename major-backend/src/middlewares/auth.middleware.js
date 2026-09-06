@@ -37,3 +37,35 @@ export const verifyAdmin = (req, res, next) => {
 
     next();
 };
+
+export const verifyStudent = (req, res, next) => {
+    if (!req.user) {
+        throw new ApiError(401, "Unauthorized request");
+    }
+
+    if (req.user.role !== "student") {
+        throw new ApiError(
+            403,
+            "Access denied. Student access only."
+        );
+    }
+
+    next();
+};
+
+export const verifyRole = (...roles) => {
+    return (req, res, next) => {
+        if (!req.user) {
+            throw new ApiError(401, "Unauthorized request");
+        }
+
+        if (!roles.includes(req.user.role)) {
+            throw new ApiError(
+                403,
+                `Access denied. Requires one of: ${roles.join(", ")}`
+            );
+        }
+
+        next();
+    };
+};

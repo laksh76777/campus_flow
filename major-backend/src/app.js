@@ -46,6 +46,10 @@ app.use(
 app.use(express.static("public"));
 app.use(cookieParser());
 
+import { securityHeaders, generalApiLimiter } from "./middlewares/security.middleware.js";
+app.use(securityHeaders);
+app.use("/api", generalApiLimiter);
+
 import userRouter from "./routes/user.routes.js";
 import studentRouter from "./routes/studentProfile.routes.js";
 import companyRouter from "./routes/company.routes.js";

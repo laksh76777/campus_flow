@@ -40,17 +40,30 @@ const generateAccessAndRefreshToken = async (userId) => {
 };
 
 const registerUser = asyncHandler(async (req,res) =>{
-    const {fullName, email, password,phone} = req.body
+    const {fullName, email, password, phone, role, adminSecretKey} = req.body;
     if(
-        [fullName, email, phone,password].some((field)=>field?.trim()==="")
+        [fullName, email, password].some((field)=> !field || field?.trim()==="")
     ){
-        throw new ApiError(400, "all fields are required")
+        throw new ApiError(400, "Full name, email, and password are required");
     }
+
+    const assignedRole = (role && role.toLowerCase().trim() === "admin") ? "admin" : "student";
+
+    if (assignedRole === "admin") {
+        const expectedSecret = process.env.ADMIN_SECRET_KEY || "TPO_ADMIN_2026";
+        if (!adminSecretKey || adminSecretKey.trim() !== expectedSecret) {
+            throw new ApiError(
+                403,
+                "Unauthorized: Valid admin secret key is required to register as Administrator."
+            );
+        }
+    }
+
     const existedUser = await User.findOne({
          email: email.toLowerCase().trim()
     })
     if(existedUser) {
-        throw new ApiError(409, "user with email or username already exists")
+        throw new ApiError(409, "User with email already exists");
     }
     const avatarLocalPath = req.files?.avatar?.[0]?.path;
     let avatar = null;
@@ -70,8 +83,8 @@ const registerUser = asyncHandler(async (req,res) =>{
         fullName: fullName.trim(),
         email: email.toLowerCase().trim(),
         password,
-        phone: phone.trim(),
-        role: "student",
+        phone: phone ? phone.trim() : "",
+        role: assignedRole,
         avatar: avatar
             ? {
                 url: avatar.secure_url || avatar.url,
@@ -89,28 +102,43 @@ const registerUser = asyncHandler(async (req,res) =>{
         throw new ApiError(500, "something went wrong while registering the user")
     }
      return res.status(201).json(
-        new ApiResponse(200, createdUser, "user registered successfully")
+        new ApiResponse(201, createdUser, "User registered successfully")
     )
 })
 
 const loginUser = asyncHandler(async (req, res) => {
+    const { email, fullName, rollNumber, password } = req.body;
 
-    const { email, fullName, password } = req.body;
-
-    if (!(email || fullName)) {
-        throw new ApiError(400, "email or fullName is required");
+    if (!(email || fullName || rollNumber)) {
+        throw new ApiError(400, "Email, full name, or roll number is required");
     }
 
     if (!password) {
-        throw new ApiError(400, "password is required");
+        throw new ApiError(400, "Password is required");
     }
 
-    const user = await User.findOne({
-        $or: [
-            ...(email ? [{ email }] : []),
-            ...(fullName ? [{ fullName }] : [])
-        ]
-    });
+    const cleanEmail = email ? email.toLowerCase().trim() : null;
+
+    let user = null;
+    if (cleanEmail || fullName) {
+        user = await User.findOne({
+            $or: [
+                ...(cleanEmail ? [{ email: cleanEmail }] : []),
+                ...(fullName ? [{ fullName: fullName.trim() }] : [])
+            ]
+        });
+    }
+
+    // If not found yet and rollNumber is provided, lookup via StudentProfile
+    if (!user && rollNumber) {
+        const profile = await mongoose.model("StudentProfile").findOne({
+            enrollmentNumber: rollNumber.trim().toUpperCase()
+        }).select("user");
+
+        if (profile && profile.user) {
+            user = await User.findById(profile.user);
+        }
+    }
 
     if (!user) {
         throw new ApiError(404, "User does not exist");
@@ -119,7 +147,7 @@ const loginUser = asyncHandler(async (req, res) => {
     const isPasswordValid = await user.isPasswordCorrect(password);
 
     if (!isPasswordValid) {
-        throw new ApiError(401, "Invalid password");
+        throw new ApiError(401, "Invalid credentials");
     }
 
     const { accessToken, refreshToken } =

@@ -17,6 +17,7 @@ const applicationSchema = new mongoose.Schema(
                 values: [
                     "applied",
                     "shortlisted",
+                    "interview",
                     "selected",
                     "rejected",
                     "withdrawn"
@@ -28,6 +29,24 @@ const applicationSchema = new mongoose.Schema(
         appliedAt: {
             type: Date,
             default: Date.now,
+        },
+        interviewDate: {
+            type: Date,
+            default: null,
+        },
+        interviewRound: {
+            type: String,
+            trim: true,
+            default: "",
+        },
+        interviewLocation: {
+            type: String,
+            trim: true,
+            default: "",
+        },
+        offeredPackage: {
+            type: Number,
+            default: null,
         },
         remarks: {
             type: String,

@@ -1,5 +1,6 @@
 import {
   LayoutDashboard,
+  BarChart3,
   Users,
   Briefcase,
   Building2,
@@ -25,9 +26,15 @@ export default function AdminSidebar({
   const navItems = [
     {
       id: "overview",
-      label: "Overview & Analytics",
+      label: "Overview",
       icon: LayoutDashboard,
       badge: null,
+    },
+    {
+      id: "analytics",
+      label: "Placement Analytics",
+      icon: BarChart3,
+      badge: "TPO",
     },
     {
       id: "students",

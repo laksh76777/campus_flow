@@ -7,6 +7,9 @@ import {
   RotateCcw,
   Sparkles,
   Search,
+  Calendar,
+  MapPin,
+  Award,
 } from "lucide-react";
 
 export default function RecentApplications({
@@ -61,6 +64,12 @@ export default function RecentApplications({
           label: "Selected / Offered",
           color: "bg-emerald-50 text-emerald-700 border-emerald-200",
           icon: CheckCircle2,
+        };
+      case "interview":
+        return {
+          label: "Interview Scheduled",
+          color: "bg-purple-50 text-purple-700 border-purple-200",
+          icon: Calendar,
         };
       case "shortlisted":
         return {
@@ -206,12 +215,36 @@ export default function RecentApplications({
                         {formatDate(app.appliedAt || app.createdAt)}
                       </td>
                       <td className="px-4 py-3.5">
-                        <span
-                          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${statusInfo.color}`}
-                        >
-                          <StatusIcon className="h-3 w-3" />
-                          {statusInfo.label}
-                        </span>
+                        <div className="flex flex-col gap-1">
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-bold w-fit ${statusInfo.color}`}
+                          >
+                            <StatusIcon className="h-3 w-3" />
+                            {statusInfo.label}
+                          </span>
+
+                          {app.status === "interview" && app.interviewDate && (
+                            <div className="flex items-center gap-1 text-[10px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200 w-fit">
+                              <Calendar className="h-3 w-3" />
+                              <span>
+                                {app.interviewRound || "Interview"}:{" "}
+                                {new Date(app.interviewDate).toLocaleDateString("en-IN", {
+                                  month: "short",
+                                  day: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </span>
+                            </div>
+                          )}
+
+                          {app.status === "selected" && (app.offeredPackage || drive.package) && (
+                            <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 w-fit">
+                              <Award className="h-3 w-3" />
+                              <span>Offered CTC: ₹{app.offeredPackage || drive.package} LPA</span>
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3.5 text-right">
                         {canWithdraw ? (
@@ -267,6 +300,29 @@ export default function RecentApplications({
                       {statusInfo.label}
                     </span>
                   </div>
+
+                  {app.status === "interview" && app.interviewDate && (
+                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-purple-700 bg-purple-50 p-2 rounded-xl border border-purple-200">
+                      <Calendar className="h-3.5 w-3.5 shrink-0" />
+                      <span>
+                        {app.interviewRound || "Interview"}:{" "}
+                        {new Date(app.interviewDate).toLocaleDateString("en-IN", {
+                          month: "short",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}{" "}
+                        {app.interviewLocation ? `@ ${app.interviewLocation}` : ""}
+                      </span>
+                    </div>
+                  )}
+
+                  {app.status === "selected" && (app.offeredPackage || drive.package) && (
+                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 p-2 rounded-xl border border-emerald-200">
+                      <Award className="h-3.5 w-3.5 shrink-0" />
+                      <span>🎉 Offer Extended: ₹{app.offeredPackage || drive.package} LPA</span>
+                    </div>
+                  )}
 
                   <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
                     <span>Package: <strong className="text-slate-800">₹{drive.package || "N/A"} LPA</strong></span>

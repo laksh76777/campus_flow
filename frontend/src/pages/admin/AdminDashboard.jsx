@@ -6,6 +6,7 @@ import { RefreshCw } from "lucide-react";
 import AdminSidebar from "../../components/admin/AdminSidebar";
 import AdminNavbar from "../../components/admin/AdminNavbar";
 import AdminOverview from "../../components/admin/AdminOverview";
+import PlacementAnalytics from "../../components/admin/PlacementAnalytics";
 import ManageDrives from "../../components/admin/ManageDrives";
 import ManageCompanies from "../../components/admin/ManageCompanies";
 import ManageApplications from "../../components/admin/ManageApplications";
@@ -507,13 +508,23 @@ export default function AdminDashboard({ initialTab = "overview" }) {
   };
 
   // Handlers for Application
-  const handleUpdateApplicationStatus = async (appId, newStatus, remarks) => {
+  const handleUpdateApplicationStatus = async (
+    appId,
+    newStatus,
+    remarks,
+    extraDetails = {}
+  ) => {
     try {
-      await updateApplicationStatus(appId, newStatus, remarks);
+      await updateApplicationStatus(appId, newStatus, remarks, extraDetails);
       setApplications((prev) =>
         prev.map((app) =>
           app._id === appId
-            ? { ...app, status: newStatus, remarks: remarks || app.remarks }
+            ? {
+                ...app,
+                status: newStatus,
+                remarks: remarks || app.remarks,
+                ...extraDetails,
+              }
             : app
         )
       );
@@ -522,7 +533,12 @@ export default function AdminDashboard({ initialTab = "overview" }) {
       setApplications((prev) =>
         prev.map((app) =>
           app._id === appId
-            ? { ...app, status: newStatus, remarks: remarks || app.remarks }
+            ? {
+                ...app,
+                status: newStatus,
+                remarks: remarks || app.remarks,
+                ...extraDetails,
+              }
             : app
         )
       );
@@ -600,6 +616,16 @@ export default function AdminDashboard({ initialTab = "overview" }) {
                 setIsCreateCompanyOpen(true);
                 handleTabChange("companies");
               }}
+            />
+          )}
+
+          {activeTab === "analytics" && (
+            <PlacementAnalytics
+              stats={stats}
+              applications={applications}
+              students={students}
+              drives={drives}
+              companies={companies}
             />
           )}
 

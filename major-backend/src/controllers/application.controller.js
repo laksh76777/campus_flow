@@ -251,7 +251,7 @@ const getApplicationsByDrive = asyncHandler(async (req, res) => {
 
 const updateApplicationStatus = asyncHandler(async (req, res) => {
     const { applicationId } = req.params;
-    const { status, remarks } = req.body;
+    const { status, remarks, interviewDate, interviewRound, interviewLocation, offeredPackage } = req.body;
     if (!status) {
         throw new ApiError(
             400,
@@ -261,8 +261,10 @@ const updateApplicationStatus = asyncHandler(async (req, res) => {
     const allowedStatus = [
         "applied",
         "shortlisted",
+        "interview",
+        "selected",
         "rejected",
-        "selected"
+        "withdrawn"
     ];
     if (!allowedStatus.includes(status)) {
         throw new ApiError(
@@ -270,7 +272,7 @@ const updateApplicationStatus = asyncHandler(async (req, res) => {
             "Invalid application status"
         );
     }
-    const application = await Application.findById(applicationId);
+    const application = await Application.findById(applicationId).populate("placementDrive");
     if (!application) {
         throw new ApiError(
             404,
@@ -282,12 +284,45 @@ const updateApplicationStatus = asyncHandler(async (req, res) => {
     if (remarks !== undefined) {
         application.remarks = remarks;
     }
+
+    if (status === "interview") {
+        if (interviewDate) application.interviewDate = new Date(interviewDate);
+        if (interviewRound) application.interviewRound = interviewRound.trim();
+        if (interviewLocation) application.interviewLocation = interviewLocation.trim();
+    }
+
+    if (status === "selected") {
+        if (offeredPackage !== undefined && offeredPackage !== null) {
+            application.offeredPackage = Number(offeredPackage);
+        } else if (application.placementDrive && application.placementDrive.package) {
+            // Default to placement drive package if not overridden
+            application.offeredPackage = application.placementDrive.package;
+        }
+    }
+
     application.statusUpdatedAt = new Date();
     await application.save();
+
+    // Return populated application
+    const updatedApplication = await Application.findById(application._id)
+        .populate({
+            path: "student",
+            populate: {
+                path: "user",
+                select: "fullName email phone avatar"
+            }
+        })
+        .populate({
+            path: "placementDrive",
+            populate: {
+                path: "company"
+            }
+        });
+
     return res.status(200).json(
         new ApiResponse(
             200,
-            application,
+            updatedApplication,
             "Application status updated successfully"
         )
     );

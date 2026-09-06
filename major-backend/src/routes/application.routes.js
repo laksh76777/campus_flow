@@ -1,5 +1,7 @@
 import { Router } from "express";
-import { verifyAdmin, verifyJWT } from "../middlewares/auth.middleware.js";
+import { verifyAdmin, verifyJWT, verifyStudent } from "../middlewares/auth.middleware.js";
+import { applyRateLimiter } from "../middlewares/security.middleware.js";
+import { validateApplicationStatus } from "../middlewares/validation.middleware.js";
 import {
     applyForPlacement,
     getMyApplications,
@@ -22,18 +24,22 @@ router
     .route("/:driveId/apply")
     .post(
         verifyJWT,
+        verifyStudent,
+        applyRateLimiter,
         applyForPlacement
     );
 router
     .route("/my-applications")
     .get(
         verifyJWT,
+        verifyStudent,
         getMyApplications
     );
 router
     .route("/:applicationId/withdraw")
     .patch(
         verifyJWT,
+        verifyStudent,
         withdrawApplication
     );
 router.route("/drive/:placementDriveId").get(
@@ -45,6 +51,7 @@ router.route("/drive/:placementDriveId").get(
 router.route("/:applicationId/status").patch(
     verifyJWT,
     verifyAdmin,
+    validateApplicationStatus,
     updateApplicationStatus
 );
 router.route("/:applicationId").get(

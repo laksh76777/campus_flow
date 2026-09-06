@@ -6,7 +6,8 @@ import {
 
 import {
     verifyJWT,
-    verifyAdmin
+    verifyAdmin,
+    verifyStudent
 } from "../middlewares/auth.middleware.js";
 
 const router = Router();
@@ -22,6 +23,7 @@ router
     .route("/student/stats")
     .get(
         verifyJWT,
+        verifyStudent,
         getStudentDashboardStats
     );
 

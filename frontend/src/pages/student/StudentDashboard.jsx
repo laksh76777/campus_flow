@@ -11,6 +11,11 @@ import {
   ExternalLink,
   Plus,
   BookOpen,
+  Calendar,
+  CheckCircle2,
+  Clock,
+  MapPin,
+  Trophy,
 } from "lucide-react";
 
 import StudentSidebar from "../../components/studentDashboard/StudentSidebar";
@@ -180,12 +185,56 @@ export default function StudentDashboard() {
         total: activeApplicationsList.length,
         applied: activeApplicationsList.filter((a) => a.status === "applied").length,
         shortlisted: activeApplicationsList.filter((a) => a.status === "shortlisted").length,
+        interview: activeApplicationsList.filter((a) => a.status === "interview").length,
         selected: activeApplicationsList.filter((a) => a.status === "selected").length,
         rejected: activeApplicationsList.filter((a) => a.status === "rejected").length,
         withdrawn: activeApplicationsList.filter((a) => a.status === "withdrawn").length,
       },
     };
   }, [dashboardStats, activeDrivesList, activeApplicationsList]);
+
+  // Profile readiness calculation (0-100%) and missing requirements
+  const profileScore = useMemo(() => {
+    if (dashboardStats?.profileScore?.checklist) {
+      return dashboardStats.profileScore;
+    }
+
+    const checklist = [
+      { field: "Basic Details", completed: Boolean(studentProfile?.enrollmentNumber && (user?.fullName || authUser?.fullName)), points: 15, hint: "Name & Enrollment number" },
+      { field: "Contact Info", completed: Boolean(user?.email && (user?.phone || studentProfile?.phone)), points: 10, hint: "Email & Phone number" },
+      { field: "Academic Standing", completed: Boolean(studentProfile?.branch && studentProfile?.cgpa), points: 25, hint: "Branch & CGPA" },
+      { field: "10th & 12th Marks", completed: Boolean(studentProfile?.tenthPercentage && studentProfile?.twelfthPercentage), points: 15, hint: "Board exam percentages" },
+      { field: "Skills Portfolio", completed: Boolean(studentProfile?.skills && studentProfile.skills.length >= 3), points: 15, hint: "Add at least 3 skills" },
+      { field: "Verified Resume", completed: Boolean(studentProfile?.resume?.url), points: 20, hint: "Uploaded verified resume" }
+    ];
+
+    const percentage = checklist.reduce((acc, c) => (c.completed ? acc + c.points : acc), 0);
+    const missingItems = checklist.filter((c) => !c.completed);
+    return { percentage, checklist, missingItems };
+  }, [dashboardStats, studentProfile, user, authUser]);
+
+  // Scheduled upcoming interviews
+  const upcomingInterviews = useMemo(() => {
+    if (dashboardStats?.upcomingInterviews && dashboardStats.upcomingInterviews.length > 0) {
+      return dashboardStats.upcomingInterviews;
+    }
+    return applications.filter((app) => app.status === "interview");
+  }, [dashboardStats, applications]);
+
+  // Secured corporate placement offer details (if any)
+  const offerDetails = useMemo(() => {
+    if (dashboardStats?.offerDetails) return dashboardStats.offerDetails;
+    const selectedApp = applications.find((app) => app.status === "selected");
+    if (!selectedApp) return null;
+    const drive = selectedApp.placementDrive || {};
+    const company = typeof drive.company === "object" ? drive.company?.companyName : drive.companyName || "Corporate Partner";
+    return {
+      companyName: company,
+      jobTitle: drive.jobTitle || "Software Engineer",
+      package: selectedApp.offeredPackage || drive.package || 18,
+      selectedAt: selectedApp.statusUpdatedAt || selectedApp.updatedAt
+    };
+  }, [dashboardStats, applications]);
 
   // Apply Handler
   const handleOpenApplyModal = (drive) => {
@@ -329,6 +378,157 @@ export default function StudentDashboard() {
           {/* TAB 1: OVERVIEW */}
           {activeTab === "overview" && (
             <div className="space-y-6">
+              {/* Placed Student Offer Celebration Banner */}
+              {offerDetails && (
+                <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-700 p-6 text-white shadow-xl animate-in fade-in-50">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-md shadow-inner text-3xl">
+                        🎉
+                      </div>
+                      <div>
+                        <span className="rounded-full bg-emerald-400/20 px-3 py-0.5 text-xs font-bold text-emerald-200 border border-emerald-300/30">
+                          Official Placement Offer Extended
+                        </span>
+                        <h3 className="text-xl sm:text-2xl font-black tracking-tight mt-1">
+                          Congratulations, {studentName}!
+                        </h3>
+                        <p className="text-xs sm:text-sm text-emerald-100 mt-0.5">
+                          Selected as <strong>{offerDetails.jobTitle}</strong> at <strong>{offerDetails.companyName}</strong> with a confirmed offer package of <strong>₹{offerDetails.package} LPA</strong>.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setActiveTab("applications")}
+                      className="shrink-0 rounded-2xl bg-white px-5 py-2.5 text-xs sm:text-sm font-bold text-emerald-800 shadow-md hover:bg-emerald-50 transition active:scale-95"
+                    >
+                      View Offer Details
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Scheduled Upcoming Interviews Widget */}
+              {upcomingInterviews.length > 0 && (
+                <div className="rounded-3xl border border-purple-200/90 bg-gradient-to-br from-purple-50/70 via-white to-indigo-50/40 p-5 sm:p-6 shadow-xs animate-in fade-in-50">
+                  <div className="flex items-center justify-between pb-3 border-b border-purple-100">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-purple-600 text-white shadow-xs">
+                        <Calendar className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900">
+                          Upcoming Scheduled Interviews ({upcomingInterviews.length})
+                        </h3>
+                        <p className="text-[11px] text-slate-500">
+                          Live candidate evaluations & technical rounds
+                        </p>
+                      </div>
+                    </div>
+                    <span className="rounded-full bg-purple-100 px-2.5 py-0.5 text-[11px] font-bold text-purple-700">
+                      Active Next Round
+                    </span>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {upcomingInterviews.map((app) => {
+                      const drive = app.placementDrive || {};
+                      const comp =
+                        drive.company?.companyName || drive.companyName || "Corporate Partner";
+                      return (
+                        <div
+                          key={app._id}
+                          className="p-4 rounded-2xl bg-white border border-purple-100 shadow-xs flex flex-col justify-between gap-3 hover:border-purple-300 transition"
+                        >
+                          <div>
+                            <div className="flex items-center justify-between">
+                              <h4 className="font-bold text-slate-900 text-sm">{comp}</h4>
+                              <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                                {app.interviewRound || "Technical Round"}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-500 mt-0.5">{drive.jobTitle || "Engineering Position"}</p>
+
+                            <div className="mt-2.5 flex flex-wrap items-center gap-3 text-xs text-slate-600">
+                              <span className="flex items-center gap-1 font-semibold text-purple-800">
+                                <Clock className="h-3.5 w-3.5" />
+                                <span>
+                                  {app.interviewDate
+                                    ? new Date(app.interviewDate).toLocaleString("en-IN", {
+                                        month: "short",
+                                        day: "numeric",
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      })
+                                    : "Date to be announced"}
+                                </span>
+                              </span>
+
+                              {app.interviewLocation && (
+                                <span className="flex items-center gap-1 text-slate-500 truncate max-w-xs">
+                                  <MapPin className="h-3.5 w-3.5 shrink-0" />
+                                  <span className="truncate">{app.interviewLocation}</span>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Profile Completion Readiness Card (if incomplete) */}
+              {profileScore.percentage < 100 && (
+                <div className="rounded-3xl border border-blue-200/90 bg-gradient-to-br from-blue-50/60 via-white to-slate-50 p-5 sm:p-6 shadow-xs">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="space-y-1.5 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-white shadow-xs">
+                          <Sparkles className="h-4 w-4" />
+                        </span>
+                        <h3 className="text-sm sm:text-base font-bold text-slate-900">
+                          Placement Profile Readiness: {profileScore.percentage}% Complete
+                        </h3>
+                      </div>
+                      <p className="text-xs text-slate-500 max-w-xl">
+                        Verified profiles unlock company eligibility screening. Complete your missing items to apply for all top-tier corporate drives.
+                      </p>
+
+                      {/* Missing items chips */}
+                      <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
+                        {profileScore.missingItems.map((item) => (
+                          <button
+                            key={item.field}
+                            onClick={() => setIsProfileDrawerOpen(true)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-800 hover:bg-amber-100 transition"
+                          >
+                            <span>+ Complete {item.field}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Readiness gauge bar */}
+                    <div className="w-full sm:w-48 shrink-0 text-center sm:text-right">
+                      <div className="h-3 w-full rounded-full bg-slate-200 overflow-hidden mb-1.5">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 transition-all duration-700"
+                          style={{ width: `${profileScore.percentage}%` }}
+                        />
+                      </div>
+                      <button
+                        onClick={() => setIsProfileDrawerOpen(true)}
+                        className="text-xs font-bold text-blue-600 hover:underline"
+                      >
+                        Edit Profile &rarr;
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Stat Metric Cards */}
               <DashboardStats
                 stats={aggregatedStats}
