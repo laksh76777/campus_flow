@@ -1,6 +1,6 @@
 import "../env.js"
 import connectDB from "./db/index.js";
-import {app} from "../src/app.js"
+import {app} from "./app.js";
 console.log("Envirnment variables loaded successgfully.");
 connectDB().then(()=>{
     app.on("error", (error) => {
