@@ -9,8 +9,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [studentProfile, setStudentProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  const [userRole, setUserRole] = useState(() => localStorage.getItem("userRole") || "student");
+  const [userRole, setUserRole] = useState(() => localStorage.getItem("userRole") || null);
 
   // Load user details & student profile
   const fetchUserData = useCallback(async () => {
@@ -72,6 +71,9 @@ export function AuthProvider({ children }) {
     setUserRole(resolvedRole);
     localStorage.setItem("userRole", resolvedRole);
     if (userData) setUser(userData);
+    if (resolvedRole === "admin") {
+      setStudentProfile(null);
+    }
     fetchUserData();
   };
 
@@ -90,7 +92,7 @@ export function AuthProvider({ children }) {
       localStorage.removeItem("userRole");
       setToken("");
       setUser(null);
-      setUserRole("student");
+      setUserRole(null);
       setStudentProfile(null);
     }
   };

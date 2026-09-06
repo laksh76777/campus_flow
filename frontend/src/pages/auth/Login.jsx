@@ -27,10 +27,10 @@ export default function Login() {
 
   // If already authenticated, redirect to their proper dashboard
   useEffect(() => {
-    if (isAuthenticated && !authLoading) {
+    if (isAuthenticated && !authLoading && userRole) {
       if (userRole === "admin") {
         navigate("/admin-dashboard", { replace: true });
-      } else {
+      } else if (userRole === "student") {
         navigate("/student-dashboard", { replace: true });
       }
     }
@@ -62,27 +62,10 @@ export default function Login() {
       setLoading(true);
 
       let resData;
-      try {
-        if (role === "student") {
-          resData = await loginStudent({ email: email.trim(), password });
-        } else {
-          resData = await loginAdmin({ email: email.trim(), password });
-        }
-      } catch (firstErr) {
-        // Fallback: If login failed with chosen tab, check if user is registered in the other role
-        if (role === "student") {
-          try {
-            resData = await loginAdmin({ email: email.trim(), password });
-          } catch {
-            throw firstErr;
-          }
-        } else {
-          try {
-            resData = await loginStudent({ email: email.trim(), password });
-          } catch {
-            throw firstErr;
-          }
-        }
+      if (role === "student") {
+        resData = await loginStudent({ email: email.trim(), password });
+      } else {
+        resData = await loginAdmin({ email: email.trim(), password });
       }
 
       const token = resData?.data?.accessToken || resData?.data?.token;

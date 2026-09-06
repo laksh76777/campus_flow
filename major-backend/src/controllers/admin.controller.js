@@ -122,7 +122,8 @@ const loginAdmin = asyncHandler(async (req, res) => {
         .select("-password -refreshToken");
     const options = {
         httpOnly: true,
-        secure: true
+        secure: true,
+        sameSite: "none"
     };
     return res
         .status(200)
@@ -156,7 +157,8 @@ const logoutAdmin = asyncHandler(async (req, res) => {
 
     const options = {
         httpOnly: true,
-        secure: true
+        secure: true,
+        sameSite: "none"
     };
 
     return res

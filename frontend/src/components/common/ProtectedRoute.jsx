@@ -27,12 +27,16 @@ export default function ProtectedRoute({ children, requiredRole }) {
     );
   }
 
+  const currentRole = userRole || localStorage.getItem("userRole");
+
   // Role mismatch protection
-  if (requiredRole && userRole && userRole !== requiredRole) {
-    if (userRole === "admin") {
+  if (requiredRole && currentRole && currentRole !== requiredRole) {
+    if (currentRole === "admin") {
       return <Navigate to="/admin-dashboard" replace />;
     }
-    return <Navigate to="/student-dashboard" replace />;
+    if (currentRole === "student") {
+      return <Navigate to="/student-dashboard" replace />;
+    }
   }
 
   return children;
