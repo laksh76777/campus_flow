@@ -6,6 +6,7 @@ import {
   Building2,
   FileText,
   ArrowRight,
+  RotateCcw,
 } from "lucide-react";
 import { getResumeViewUrl } from "../../utils/resumeHelper";
 
@@ -14,6 +15,7 @@ export default function ApplyModal({
   onClose,
   drive,
   studentProfile,
+  isReapply = false,
   onConfirmApply,
 }) {
   const [submitting, setSubmitting] = useState(false);
@@ -157,6 +159,14 @@ export default function ApplyModal({
           )}
         </div>
 
+        {/* Re-apply Notice */}
+        {isReapply && (
+          <div className="mt-4 flex items-center gap-2.5 rounded-xl bg-amber-50 p-3 border border-amber-200/80 text-xs text-amber-800">
+            <RotateCcw className="h-4 w-4 text-amber-600 shrink-0" />
+            <span>You previously withdrew from this drive. You can re-apply while the registration period remains open.</span>
+          </div>
+        )}
+
         {/* Actions */}
         <div className="mt-6 flex items-center justify-end gap-3">
           <button
@@ -172,14 +182,23 @@ export default function ApplyModal({
             type="button"
             onClick={handleSubmit}
             disabled={submitting || !isWindowOpen || !isCgpaEligible || !isBacklogEligible}
-            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-semibold text-white shadow-md shadow-blue-500/20 transition hover:bg-blue-700 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+            className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-semibold text-white shadow-md transition active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed ${
+              isReapply
+                ? "bg-amber-600 hover:bg-amber-700 shadow-amber-500/20"
+                : "bg-blue-600 hover:bg-blue-700 shadow-blue-500/20"
+            }`}
           >
             {submitting ? (
-              <span>Submitting Application...</span>
+              <span>{isReapply ? "Re-submitting Application..." : "Submitting Application..."}</span>
             ) : !isStarted ? (
               <span>Opens on {startDate?.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
             ) : isExpired ? (
               <span>Application Closed</span>
+            ) : isReapply ? (
+              <>
+                <span>Re-apply Now</span>
+                <RotateCcw className="h-4 w-4" />
+              </>
             ) : (
               <>
                 <span>Submit Application</span>

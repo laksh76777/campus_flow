@@ -6,11 +6,13 @@ import {
   CheckCircle,
   Briefcase,
   GraduationCap,
+  RotateCcw,
 } from "lucide-react";
 
 export default function RecentDrives({
   drives = [],
   appliedDriveIds = new Set(),
+  withdrawnDriveIds = new Set(),
   onApplyClick,
   title = "Eligible Placement Drives",
   description = "Opportunities matching your academic criteria and branch",
@@ -145,8 +147,11 @@ export default function RecentDrives({
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {displayList.map((drive) => {
             const companyName = drive.company?.companyName || drive.companyName || "Partner Company";
-            const isApplied = appliedDriveIds.has(drive._id);
+            const driveIdStr = drive._id ? String(drive._id) : "";
+            const isApplied = appliedDriveIds.has(drive._id) || (driveIdStr && appliedDriveIds.has(driveIdStr));
+            const isWithdrawn = !isApplied && (withdrawnDriveIds.has(drive._id) || (driveIdStr && withdrawnDriveIds.has(driveIdStr)));
             const deadlineInfo = formatDeadline(drive.applicationDeadline);
+            const isEnded = deadlineInfo?.label === "Ended";
 
             return (
               <div
@@ -227,6 +232,22 @@ export default function RecentDrives({
                       <CheckCircle className="h-3.5 w-3.5" />
                       Applied
                     </span>
+                  ) : isWithdrawn ? (
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
+                        Withdrawn
+                      </span>
+                      {!isEnded && (
+                        <button
+                          onClick={() => onApplyClick(drive)}
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 px-3 py-1.5 text-xs font-bold text-white shadow-xs transition active:scale-95"
+                          title="Re-apply to this placement drive"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                          <span>Re-apply</span>
+                        </button>
+                      )}
+                    </div>
                   ) : (
                     <button
                       onClick={() => onApplyClick(drive)}

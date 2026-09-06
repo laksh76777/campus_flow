@@ -93,6 +93,20 @@ const applyForPlacement = asyncHandler(async (req, res) => {
         placementDrive: placementDrive._id
     });
     if (existingApplication) {
+        if (existingApplication.status === "withdrawn") {
+            existingApplication.status = "applied";
+            existingApplication.appliedAt = new Date();
+            existingApplication.statusUpdatedAt = new Date();
+            await existingApplication.save();
+
+            return res.status(200).json(
+                new ApiResponse(
+                    200,
+                    existingApplication,
+                    "Application re-submitted successfully"
+                )
+            );
+        }
         throw new ApiError(
             409,
             "You have already applied for this placement drive"

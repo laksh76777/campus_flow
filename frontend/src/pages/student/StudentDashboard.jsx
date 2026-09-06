@@ -89,7 +89,7 @@ export default function StudentDashboard() {
       // 3. Fetch Eligible Drives directly
       try {
         const drivesRes = await getMyEligibleDrives();
-        if (drivesRes.data && drivesRes.data.length > 0) {
+        if (Array.isArray(drivesRes?.data)) {
           setEligibleDrives(drivesRes.data);
         }
       } catch (err) {
@@ -99,7 +99,7 @@ export default function StudentDashboard() {
       // 4. Fetch All Applications
       try {
         const appsRes = await getMyApplications();
-        if (appsRes.data && appsRes.data.length > 0) {
+        if (Array.isArray(appsRes?.data)) {
           setApplications(appsRes.data);
         }
       } catch (err) {
@@ -118,13 +118,31 @@ export default function StudentDashboard() {
   }, [loadDashboardData]);
 
   // Derived drive lists & applied drive IDs
+  // ONLY non-withdrawn applications count as applied!
   const appliedDriveIds = useMemo(() => {
     const ids = new Set();
     applications.forEach((app) => {
-      if (app.placementDrive?._id) {
-        ids.add(app.placementDrive._id);
-      } else if (app.placementDrive) {
-        ids.add(app.placementDrive);
+      if (app.status && app.status !== "withdrawn") {
+        const id = app.placementDrive?._id || app.placementDrive;
+        if (id) {
+          ids.add(id);
+          ids.add(String(id));
+        }
+      }
+    });
+    return ids;
+  }, [applications]);
+
+  // Drives where the student previously applied but has now withdrawn
+  const withdrawnDriveIds = useMemo(() => {
+    const ids = new Set();
+    applications.forEach((app) => {
+      if (app.status === "withdrawn") {
+        const id = app.placementDrive?._id || app.placementDrive;
+        if (id) {
+          ids.add(id);
+          ids.add(String(id));
+        }
       }
     });
     return ids;
@@ -312,6 +330,7 @@ export default function StudentDashboard() {
                   <RecentDrives
                     drives={activeDrivesList}
                     appliedDriveIds={appliedDriveIds}
+                    withdrawnDriveIds={withdrawnDriveIds}
                     onApplyClick={handleOpenApplyModal}
                     title="Active Eligible Drives"
                     description="Opportunities open for your branch and CGPA"
@@ -359,6 +378,7 @@ export default function StudentDashboard() {
               <RecentDrives
                 drives={activeDrivesList}
                 appliedDriveIds={appliedDriveIds}
+                withdrawnDriveIds={withdrawnDriveIds}
                 onApplyClick={handleOpenApplyModal}
                 title="All Eligible Placement Drives"
                 description="Live recruitment drives filtered by your eligibility criteria"
@@ -584,6 +604,12 @@ export default function StudentDashboard() {
         }}
         drive={selectedDriveToApply}
         studentProfile={studentProfile}
+        isReapply={
+          selectedDriveToApply
+            ? withdrawnDriveIds.has(selectedDriveToApply._id) ||
+              withdrawnDriveIds.has(String(selectedDriveToApply._id))
+            : false
+        }
         onConfirmApply={handleConfirmApply}
       />
     </div>

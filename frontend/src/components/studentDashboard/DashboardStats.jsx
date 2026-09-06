@@ -18,6 +18,7 @@ export default function DashboardStats({
   const shortlistedCount = stats?.applications?.shortlisted ?? 0;
   const selectedCount = stats?.applications?.selected ?? 0;
   const appliedCount = stats?.applications?.applied ?? 0;
+  const withdrawnCount = stats?.applications?.withdrawn ?? 0;
   const cgpa = studentProfile?.cgpa != null ? studentProfile.cgpa : "--";
   const backlogs = studentProfile?.backlogs ?? 0;
 
@@ -36,9 +37,24 @@ export default function DashboardStats({
     {
       title: "Applications Sent",
       value: totalApplications,
-      subtext: `${appliedCount} in active review`,
-      badge: appliedCount > 0 ? "In Progress" : "No Pending",
-      badgeColor: appliedCount > 0 ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-slate-100 text-slate-600 border-slate-200",
+      subtext:
+        appliedCount > 0
+          ? `${appliedCount} in active review`
+          : withdrawnCount > 0
+          ? `${withdrawnCount} withdrawn`
+          : "0 in active review",
+      badge:
+        appliedCount > 0
+          ? "In Progress"
+          : withdrawnCount > 0
+          ? "Withdrawn"
+          : "No Pending",
+      badgeColor:
+        appliedCount > 0
+          ? "bg-blue-50 text-blue-700 border-blue-200"
+          : withdrawnCount > 0
+          ? "bg-amber-50 text-amber-700 border-amber-200"
+          : "bg-slate-100 text-slate-600 border-slate-200",
       icon: FileCheck2,
       iconBg: "bg-indigo-600 text-white shadow-indigo-500/20",
       actionText: "View History",
