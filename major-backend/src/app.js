@@ -8,7 +8,7 @@ const allowedOrigins = [
     "http://localhost:5173",
     "http://localhost:3000",
     process.env.CORS_ORIGIN
-];
+].filter(Boolean);
 
 app.get("/", (req, res) => {
     res.send("backend is running");
@@ -17,22 +17,35 @@ app.get("/", (req, res) => {
 app.use(
     cors({
         origin: function (origin, callback) {
-            if (!origin || allowedOrigins.includes(origin)) {
-                callback(null, true);
-            } else {
-                callback(new Error("Not allowed by CORS"));
+            // Allow requests without Origin
+            if (!origin) {
+                return callback(null, true);
             }
+
+            if (allowedOrigins.includes(origin)) {
+                return callback(null, true);
+            }
+
+            console.log("Blocked by CORS:", origin);
+
+            return callback(new Error("Not allowed by CORS"));
         },
         credentials: true
     })
 );
 
 app.use(express.json({ limit: "16kb" }));
-app.use(express.urlencoded({ extended: true, limit: "16kb" }));
+
+app.use(
+    express.urlencoded({
+        extended: true,
+        limit: "16kb"
+    })
+);
+
 app.use(express.static("public"));
 app.use(cookieParser());
 
-// Routes
 import userRouter from "./routes/user.routes.js";
 import studentRouter from "./routes/studentProfile.routes.js";
 import companyRouter from "./routes/company.routes.js";
@@ -49,13 +62,17 @@ app.use("/api/v1/placementdrive", placementDriveRouter);
 app.use("/api/v1/application", applicationRouter);
 app.use("/api/v1/dashboard", dashboardRouter);
 
+// Global Error Handler
 app.use((err, req, res, next) => {
+    console.error(err);
+
     const statusCode = err.statusCode || 500;
+    const message = err.message || "Internal Server Error";
 
     return res.status(statusCode).json({
         statusCode,
         success: false,
-        message: err.message || "Internal Server Error",
+        message,
         errors: err.errors || []
     });
 });
