@@ -52,6 +52,50 @@ const studentProfileSchema = new mongoose.Schema(
             default: [],
         },
 
+        tenthPercentage: {
+            type: Number,
+            min: 0,
+            max: 100,
+            default: null,
+        },
+
+        twelfthPercentage: {
+            type: Number,
+            min: 0,
+            max: 100,
+            default: null,
+        },
+
+        certificates: [
+            {
+                title: {
+                    type: String,
+                    required: true,
+                    trim: true,
+                },
+                issuer: {
+                    type: String,
+                    trim: true,
+                    default: "",
+                },
+                issueDate: {
+                    type: String,
+                    trim: true,
+                    default: "",
+                },
+                certificateUrl: {
+                    type: String,
+                    trim: true,
+                    default: "",
+                },
+                credentialId: {
+                    type: String,
+                    trim: true,
+                    default: "",
+                },
+            }
+        ],
+
         about: {
             type: String,
             trim: true,

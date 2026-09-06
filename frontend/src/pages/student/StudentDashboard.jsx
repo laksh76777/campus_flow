@@ -6,6 +6,11 @@ import {
   GraduationCap,
   ArrowRight,
   RefreshCw,
+  Award,
+  ShieldCheck,
+  ExternalLink,
+  Plus,
+  BookOpen,
 } from "lucide-react";
 
 import StudentSidebar from "../../components/studentDashboard/StudentSidebar";
@@ -162,7 +167,7 @@ export default function StudentDashboard() {
       toast.success("Application submitted successfully!");
       loadDashboardData(true);
     } catch (err) {
-      const msg = err.response?.data?.message || "Failed to submit application";
+      const msg = err.response?.data?.message || err.message || "Failed to submit application";
       toast.error(msg);
       throw err;
     }
@@ -394,26 +399,38 @@ export default function StudentDashboard() {
               </div>
 
               {/* Stats overview */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 text-center">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 text-center">
                   <span className="text-[11px] font-bold text-slate-400 uppercase">CGPA</span>
-                  <p className="text-2xl font-extrabold text-slate-900 mt-1">{studentCgpa}</p>
+                  <p className="text-xl font-extrabold text-slate-900 mt-1">{studentCgpa}</p>
                 </div>
-                <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 text-center">
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 text-center">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase">10th Std</span>
+                  <p className="text-xl font-extrabold text-blue-600 mt-1">
+                    {studentProfile?.tenthPercentage != null ? `${studentProfile.tenthPercentage}%` : "--"}
+                  </p>
+                </div>
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 text-center">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase">12th Std</span>
+                  <p className="text-xl font-extrabold text-indigo-600 mt-1">
+                    {studentProfile?.twelfthPercentage != null ? `${studentProfile.twelfthPercentage}%` : "--"}
+                  </p>
+                </div>
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 text-center">
                   <span className="text-[11px] font-bold text-slate-400 uppercase">Backlogs</span>
-                  <p className="text-2xl font-extrabold text-emerald-600 mt-1">
+                  <p className="text-xl font-extrabold text-emerald-600 mt-1">
                     {studentProfile?.backlogs ?? 0}
                   </p>
                 </div>
-                <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 text-center">
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 text-center">
                   <span className="text-[11px] font-bold text-slate-400 uppercase">Semester</span>
-                  <p className="text-2xl font-extrabold text-slate-900 mt-1">
+                  <p className="text-xl font-extrabold text-slate-900 mt-1">
                     {studentProfile?.semester ?? 6}th
                   </p>
                 </div>
-                <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 text-center">
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 text-center">
                   <span className="text-[11px] font-bold text-slate-400 uppercase">Graduation</span>
-                  <p className="text-2xl font-extrabold text-slate-900 mt-1">{graduationYear}</p>
+                  <p className="text-xl font-extrabold text-slate-900 mt-1">{graduationYear}</p>
                 </div>
               </div>
 
@@ -442,6 +459,102 @@ export default function StudentDashboard() {
                     <strong className="text-slate-800">{studentBranch}</strong>
                   </div>
                 </div>
+              </div>
+
+              {/* Verified Certificates & Credentials Section */}
+              <div className="rounded-2xl border border-slate-100 p-5 sm:p-6 bg-slate-50/40 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                      <Award className="h-4 w-4 text-amber-500" />
+                      <span>Certificates & External Credentials</span>
+                      <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700 border border-blue-100">
+                        {studentProfile?.certificates?.length || 0}
+                      </span>
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Verified professional credentials and online certifications
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => setIsProfileDrawerOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-2xs"
+                  >
+                    <Plus className="h-3.5 w-3.5 text-blue-600" />
+                    <span>Manage</span>
+                  </button>
+                </div>
+
+                {!studentProfile?.certificates || studentProfile.certificates.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-slate-200 bg-white p-6 text-center">
+                    <Award className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                    <p className="text-xs font-semibold text-slate-700">
+                      No certifications added yet
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Add your certifications and verification links to impress campus recruiters.
+                    </p>
+                    <button
+                      onClick={() => setIsProfileDrawerOpen(true)}
+                      className="mt-3 inline-flex items-center gap-1 rounded-xl bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100 transition border border-blue-100"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>Add Credentials</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {studentProfile.certificates.map((cert, idx) => (
+                      <div
+                        key={idx}
+                        className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs hover:border-blue-200 transition flex flex-col justify-between gap-3"
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 border border-amber-100">
+                            <Award className="h-4 w-4" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h5 className="font-bold text-xs text-slate-900 leading-tight truncate">
+                              {cert.title}
+                            </h5>
+                            <p className="text-[11px] font-medium text-slate-500 mt-0.5">
+                              {cert.issuer || "Issuing Body"}
+                              {cert.issueDate ? ` • ${cert.issueDate}` : ""}
+                            </p>
+                            {cert.credentialId && (
+                              <span className="inline-block mt-1 font-mono text-[10px] text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
+                                ID: {cert.credentialId}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {cert.certificateUrl ? (
+                          <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                            <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
+                              <ShieldCheck className="h-3.5 w-3.5" />
+                              <span>Verified Link</span>
+                            </span>
+                            <a
+                              href={cert.certificateUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline"
+                            >
+                              <span>Verify on Site</span>
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          </div>
+                        ) : (
+                          <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-400 italic">
+                            No verification URL attached
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}

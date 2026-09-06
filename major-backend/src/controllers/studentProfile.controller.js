@@ -93,13 +93,35 @@ const createStudentProfile = asyncHandler(async (req, res) => {
 });
 
 const getCurrentStudentProfile = asyncHandler(async (req, res) => {
-
-    const studentProfile = await StudentProfile.findOne({
+    let studentProfile = await StudentProfile.findOne({
         user: req.user?._id
     }).populate(
         "user",
         "-password -refreshToken"
     );
+
+    if (!studentProfile && req.user?.role === "student") {
+        const generatedEnrollment = `ENR-${req.user._id.toString().slice(-6).toUpperCase()}`;
+        const newProfile = await StudentProfile.create({
+            user: req.user._id,
+            enrollmentNumber: generatedEnrollment,
+            branch: "CSE",
+            semester: 6,
+            graduationYear: 2027,
+            cgpa: 8.0,
+            backlogs: 0,
+            skills: ["JavaScript", "Python", "React"],
+            about: "",
+            tenthPercentage: null,
+            twelfthPercentage: null,
+            certificates: []
+        });
+
+        studentProfile = await StudentProfile.findById(newProfile._id).populate(
+            "user",
+            "-password -refreshToken"
+        );
+    }
 
     if (!studentProfile) {
         throw new ApiError(
@@ -126,6 +148,9 @@ const updateStudentProfile = asyncHandler(async (req, res) => {
         graduationYear,
         cgpa,
         backlogs,
+        tenthPercentage,
+        twelfthPercentage,
+        certificates,
         skills,
         about
     } = req.body;
@@ -141,11 +166,14 @@ const updateStudentProfile = asyncHandler(async (req, res) => {
         const newProfile = await StudentProfile.create({
             user: req.user?._id,
             enrollmentNumber: generatedEnrollment,
-            branch: branch || "Computer Science",
+            branch: branch || "CSE",
             semester: semester ? Number(semester) : 6,
-            graduationYear: graduationYear ? Number(graduationYear) : 2026,
-            cgpa: cgpa !== undefined ? Number(cgpa) : 8.5,
+            graduationYear: graduationYear ? Number(graduationYear) : 2027,
+            cgpa: cgpa !== undefined ? Number(cgpa) : 8.0,
             backlogs: backlogs !== undefined ? Number(backlogs) : 0,
+            tenthPercentage: tenthPercentage !== undefined && tenthPercentage !== null && tenthPercentage !== "" ? Number(tenthPercentage) : null,
+            twelfthPercentage: twelfthPercentage !== undefined && twelfthPercentage !== null && twelfthPercentage !== "" ? Number(twelfthPercentage) : null,
+            certificates: Array.isArray(certificates) ? certificates : [],
             skills: Array.isArray(skills)
                 ? skills
                 : typeof skills === "string"
@@ -211,6 +239,18 @@ const updateStudentProfile = asyncHandler(async (req, res) => {
 
     if (backlogs !== undefined) {
         updateData.backlogs = Number(backlogs);
+    }
+
+    if (tenthPercentage !== undefined) {
+        updateData.tenthPercentage = tenthPercentage === "" || tenthPercentage === null ? null : Number(tenthPercentage);
+    }
+
+    if (twelfthPercentage !== undefined) {
+        updateData.twelfthPercentage = twelfthPercentage === "" || twelfthPercentage === null ? null : Number(twelfthPercentage);
+    }
+
+    if (certificates !== undefined) {
+        updateData.certificates = Array.isArray(certificates) ? certificates : [];
     }
 
     if (skills !== undefined) {

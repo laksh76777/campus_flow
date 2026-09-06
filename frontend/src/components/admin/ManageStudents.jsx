@@ -244,6 +244,25 @@ export default function ManageStudents({
                           Sem {student.semester || 6} • Batch of{" "}
                           {student.graduationYear || 2026}
                         </div>
+                        {(student.tenthPercentage != null || student.twelfthPercentage != null || student.certificates?.length > 0) && (
+                          <div className="text-[10px] text-slate-500 mt-1 flex flex-wrap gap-1.5 items-center">
+                            {student.tenthPercentage != null && (
+                              <span className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-medium">
+                                10th: {student.tenthPercentage}%
+                              </span>
+                            )}
+                            {student.twelfthPercentage != null && (
+                              <span className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-medium">
+                                12th: {student.twelfthPercentage}%
+                              </span>
+                            )}
+                            {Array.isArray(student.certificates) && student.certificates.length > 0 && (
+                              <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded font-bold">
+                                {student.certificates.length} Cert{student.certificates.length > 1 ? "s" : ""}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
 
                       {/* CGPA */}

@@ -27,7 +27,17 @@ export default function ApplyModal({
   const isBacklogEligible = studentBacklogs <= (drive.maximumBacklogs ?? 0);
   const hasResume = !!studentProfile?.resume?.url;
 
+  const now = new Date();
+  const startDate = drive.applicationStartDate ? new Date(drive.applicationStartDate) : null;
+  const deadlineDate = drive.applicationDeadline ? new Date(drive.applicationDeadline) : null;
+  const isStarted = !startDate || now >= startDate;
+  const isExpired = deadlineDate && now > deadlineDate;
+  const isWindowOpen = isStarted && !isExpired;
+
   const handleSubmit = async () => {
+    if (!isStarted) {
+      return;
+    }
     setSubmitting(true);
     try {
       await onConfirmApply(drive._id);
@@ -108,6 +118,22 @@ export default function ApplyModal({
                 {drive.graduationYear || 2026}
               </span>
             </div>
+
+            <div className="flex items-center justify-between">
+              <span className="text-slate-600">Application Period:</span>
+              <span className={`flex items-center gap-1 font-semibold ${isWindowOpen ? "text-emerald-700" : "text-amber-700"}`}>
+                {isWindowOpen ? (
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                ) : (
+                  <XCircle className="h-4 w-4 text-amber-500" />
+                )}
+                {!isStarted
+                  ? `Opens on ${startDate?.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`
+                  : isExpired
+                  ? "Deadline passed"
+                  : "Open for applications"}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -145,11 +171,15 @@ export default function ApplyModal({
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={submitting}
-            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-semibold text-white shadow-md shadow-blue-500/20 transition hover:bg-blue-700 active:scale-95 disabled:opacity-60"
+            disabled={submitting || !isWindowOpen || !isCgpaEligible || !isBacklogEligible}
+            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-semibold text-white shadow-md shadow-blue-500/20 transition hover:bg-blue-700 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {submitting ? (
               <span>Submitting Application...</span>
+            ) : !isStarted ? (
+              <span>Opens on {startDate?.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
+            ) : isExpired ? (
+              <span>Application Closed</span>
             ) : (
               <>
                 <span>Submit Application</span>
