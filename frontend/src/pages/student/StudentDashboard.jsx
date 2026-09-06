@@ -33,7 +33,15 @@ import { useAuth } from "../../context/authContextDef";
 
 export default function StudentDashboard() {
   const navigate = useNavigate();
-  const { user: authUser, logout, studentProfile: authProfile } = useAuth();
+  const { user: authUser, userRole, logout, studentProfile: authProfile } = useAuth();
+
+  // If logged-in user is an admin, immediately redirect to Admin Console and avoid student calls
+  useEffect(() => {
+    const currentRole = userRole || localStorage.getItem("userRole") || authUser?.role;
+    if (currentRole === "admin") {
+      navigate("/admin-dashboard", { replace: true });
+    }
+  }, [userRole, authUser, navigate]);
 
   // Navigation and UI state
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -55,6 +63,12 @@ export default function StudentDashboard() {
 
   // Load all dashboard data
   const loadDashboardData = useCallback(async (isRefresh = false) => {
+    const currentRole = userRole || localStorage.getItem("userRole") || authUser?.role;
+    if (currentRole === "admin") {
+      navigate("/admin-dashboard", { replace: true });
+      return;
+    }
+
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
 
