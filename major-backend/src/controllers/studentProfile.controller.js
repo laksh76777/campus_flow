@@ -374,7 +374,7 @@ const updateStudentResume = asyncHandler(async (req, res) => {
 
 const getAllStudentProfiles = asyncHandler(async (req, res) => {
     const students = await StudentProfile.find()
-        .populate("user", "fullName email role")
+        .populate("user", "fullName email phone avatar role")
         .sort({ createdAt: -1 });
 
     return res.status(200).json(

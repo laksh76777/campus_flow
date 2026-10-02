@@ -1,4 +1,3 @@
-import { useState, useMemo } from "react";
 import {
   Users,
   Search,
@@ -9,8 +8,10 @@ import {
   Mail,
   Award,
   RefreshCw,
+  Eye,
 } from "lucide-react";
 import { getResumeViewUrl } from "../../utils/resumeHelper";
+import StudentDetailModal from "./StudentDetailModal";
 
 export default function ManageStudents({
   students = [],
@@ -20,6 +21,7 @@ export default function ManageStudents({
   const [branchFilter, setBranchFilter] = useState("all");
   const [backlogFilter, setBacklogFilter] = useState("all");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState(null);
 
   const handleManualRefresh = async () => {
     if (onRefresh) {
@@ -191,7 +193,7 @@ export default function ManageStudents({
                   <th className="py-3.5 px-3 text-center">CGPA</th>
                   <th className="py-3.5 px-3 text-center">Backlogs</th>
                   <th className="py-3.5 px-3">Skills Portfolio</th>
-                  <th className="py-3.5 pl-3 pr-5 text-right">Resume</th>
+                  <th className="py-3.5 pl-3 pr-5 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
@@ -208,16 +210,18 @@ export default function ManageStudents({
                   return (
                     <tr
                       key={student._id || student.enrollmentNumber}
-                      className="hover:bg-slate-50/70 transition-colors"
+                      onClick={() => setSelectedStudent(student)}
+                      className="hover:bg-blue-50/50 cursor-pointer transition-colors group"
+                      title="Click to view full student dossier"
                     >
                       {/* Candidate Avatar & Name */}
                       <td className="py-3.5 pl-5 pr-3">
                         <div className="flex items-center gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-extrabold text-xs shadow-xs">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-extrabold text-xs shadow-xs group-hover:scale-105 transition-transform">
                             {initial}
                           </div>
                           <div>
-                            <div className="font-extrabold text-slate-900 leading-tight">
+                            <div className="font-extrabold text-slate-900 leading-tight group-hover:text-blue-700 transition-colors">
                               {name}
                             </div>
                             <div className="flex items-center gap-1 text-[11px] text-slate-400 mt-0.5">
@@ -319,24 +323,41 @@ export default function ManageStudents({
                         </div>
                       </td>
 
-                      {/* Resume Trigger */}
+                      {/* Actions: View Profile & Resume */}
                       <td className="py-3.5 pl-3 pr-5 text-right">
-                        {hasResume ? (
-                          <a
-                            href={getResumeViewUrl(student.resume.url)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 rounded-xl bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700 border border-blue-200 hover:bg-blue-100 transition"
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedStudent(student);
+                            }}
+                            className="inline-flex items-center gap-1 rounded-xl bg-slate-900 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-slate-800 shadow-xs transition active:scale-95"
+                            title="View complete student details"
                           >
-                            <FileText className="h-3 w-3" />
-                            <span>Resume</span>
-                            <ExternalLink className="h-2.5 w-2.5" />
-                          </a>
-                        ) : (
-                          <span className="text-[11px] font-semibold text-slate-400 italic">
-                            No Resume
-                          </span>
-                        )}
+                            <Eye className="h-3 w-3" />
+                            <span>View</span>
+                          </button>
+
+                          {hasResume ? (
+                            <a
+                              href={getResumeViewUrl(student.resume.url)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="inline-flex items-center gap-1 rounded-xl bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700 border border-blue-200 hover:bg-blue-100 transition"
+                              title="Open resume in new tab"
+                            >
+                              <FileText className="h-3 w-3" />
+                              <span>Resume</span>
+                              <ExternalLink className="h-2.5 w-2.5" />
+                            </a>
+                          ) : (
+                            <span className="text-[11px] font-semibold text-slate-400 italic px-1">
+                              No Resume
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -346,6 +367,13 @@ export default function ManageStudents({
           </div>
         </div>
       )}
+
+      {/* Complete Student Profile Dossier Modal */}
+      <StudentDetailModal
+        student={selectedStudent}
+        isOpen={!!selectedStudent}
+        onClose={() => setSelectedStudent(null)}
+      />
     </div>
   );
 }
