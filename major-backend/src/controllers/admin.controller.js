@@ -173,8 +173,30 @@ const logoutAdmin = asyncHandler(async (req, res) => {
             )
         );
 });
+
+const getCurrentAdmin = asyncHandler(async (req, res) => {
+    const admin = await Admin.findOne({
+        user: req.user._id
+    });
+
+    const userObj = req.user.toObject ? req.user.toObject() : req.user;
+
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            {
+                ...userObj,
+                admin,
+                role: "admin"
+            },
+            "Current admin profile fetched successfully"
+        )
+    );
+});
+
 export {
     registerAdmin,
     loginAdmin,
-    logoutAdmin
+    logoutAdmin,
+    getCurrentAdmin
 };

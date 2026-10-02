@@ -4,35 +4,94 @@ import cookieParser from "cookie-parser";
 
 const app = express();
 
-const allowedOrigins = [
+// Parse configured origins from environment variable (supports comma-separated list)
+const configuredOrigins = (process.env.CORS_ORIGIN || "")
+    .split(",")
+    .map((o) => o.trim().replace(/\/$/, ""))
+    .filter(Boolean);
+
+const defaultAllowedOrigins = [
     "http://localhost:5173",
     "http://localhost:3000",
-    process.env.CORS_ORIGIN
-].filter(Boolean);
+    "http://localhost:4173",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:4173"
+];
+
+const isOriginAllowed = (origin) => {
+    // Allow non-browser requests or requests without Origin header (e.g. Postman, mobile apps, server-to-server)
+    if (!origin) return true;
+
+    const normalizedOrigin = origin.replace(/\/$/, "");
+
+    // Allow all if CORS_ORIGIN is '*'
+    if (process.env.CORS_ORIGIN === "*" || configuredOrigins.includes("*")) {
+        return true;
+    }
+
+    // Explicit origins from env or default local dev
+    if (
+        defaultAllowedOrigins.includes(normalizedOrigin) ||
+        configuredOrigins.includes(normalizedOrigin)
+    ) {
+        return true;
+    }
+
+    // Allow any localhost / 127.0.0.1 port for development
+    if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalizedOrigin)) {
+        return true;
+    }
+
+    // Allow all Vercel deployments (preview domains like *-msgcyqj4h.vercel.app and production domains)
+    try {
+        const parsed = new URL(normalizedOrigin);
+        if (
+            parsed.protocol === "https:" &&
+            (parsed.hostname === "vercel.app" || parsed.hostname.endsWith(".vercel.app"))
+        ) {
+            return true;
+        }
+        if (
+            parsed.protocol === "https:" &&
+            (parsed.hostname === "onrender.com" || parsed.hostname.endsWith(".onrender.com"))
+        ) {
+            return true;
+        }
+    } catch {
+        // invalid URL format
+    }
+
+    return false;
+};
+
+const corsOptions = {
+    origin: function (origin, callback) {
+        if (isOriginAllowed(origin)) {
+            return callback(null, true);
+        }
+
+        console.warn("Blocked by CORS:", origin);
+        return callback(null, false);
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+        "Content-Type",
+        "Authorization",
+        "X-Requested-With",
+        "Accept",
+        "Origin"
+    ],
+    exposedHeaders: ["Set-Cookie"],
+    optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
 
 app.get("/", (req, res) => {
     res.send("backend is running");
 });
-
-app.use(
-    cors({
-        origin: function (origin, callback) {
-            // Allow requests without Origin
-            if (!origin) {
-                return callback(null, true);
-            }
-
-            if (allowedOrigins.includes(origin)) {
-                return callback(null, true);
-            }
-
-            console.log("Blocked by CORS:", origin);
-
-            return callback(new Error("Not allowed by CORS"));
-        },
-        credentials: true
-    })
-);
 
 app.use(express.json({ limit: "16kb" }));
 
