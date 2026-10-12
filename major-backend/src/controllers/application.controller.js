@@ -4,6 +4,8 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { Application } from "../models/application.model.js";
 import { StudentProfile } from "../models/studentProfile.model.js";
 import { PlacementDrive } from "../models/placementDrive.model.js";
+import { Notification } from "../models/notification.model.js";
+import { sendApplicationStatusEmail } from "../utils/mailService.js";
 const applyForPlacement = asyncHandler(async (req, res) => {
     const { driveId } = req.params;
     if (!driveId) {
@@ -318,6 +320,72 @@ const updateApplicationStatus = asyncHandler(async (req, res) => {
                 path: "company"
             }
         });
+
+    // Notify student via In-App Notification and Email
+    const studentUser = updatedApplication?.student?.user;
+    const companyName = updatedApplication?.placementDrive?.company?.name || "Campus Drive";
+    const jobTitle = updatedApplication?.placementDrive?.jobTitle || "";
+
+    if (studentUser?._id) {
+        let notifTitle = `Application Status Updated: ${companyName}`;
+        let notifType = "status_update";
+
+        if (status === "selected") {
+            notifTitle = `🎉 Selected for ${companyName}!`;
+            notifType = "selection";
+        } else if (status === "interview") {
+            notifTitle = `📅 Interview Scheduled - ${companyName}`;
+            notifType = "interview";
+        } else if (status === "shortlisted") {
+            notifTitle = `✨ Shortlisted for ${companyName}`;
+            notifType = "status_update";
+        } else if (status === "rejected") {
+            notifTitle = `Application Update: ${companyName}`;
+            notifType = "rejection";
+        }
+
+        const notifMessage = remarks
+            ? remarks
+            : `Your application status for ${companyName} (${jobTitle || "Campus Drive"}) is now ${status.toUpperCase()}.`;
+
+        try {
+            await Notification.create({
+                user: studentUser._id,
+                title: notifTitle,
+                message: notifMessage,
+                type: notifType,
+                status,
+                companyName,
+                jobTitle,
+                remarks: remarks || "",
+                interviewDate: application.interviewDate,
+                interviewRound: application.interviewRound,
+                interviewLocation: application.interviewLocation,
+                offeredPackage: application.offeredPackage,
+                application: application._id,
+            });
+        } catch (notifErr) {
+            console.error("Failed to create in-app notification:", notifErr.message);
+        }
+
+        // Send Email Alert
+        if (studentUser?.email) {
+            sendApplicationStatusEmail({
+                studentEmail: studentUser.email,
+                studentName: studentUser.fullName,
+                companyName,
+                jobTitle,
+                status,
+                remarks: remarks || "",
+                interviewDate: application.interviewDate,
+                interviewRound: application.interviewRound,
+                interviewLocation: application.interviewLocation,
+                offeredPackage: application.offeredPackage,
+            }).catch((emailErr) => {
+                console.error("Failed to send status email:", emailErr.message);
+            });
+        }
+    }
 
     return res.status(200).json(
         new ApiResponse(
