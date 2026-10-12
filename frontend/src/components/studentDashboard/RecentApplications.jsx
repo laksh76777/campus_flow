@@ -10,6 +10,7 @@ import {
   Calendar,
   MapPin,
   Award,
+  MessageSquare,
 } from "lucide-react";
 
 export default function RecentApplications({
@@ -244,6 +245,16 @@ export default function RecentApplications({
                               <span>Offered CTC: ₹{app.offeredPackage || drive.package} LPA</span>
                             </div>
                           )}
+
+                          {app.remarks && (
+                            <div className="flex items-start gap-1 text-[10px] font-medium text-amber-900 bg-amber-50/90 p-1.5 rounded-lg border border-amber-200/80 max-w-xs mt-1">
+                              <MessageSquare className="h-3 w-3 shrink-0 text-amber-600 mt-0.5" />
+                              <span className="line-clamp-2" title={app.remarks}>
+                                <strong className="text-amber-800">Admin: </strong>
+                                {app.remarks}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-3.5 text-right">
@@ -321,6 +332,16 @@ export default function RecentApplications({
                     <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 p-2 rounded-xl border border-emerald-200">
                       <Award className="h-3.5 w-3.5 shrink-0" />
                       <span>🎉 Offer Extended: ₹{app.offeredPackage || drive.package} LPA</span>
+                    </div>
+                  )}
+
+                  {app.remarks && (
+                    <div className="flex items-start gap-1.5 text-[11px] font-medium text-amber-900 bg-amber-50/90 p-2.5 rounded-xl border border-amber-200">
+                      <MessageSquare className="h-3.5 w-3.5 shrink-0 text-amber-600 mt-0.5" />
+                      <span>
+                        <strong className="text-amber-800">Admin Message: </strong>
+                        {app.remarks}
+                      </span>
                     </div>
                   )}
 

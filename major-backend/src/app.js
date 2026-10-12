@@ -116,6 +116,7 @@ import adminRouter from "./routes/admin.routes.js";
 import placementDriveRouter from "./routes/placementDrive.routes.js";
 import applicationRouter from "./routes/application.routes.js";
 import dashboardRouter from "./routes/dashboard.routes.js";
+import notificationRouter from "./routes/notification.routes.js";
 
 app.use("/api/v1/users", userRouter);
 app.use("/api/v1/studentprofile", studentRouter);
@@ -124,6 +125,7 @@ app.use("/api/v1/admin", adminRouter);
 app.use("/api/v1/placementdrive", placementDriveRouter);
 app.use("/api/v1/application", applicationRouter);
 app.use("/api/v1/dashboard", dashboardRouter);
+app.use("/api/v1/notifications", notificationRouter);
 
 // Global Error Handler
 app.use((err, req, res, next) => {
