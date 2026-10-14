@@ -23,6 +23,30 @@ const AVAILABLE_BRANCHES = [
   "Civil",
 ];
 
+const DEFAULT_FIELDS = [
+  { fieldKey: "fullName", label: "Student Full Name", category: "personal", requiredToApply: true, visibleToTpo: true, shareWithCompany: true },
+  { fieldKey: "usn", label: "USN / Enrollment No", category: "personal", requiredToApply: true, visibleToTpo: true, shareWithCompany: true },
+  { fieldKey: "email", label: "Institutional Email", category: "personal", requiredToApply: true, visibleToTpo: true, shareWithCompany: true },
+  { fieldKey: "phone", label: "Mobile Number", category: "personal", requiredToApply: true, visibleToTpo: true, shareWithCompany: true },
+  { fieldKey: "personalEmail", label: "Personal Email", category: "personal", requiredToApply: false, visibleToTpo: true, shareWithCompany: false },
+  { fieldKey: "branch", label: "Department / Branch", category: "academic", requiredToApply: true, visibleToTpo: true, shareWithCompany: true },
+  { fieldKey: "graduationYear", label: "Graduation Year", category: "academic", requiredToApply: true, visibleToTpo: true, shareWithCompany: true },
+  { fieldKey: "placementSession", label: "Placement Session", category: "academic", requiredToApply: true, visibleToTpo: true, shareWithCompany: true },
+  { fieldKey: "cgpa", label: "Overall CGPA", category: "academic", requiredToApply: true, visibleToTpo: true, shareWithCompany: true },
+  { fieldKey: "semesterSGPA", label: "Semester-wise SGPA", category: "academic", requiredToApply: false, visibleToTpo: true, shareWithCompany: true },
+  { fieldKey: "activeBacklogs", label: "Active Backlogs Count", category: "academic", requiredToApply: true, visibleToTpo: true, shareWithCompany: true },
+  { fieldKey: "historicalBacklogs", label: "Cleared / Historical Backlogs", category: "academic", requiredToApply: false, visibleToTpo: true, shareWithCompany: true },
+  { fieldKey: "tenthPercentage", label: "Class 10 Percentage", category: "academic", requiredToApply: true, visibleToTpo: true, shareWithCompany: true },
+  { fieldKey: "twelfthOrDiploma", label: "Class 12 / Diploma Percentage", category: "academic", requiredToApply: true, visibleToTpo: true, shareWithCompany: true },
+  { fieldKey: "educationGaps", label: "Education Gap Declaration", category: "academic", requiredToApply: false, visibleToTpo: true, shareWithCompany: false },
+  { fieldKey: "resume", label: "Master Resume Document", category: "documents", requiredToApply: true, visibleToTpo: true, shareWithCompany: true, documentRequired: true },
+  { fieldKey: "tenthMarksheet", label: "Class 10 Marksheet", category: "documents", requiredToApply: false, visibleToTpo: true, shareWithCompany: false, documentRequired: true },
+  { fieldKey: "twelfthMarksheet", label: "Class 12 / Diploma Marksheet", category: "documents", requiredToApply: false, visibleToTpo: true, shareWithCompany: false, documentRequired: true },
+  { fieldKey: "currentAddress", label: "Current Address", category: "family_address", requiredToApply: false, visibleToTpo: true, shareWithCompany: false },
+  { fieldKey: "permanentAddress", label: "Permanent Address", category: "family_address", requiredToApply: false, visibleToTpo: true, shareWithCompany: false },
+  { fieldKey: "familyDetails", label: "Parents / Guardian Information", category: "family_address", requiredToApply: false, visibleToTpo: true, shareWithCompany: false },
+];
+
 const getDefaultFormData = () => {
   const now = Date.now();
   return {
@@ -33,13 +57,14 @@ const getDefaultFormData = () => {
     location: "Bengaluru",
     minimumCGPA: "7.0",
     maximumBacklogs: "0",
-    graduationYear: "2026",
+    graduationYear: "2027",
     eligibleBranches: ["CSE", "IT", "ECE"],
     applicationStartDate: new Date(now).toISOString().split("T")[0],
     applicationDeadline: new Date(now + 10 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
     driveDate: new Date(now + 20 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
     venue: "Main Campus Auditorium & Online OA",
     jobDescription: "",
+    studentRequirements: DEFAULT_FIELDS.map(f => ({ ...f }))
   };
 };
 
@@ -621,6 +646,105 @@ export default function ManageDrives({
                   onChange={(e) => setFormData({ ...formData, jobDescription: e.target.value })}
                   className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs focus:border-blue-500 focus:outline-none resize-none"
                 />
+              </div>
+
+              {/* Student Information Requirements Section */}
+              <div className="rounded-2xl border border-slate-200 p-4 bg-slate-50/50 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-2.5">
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
+                      <Users className="h-4 w-4 text-blue-600" />
+                      <span>Student Information Requirements</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-500">
+                      Configure what students must supply to apply, what the TPO inspects, and what exports to the company.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData((prev) => ({
+                          ...prev,
+                          studentRequirements: DEFAULT_FIELDS.map((f) => ({ ...f }))
+                        }));
+                        toast.success("Reset requirements to default configuration");
+                      }}
+                      className="text-[10px] font-bold text-slate-600 hover:text-slate-900 bg-white border border-slate-200 px-2.5 py-1 rounded-lg"
+                    >
+                      Reset Defaults
+                    </button>
+                  </div>
+                </div>
+
+                {/* Privacy Warning check */}
+                {formData.studentRequirements?.some(
+                  (r) => r.category === "family_address" && r.shareWithCompany
+                ) && (
+                  <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800 flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="font-bold">Privacy Warning: </strong>
+                      You have selected confidential family or address details to be shared with the recruiting company. Ensure you have explicit institutional authorization before publishing.
+                    </div>
+                  </div>
+                )}
+
+                <div className="max-h-60 overflow-y-auto space-y-2 pr-1 divide-y divide-slate-100">
+                  {formData.studentRequirements?.map((req, idx) => (
+                    <div key={req.fieldKey} className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                      <div>
+                        <span className="font-bold text-slate-800">{req.label}</span>
+                        <span className="ml-2 text-[10px] font-mono text-slate-400 capitalize">({req.category})</span>
+                      </div>
+
+                      <div className="flex items-center gap-4 text-[11px]">
+                        <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={req.requiredToApply}
+                            onChange={(e) => {
+                              const updated = [...formData.studentRequirements];
+                              updated[idx].requiredToApply = e.target.checked;
+                              setFormData({ ...formData, studentRequirements: updated });
+                            }}
+                            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="font-semibold text-slate-600">Required</span>
+                        </label>
+
+                        <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={req.visibleToTpo}
+                            onChange={(e) => {
+                              const updated = [...formData.studentRequirements];
+                              updated[idx].visibleToTpo = e.target.checked;
+                              setFormData({ ...formData, studentRequirements: updated });
+                            }}
+                            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="font-semibold text-slate-600">Visible to TPO</span>
+                        </label>
+
+                        <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={req.shareWithCompany}
+                            onChange={(e) => {
+                              const updated = [...formData.studentRequirements];
+                              updated[idx].shareWithCompany = e.target.checked;
+                              setFormData({ ...formData, studentRequirements: updated });
+                            }}
+                            className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                          />
+                          <span className="font-semibold text-slate-600">Share Company</span>
+                        </label>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {/* Modal Buttons */}

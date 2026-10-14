@@ -6,8 +6,16 @@ import { Admin } from "../models/admin.model.js";
 
 
 const registerAdmin = asyncHandler(async (req, res) => {
-    const {fullName,email,password,phone,employeeId,designation,department
-    } = req.body;
+    const { fullName, email, password, phone, employeeId, designation, department, adminSecretKey } = req.body;
+
+    const expectedSecret = process.env.ADMIN_SECRET_KEY || "TPO_ADMIN_2026";
+    if (!adminSecretKey || adminSecretKey.trim() !== expectedSecret.trim()) {
+        throw new ApiError(
+            403,
+            "Unauthorized: Valid admin secret key is required to register as Administrator."
+        );
+    }
+
     if (
         !fullName || !email || !password || !employeeId || !designation
     ) {

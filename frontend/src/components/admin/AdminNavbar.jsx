@@ -41,6 +41,7 @@ export default function AdminNavbar({
     drives: "Manage Placement Drives",
     companies: "Corporate Partners Directory",
     applications: "Applicant Review & Shortlisting",
+    sessions: "Placement Sessions & Academic Cohorts",
   };
 
   const adminNotifications = [

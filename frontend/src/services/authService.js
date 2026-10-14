@@ -5,19 +5,55 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1";
 export const registerStudent = async (userData) => {
   const formData = new FormData();
 
-  formData.append("fullName", userData.fullName);
-  formData.append("email", userData.email);
-  formData.append("password", userData.password);
-  formData.append("phone", userData.phone || "");
+  const textFields = [
+    "fullName",
+    "email",
+    "personalEmail",
+    "password",
+    "confirmPassword",
+    "phone",
+    "usn",
+    "course",
+    "courseDurationYears",
+    "department",
+    "branch",
+    "admissionYear",
+    "graduationYear",
+    "currentSemester",
+    "semester",
+    "placementSession",
+    "gender",
+    "dob"
+  ];
 
-  if (userData.avatar) {
+  textFields.forEach((key) => {
+    if (userData[key] !== undefined && userData[key] !== null) {
+      formData.append(key, userData[key]);
+    }
+  });
+
+  if (userData.avatar && typeof userData.avatar !== "string") {
     formData.append("avatar", userData.avatar);
   }
 
   const response = await axios.post(`${API_URL}/users/register`, formData, {
     headers: { "Content-Type": "multipart/form-data" },
+    withCredentials: true,
   });
 
+  return response.data;
+};
+
+// Public department list for registration
+export const getPublicDepartments = async (course = "") => {
+  const url = course ? `${API_URL}/departments?course=${encodeURIComponent(course)}` : `${API_URL}/departments`;
+  const response = await axios.get(url);
+  return response.data;
+};
+
+// Public placement sessions list for cohort mapping preview
+export const getPublicSessions = async () => {
+  const response = await axios.get(`${API_URL}/sessions`);
   return response.data;
 };
 

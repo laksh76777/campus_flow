@@ -87,27 +87,24 @@ const corsOptions = {
     optionsSuccessStatus: 200
 };
 
+import { securityHeaders, generalApiLimiter } from "./middlewares/security.middleware.js";
+
 app.use(cors(corsOptions));
-
-app.get("/", (req, res) => {
-    res.send("backend is running");
-});
-
+app.use(securityHeaders);
 app.use(express.json({ limit: "16kb" }));
-
 app.use(
     express.urlencoded({
         extended: true,
         limit: "16kb"
     })
 );
-
 app.use(express.static("public"));
 app.use(cookieParser());
-
-import { securityHeaders, generalApiLimiter } from "./middlewares/security.middleware.js";
-app.use(securityHeaders);
 app.use("/api", generalApiLimiter);
+
+app.get("/", (req, res) => {
+    res.send("backend is running");
+});
 
 import userRouter from "./routes/user.routes.js";
 import studentRouter from "./routes/studentProfile.routes.js";
@@ -117,6 +114,8 @@ import placementDriveRouter from "./routes/placementDrive.routes.js";
 import applicationRouter from "./routes/application.routes.js";
 import dashboardRouter from "./routes/dashboard.routes.js";
 import notificationRouter from "./routes/notification.routes.js";
+import sessionRouter from "./routes/placementSession.routes.js";
+import departmentRouter from "./routes/department.routes.js";
 
 app.use("/api/v1/users", userRouter);
 app.use("/api/v1/studentprofile", studentRouter);
@@ -126,6 +125,8 @@ app.use("/api/v1/placementdrive", placementDriveRouter);
 app.use("/api/v1/application", applicationRouter);
 app.use("/api/v1/dashboard", dashboardRouter);
 app.use("/api/v1/notifications", notificationRouter);
+app.use("/api/v1/sessions", sessionRouter);
+app.use("/api/v1/departments", departmentRouter);
 
 // Global Error Handler
 app.use((err, req, res, next) => {

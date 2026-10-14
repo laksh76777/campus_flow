@@ -125,19 +125,19 @@ export default function Login() {
   const fillDemoStudent = () => {
     setRole("student");
     setSearchParams({ role: "student", redirect: "/student-dashboard" });
-    setEmail("prakashchoyal85@gmail.com");
-    setPassword("12345678");
+    setEmail("student@campusflow.edu");
+    setPassword("Student@12345");
     setError("");
-    toast.success("Filled student credentials");
+    toast.success("Filled student credentials (student@campusflow.edu)");
   };
 
   const fillDemoAdmin = () => {
     setRole("admin");
     setSearchParams({ role: "admin", redirect: "/admin-dashboard" });
-    setEmail("sarangowda@gmail.com");
-    setPassword("12345678");
+    setEmail("admin@campusflow.edu");
+    setPassword("Admin@12345");
     setError("");
-    toast.success("Filled admin credentials");
+    toast.success("Filled TPO admin credentials (admin@campusflow.edu)");
   };
 
   return (
@@ -301,18 +301,27 @@ export default function Login() {
               <button
                 type="button"
                 onClick={fillDemoStudent}
-                className="flex items-center justify-center gap-1.5 rounded-lg border border-slate-800 bg-slate-950/60 py-1.5 px-2 text-[11px] font-medium text-slate-400 hover:border-blue-500/40 hover:text-white transition"
+                className="flex flex-col items-center justify-center rounded-xl border border-slate-800 bg-slate-950/60 p-2 text-center transition hover:border-blue-500/50 hover:bg-slate-900/80"
               >
-                <CheckCircle2 className="h-3 w-3 text-blue-400" />
-                Student Demo
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-400">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Student Demo
+                </div>
+                <span className="mt-1 text-[10px] text-slate-400">student@campusflow.edu</span>
+                <span className="text-[10px] text-slate-500">Student@12345</span>
               </button>
+
               <button
                 type="button"
                 onClick={fillDemoAdmin}
-                className="flex items-center justify-center gap-1.5 rounded-lg border border-slate-800 bg-slate-950/60 py-1.5 px-2 text-[11px] font-medium text-slate-400 hover:border-indigo-500/40 hover:text-white transition"
+                className="flex flex-col items-center justify-center rounded-xl border border-slate-800 bg-slate-950/60 p-2 text-center transition hover:border-indigo-500/50 hover:bg-slate-900/80"
               >
-                <CheckCircle2 className="h-3 w-3 text-indigo-400" />
-                Admin Demo
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-400">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Admin / TPO
+                </div>
+                <span className="mt-1 text-[10px] text-slate-400">admin@campusflow.edu</span>
+                <span className="text-[10px] text-slate-500">Admin@12345</span>
               </button>
             </div>
           </div>

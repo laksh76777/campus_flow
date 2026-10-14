@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   X,
   CheckCircle2,
@@ -7,8 +7,12 @@ import {
   FileText,
   ArrowRight,
   RotateCcw,
+  AlertTriangle,
+  Loader2,
+  ShieldCheck,
 } from "lucide-react";
 import { getResumeViewUrl } from "../../utils/resumeHelper";
+import { checkDriveEligibility } from "../../services/studentService";
 
 export default function ApplyModal({
   isOpen,
@@ -19,6 +23,31 @@ export default function ApplyModal({
   onConfirmApply,
 }) {
   const [submitting, setSubmitting] = useState(false);
+  const [eligibilityData, setEligibilityData] = useState(null);
+  const [evaluating, setEvaluating] = useState(true);
+
+  // Live Centralized Eligibility Engine pre-check
+  useEffect(() => {
+    let isMounted = true;
+    if (isOpen && drive?._id) {
+      setEvaluating(true);
+      checkDriveEligibility(drive._id)
+        .then((res) => {
+          if (isMounted && res?.data) {
+            setEligibilityData(res.data);
+          }
+        })
+        .catch((err) => {
+          console.warn("Eligibility check fallback:", err.message);
+        })
+        .finally(() => {
+          if (isMounted) setEvaluating(false);
+        });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, drive?._id]);
 
   if (!isOpen || !drive) return null;
 
@@ -28,6 +57,10 @@ export default function ApplyModal({
   const studentBacklogs = studentProfile?.backlogs ?? 0;
   const isBacklogEligible = studentBacklogs <= (drive.maximumBacklogs ?? 0);
   const hasResume = !!studentProfile?.resume?.url;
+
+  // Determine overall eligibility from engine or fallback
+  const isEligible = eligibilityData ? eligibilityData.isEligible : (isCgpaEligible && isBacklogEligible);
+  const isMissingData = eligibilityData?.status === "MISSING_DATA";
 
   const now = new Date();
   const startDate = drive.applicationStartDate ? new Date(drive.applicationStartDate) : null;
@@ -76,67 +109,120 @@ export default function ApplyModal({
         </div>
 
         {/* Eligibility Verification Card */}
-        <div className="mt-6 rounded-2xl bg-slate-50 p-4 border border-slate-200/80 space-y-3">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-            Eligibility Checklist
-          </h4>
-
-          <div className="space-y-2 text-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-slate-600">Minimum CGPA Required:</span>
+        <div className="mt-5 rounded-2xl bg-slate-50 p-4 border border-slate-200/80 space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              Eligibility Engine Evaluation
+            </h4>
+            {evaluating ? (
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue-600">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span>Verifying...</span>
+              </span>
+            ) : eligibilityData ? (
               <span
-                className={`flex items-center gap-1 font-semibold ${
-                  isCgpaEligible ? "text-emerald-700" : "text-rose-600"
+                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                  eligibilityData.status === "ELIGIBLE"
+                    ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                    : eligibilityData.status === "MISSING_DATA"
+                    ? "bg-amber-100 text-amber-800 border border-amber-200"
+                    : "bg-rose-100 text-rose-800 border border-rose-200"
                 }`}
               >
-                {isCgpaEligible ? (
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                {eligibilityData.status === "ELIGIBLE" ? (
+                  <>
+                    <CheckCircle2 className="h-3 w-3" />
+                    <span>Eligible</span>
+                  </>
+                ) : eligibilityData.status === "MISSING_DATA" ? (
+                  <>
+                    <AlertTriangle className="h-3 w-3" />
+                    <span>Missing Profile Data</span>
+                  </>
                 ) : (
-                  <XCircle className="h-4 w-4 text-rose-500" />
+                  <>
+                    <XCircle className="h-3 w-3" />
+                    <span>Not Eligible</span>
+                  </>
                 )}
-                {drive.minimumCGPA} (Your CGPA: {studentCgpa})
               </span>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <span className="text-slate-600">Backlogs Criteria:</span>
-              <span
-                className={`flex items-center gap-1 font-semibold ${
-                  isBacklogEligible ? "text-emerald-700" : "text-rose-600"
-                }`}
-              >
-                {isBacklogEligible ? (
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                ) : (
-                  <XCircle className="h-4 w-4 text-rose-500" />
-                )}
-                Max {drive.maximumBacklogs} (You have: {studentBacklogs})
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <span className="text-slate-600">Target Graduation Year:</span>
-              <span className="font-semibold text-slate-800">
-                {drive.graduationYear || 2026}
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <span className="text-slate-600">Application Period:</span>
-              <span className={`flex items-center gap-1 font-semibold ${isWindowOpen ? "text-emerald-700" : "text-amber-700"}`}>
-                {isWindowOpen ? (
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                ) : (
-                  <XCircle className="h-4 w-4 text-amber-500" />
-                )}
-                {!isStarted
-                  ? `Opens on ${startDate?.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`
-                  : isExpired
-                  ? "Deadline passed"
-                  : "Open for applications"}
-              </span>
-            </div>
+            ) : null}
           </div>
+
+          {/* Criteria Breakdown Rows */}
+          {evaluating ? (
+            <div className="py-4 text-center text-xs text-slate-400 italic">
+              Checking academic credentials and cutoff thresholds...
+            </div>
+          ) : eligibilityData?.criteriaBreakdown?.length > 0 ? (
+            <div className="space-y-2 text-xs divide-y divide-slate-100 pt-1">
+              {eligibilityData.criteriaBreakdown.map((item, idx) => (
+                <div key={idx} className="flex items-center justify-between pt-1.5 first:pt-0">
+                  <div className="min-w-0">
+                    <span className="text-slate-700 font-medium">{item.criterion}: </span>
+                    <span className="text-slate-400 text-[11px]">Req: {item.required}</span>
+                  </div>
+                  <span
+                    className={`flex items-center gap-1 font-semibold shrink-0 pl-2 ${
+                      item.passed ? "text-emerald-700" : "text-rose-600"
+                    }`}
+                  >
+                    {item.passed ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                    ) : (
+                      <XCircle className="h-3.5 w-3.5 text-rose-500" />
+                    )}
+                    <span>{item.actual}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-600">Minimum CGPA Required:</span>
+                <span
+                  className={`flex items-center gap-1 font-semibold ${
+                    isCgpaEligible ? "text-emerald-700" : "text-rose-600"
+                  }`}
+                >
+                  {isCgpaEligible ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  ) : (
+                    <XCircle className="h-4 w-4 text-rose-500" />
+                  )}
+                  {drive.minimumCGPA} (Your CGPA: {studentCgpa})
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="text-slate-600">Backlogs Criteria:</span>
+                <span
+                  className={`flex items-center gap-1 font-semibold ${
+                    isBacklogEligible ? "text-emerald-700" : "text-rose-600"
+                  }`}
+                >
+                  {isBacklogEligible ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  ) : (
+                    <XCircle className="h-4 w-4 text-rose-500" />
+                  )}
+                  Max {drive.maximumBacklogs} (You have: {studentBacklogs})
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Engine Reason Callout if Ineligible */}
+          {eligibilityData && !eligibilityData.isEligible && (
+            <div className="rounded-xl bg-rose-50 border border-rose-200 p-2.5 text-xs text-rose-800 flex items-start gap-2 mt-2">
+              <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold">Ineligibility Reason:</p>
+                <p className="mt-0.5 text-[11px]">{eligibilityData.summary}</p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Resume Note */}
@@ -181,7 +267,7 @@ export default function ApplyModal({
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={submitting || !isWindowOpen || !isCgpaEligible || !isBacklogEligible}
+            disabled={submitting || evaluating || !isWindowOpen || !isEligible}
             className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-semibold text-white shadow-md transition active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed ${
               isReapply
                 ? "bg-amber-600 hover:bg-amber-700 shadow-amber-500/20"
@@ -190,10 +276,14 @@ export default function ApplyModal({
           >
             {submitting ? (
               <span>{isReapply ? "Re-submitting Application..." : "Submitting Application..."}</span>
+            ) : evaluating ? (
+              <span>Verifying Criteria...</span>
             ) : !isStarted ? (
               <span>Opens on {startDate?.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
             ) : isExpired ? (
               <span>Application Closed</span>
+            ) : !isEligible ? (
+              <span>Not Eligible</span>
             ) : isReapply ? (
               <>
                 <span>Re-apply Now</span>

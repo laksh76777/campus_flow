@@ -8,7 +8,10 @@ import {
     deactivatePlacementDrive,
     reactivatePlacementDrive,
     getEligibleStudents,
-    getMyEligibleDrives
+    getMyEligibleDrives,
+    checkDriveEligibility,
+    getDriveEligibilityPreview,
+    getFieldCatalogue
 } from "../controllers/placementDrive.controller.js";
 
 import {
@@ -33,6 +36,12 @@ router
         verifyJWT,
         getAllPlacementDrives
     );
+router
+    .route("/field-catalogue")
+    .get(
+        verifyJWT,
+        getFieldCatalogue
+    );
 // Specific route FIRST
 router
     .route("/my-eligible-drives")
@@ -48,6 +57,21 @@ router
         verifyJWT,
         verifyAdmin,
         getEligibleStudents
+    );
+
+router
+    .route("/:placementDriveId/eligibility-check")
+    .get(
+        verifyJWT,
+        checkDriveEligibility
+    );
+
+router
+    .route("/:placementDriveId/eligibility-preview")
+    .get(
+        verifyJWT,
+        verifyAdmin,
+        getDriveEligibilityPreview
     );
 
 // Dynamic route AFTER specific routes
