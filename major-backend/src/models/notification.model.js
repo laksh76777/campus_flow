@@ -20,7 +20,7 @@ const notificationSchema = new Schema(
         },
         type: {
             type: String,
-            enum: ["status_update", "interview", "selection", "rejection", "general"],
+            enum: ["status_update", "interview", "selection", "rejection", "general", "announcement", "urgent"],
             default: "status_update",
         },
         status: {

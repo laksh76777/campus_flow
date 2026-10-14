@@ -52,6 +52,37 @@ export default function StudentDashboard() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("overview"); // overview | drives | applications | profile
   const [isProfileDrawerOpen, setIsProfileDrawerOpen] = useState(false);
+  const [drawerSection, setDrawerSection] = useState("academic");
+  const [drawerEditing, setDrawerEditing] = useState(false);
+
+  const handleOpenProfileToSection = (section = "academic", edit = true) => {
+    setDrawerSection(section);
+    setDrawerEditing(edit);
+    setIsProfileDrawerOpen(true);
+  };
+
+  const getSectionForField = (field = "") => {
+    const f = (field || "").toLowerCase();
+    if (f.includes("10th") || f.includes("12th") || f.includes("secondary") || f.includes("diploma")) {
+      return "secondary";
+    }
+    if (f.includes("resume") || f.includes("document")) {
+      return "resume";
+    }
+    if (f.includes("sgpa") || f.includes("semester")) {
+      return "semesters";
+    }
+    if (f.includes("backlog")) {
+      return "backlogs";
+    }
+    if (f.includes("gap")) {
+      return "gaps";
+    }
+    if (f.includes("contact") || f.includes("family") || f.includes("address") || f.includes("avatar") || f.includes("phone")) {
+      return "family";
+    }
+    return "academic";
+  };
 
   // Apply Modal State
   const [selectedDriveToApply, setSelectedDriveToApply] = useState(null);
@@ -280,9 +311,11 @@ export default function StudentDashboard() {
 
   const studentName =
     user?.fullName || authUser?.fullName || studentProfile?.user?.fullName || "Student";
-  const studentBranch = studentProfile?.branch || authProfile?.branch || "Department Not Set";
+  const studentBranch = studentProfile?.branch || studentProfile?.department || authProfile?.branch || "Department Not Set";
   const studentCgpa = studentProfile?.cgpa ?? authProfile?.cgpa ?? "--";
   const graduationYear = studentProfile?.graduationYear ?? authProfile?.graduationYear ?? "----";
+  const admissionYear = studentProfile?.admissionYear ?? (studentProfile?.graduationYear ? studentProfile.graduationYear - 4 : null);
+  const sessionName = studentProfile?.placementSession?.name || (studentProfile?.graduationYear ? `Class of ${studentProfile.graduationYear} Placement Session` : "Session Pending");
 
   return (
     <div className="min-h-screen bg-slate-50/60 text-slate-900 flex antialiased">
@@ -317,11 +350,24 @@ export default function StudentDashboard() {
           {/* Top Greeting Header */}
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
+              <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                <span className="rounded-full bg-blue-50 text-blue-700 px-2.5 py-0.5 text-[11px] font-bold border border-blue-200">
+                  {studentBranch}
+                </span>
+                <span className="rounded-full bg-purple-50 text-purple-700 px-2.5 py-0.5 text-[11px] font-bold border border-purple-200">
+                  {sessionName}
+                </span>
+                {(studentProfile?.usn || studentProfile?.enrollmentNumber) && (
+                  <span className="rounded-full bg-slate-100 text-slate-700 px-2.5 py-0.5 text-[11px] font-semibold border border-slate-200">
+                    USN: {studentProfile.usn || studentProfile.enrollmentNumber}
+                  </span>
+                )}
+              </div>
               <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
                 Welcome back, {studentName} 👋
               </h2>
               <p className="mt-1 text-xs sm:text-sm font-medium text-slate-500">
-                {studentBranch} • Batch of {graduationYear} • Academic CGPA: {studentCgpa}
+                {studentProfile?.course || "B.Tech"} {admissionYear ? `• Admitted: ${admissionYear}` : ""} • Expected Graduation: Class of {graduationYear} • Academic CGPA: {typeof studentCgpa === "number" ? studentCgpa.toFixed(2) : studentCgpa}
               </p>
             </div>
 
@@ -347,33 +393,6 @@ export default function StudentDashboard() {
               </button>
             </div>
           </div>
-
-          {/* Complete Profile Notice (if student profile is pending) */}
-          {!studentProfile && (
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 p-4 sm:p-5 text-white shadow-md">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/20">
-                  <Sparkles className="h-5 w-5 text-yellow-300" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold leading-snug">
-                    Complete your Placement Profile
-                  </h4>
-                  <p className="text-xs text-blue-100 mt-0.5">
-                    Verify your CGPA, branch, and upload your resume to unlock company eligibility checks.
-                  </p>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setIsProfileDrawerOpen(true)}
-                className="shrink-0 inline-flex items-center gap-1.5 rounded-xl bg-white px-4 py-2 text-xs font-bold text-blue-700 shadow-xs hover:bg-blue-50 transition"
-              >
-                <span>Complete Profile</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          )}
 
           {/* TAB 1: OVERVIEW */}
           {activeTab === "overview" && (
@@ -479,50 +498,65 @@ export default function StudentDashboard() {
                 </div>
               )}
 
-              {/* Profile Completion Readiness Card (if incomplete) */}
+              {/* Profile Completion Readiness Card (Overview Tab Only) */}
               {profileScore.percentage < 100 && (
-                <div className="rounded-3xl border border-blue-200/90 bg-gradient-to-br from-blue-50/60 via-white to-slate-50 p-5 sm:p-6 shadow-xs">
+                <div className="rounded-2xl border border-blue-200/90 bg-gradient-to-br from-blue-50/70 via-white to-indigo-50/40 p-5 sm:p-6 shadow-xs hover:shadow-sm transition">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="space-y-1.5 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-white shadow-xs">
-                          <Sparkles className="h-4 w-4" />
+                    <div className="space-y-2 flex-1">
+                      <div className="flex items-center gap-2.5">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-xs">
+                          <Sparkles className="h-4 w-4 text-yellow-300" />
                         </span>
-                        <h3 className="text-sm sm:text-base font-bold text-slate-900">
-                          Placement Profile Readiness: {profileScore.percentage}% Complete
-                        </h3>
+                        <div>
+                          <h3 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
+                            Placement Profile Readiness: {profileScore.percentage}% Complete
+                          </h3>
+                          <p className="text-xs text-slate-500">
+                            Verified profiles unlock company eligibility screening. Click any item below to fill it directly:
+                          </p>
+                        </div>
                       </div>
-                      <p className="text-xs text-slate-500 max-w-xl">
-                        Verified profiles unlock company eligibility screening. Complete your missing items to apply for all top-tier corporate drives.
-                      </p>
 
-                      {/* Missing items chips */}
-                      <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
-                        {profileScore.missingItems.map((item) => (
-                          <button
-                            key={item.field}
-                            onClick={() => setIsProfileDrawerOpen(true)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-800 hover:bg-amber-100 transition"
-                          >
-                            <span>+ Complete {item.field}</span>
-                          </button>
-                        ))}
+                      {/* Interactive missing items chips */}
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        {profileScore.missingItems.map((item) => {
+                          const targetSection = getSectionForField(item.field);
+                          return (
+                            <button
+                              key={item.field}
+                              type="button"
+                              onClick={() => handleOpenProfileToSection(targetSection, true)}
+                              className="group inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50/90 px-2.5 py-1 text-xs font-semibold text-amber-800 shadow-2xs hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 transition active:scale-95 cursor-pointer"
+                              title={`Click to fill ${item.field}`}
+                            >
+                              <Plus className="h-3 w-3 text-amber-600 group-hover:text-blue-600 transition" />
+                              <span>Fill {item.field}</span>
+                              <ArrowRight className="h-2.5 w-2.5 text-amber-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
 
                     {/* Readiness gauge bar */}
-                    <div className="w-full sm:w-48 shrink-0 text-center sm:text-right">
-                      <div className="h-3 w-full rounded-full bg-slate-200 overflow-hidden mb-1.5">
+                    <div className="w-full sm:w-52 shrink-0 flex flex-col items-end justify-center">
+                      <div className="w-full flex items-center justify-between text-[11px] font-bold text-slate-600 mb-1">
+                        <span>Readiness</span>
+                        <span className="text-blue-600">{profileScore.percentage}%</span>
+                      </div>
+                      <div className="h-2.5 w-full rounded-full bg-slate-200 overflow-hidden mb-2">
                         <div
-                          className="h-full rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 transition-all duration-700"
+                          className="h-full rounded-full bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 transition-all duration-700"
                           style={{ width: `${profileScore.percentage}%` }}
                         />
                       </div>
                       <button
-                        onClick={() => setIsProfileDrawerOpen(true)}
-                        className="text-xs font-bold text-blue-600 hover:underline"
+                        type="button"
+                        onClick={() => handleOpenProfileToSection("academic", true)}
+                        className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
                       >
-                        Edit Profile &rarr;
+                        <span>Edit Full Profile</span>
+                        <ArrowRight className="h-3 w-3" />
                       </button>
                     </div>
                   </div>
@@ -798,9 +832,14 @@ export default function StudentDashboard() {
       {/* Slide-over Profile Drawer */}
       <ProfileDrawer
         isOpen={isProfileDrawerOpen}
-        onClose={() => setIsProfileDrawerOpen(false)}
+        onClose={() => {
+          setIsProfileDrawerOpen(false);
+          setDrawerEditing(false);
+        }}
         user={user}
         studentProfile={studentProfile}
+        initialSection={drawerSection}
+        initialEditing={drawerEditing}
         onProfileUpdated={(updated) => {
           if (updated) {
             setStudentProfile((prev) => ({ ...(prev || {}), ...updated }));

@@ -60,6 +60,24 @@ export default function RecentApplications({
 
   const getStatusBadge = (status) => {
     switch (status?.toLowerCase()) {
+      case "offer_received":
+        return {
+          label: "Offer Extended",
+          color: "bg-emerald-100 text-emerald-800 border-emerald-300",
+          icon: Award,
+        };
+      case "offer_accepted":
+        return {
+          label: "Offer Accepted",
+          color: "bg-emerald-600 text-white border-emerald-700",
+          icon: CheckCircle2,
+        };
+      case "offer_declined":
+        return {
+          label: "Offer Declined",
+          color: "bg-slate-200 text-slate-700 border-slate-300",
+          icon: XCircle,
+        };
       case "selected":
         return {
           label: "Selected / Offered",
@@ -77,6 +95,12 @@ export default function RecentApplications({
           label: "Shortlisted",
           color: "bg-amber-50 text-amber-700 border-amber-200",
           icon: Sparkles,
+        };
+      case "on_hold":
+        return {
+          label: "On Hold",
+          color: "bg-amber-100 text-amber-800 border-amber-300",
+          icon: Clock,
         };
       case "rejected":
         return {

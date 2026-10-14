@@ -3,7 +3,7 @@ import { ApiError } from "../utils/ApiError.js";
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const validateRegister = (req, res, next) => {
-    const { fullName, email, password, role, adminSecretKey } = req.body;
+    const { fullName, email, password, confirmPassword, usn, enrollmentNumber, role } = req.body;
 
     if (!fullName || typeof fullName !== "string" || fullName.trim().length < 2) {
         throw new ApiError(400, "Full name is required (at least 2 characters)");
@@ -17,20 +17,21 @@ export const validateRegister = (req, res, next) => {
         throw new ApiError(400, "Password must be at least 6 characters long");
     }
 
-    const assignedRole = role ? role.toLowerCase().trim() : "student";
-    if (!["student", "admin"].includes(assignedRole)) {
-        throw new ApiError(400, "Role must be either 'student' or 'admin'");
+    if (confirmPassword !== undefined && confirmPassword !== password) {
+        throw new ApiError(400, "Password and confirm password do not match");
     }
 
-    // Role protection: Require admin passkey when registering an admin account
-    if (assignedRole === "admin") {
-        const expectedSecret = process.env.ADMIN_SECRET_KEY || "TPO_ADMIN_2026";
-        if (!adminSecretKey || adminSecretKey.trim() !== expectedSecret) {
-            throw new ApiError(
-                403,
-                "Unauthorized: Valid admin secret passkey is required to register as Administrator."
-            );
-        }
+    const rawUsn = usn || enrollmentNumber;
+    if (rawUsn !== undefined && (typeof rawUsn !== "string" || rawUsn.trim().length < 3)) {
+        throw new ApiError(400, "USN / Enrollment Number must be at least 3 characters long");
+    }
+
+    // Role protection: Admin provisioning is strictly prohibited on the public user registration endpoint
+    if (role && role.toLowerCase().trim() === "admin") {
+        throw new ApiError(
+            403,
+            "Admin registration is prohibited on this endpoint. Administrative accounts must be provisioned via the secure Admin Portal."
+        );
     }
 
     next();
@@ -59,7 +60,11 @@ export const validateApplicationStatus = (req, res, next) => {
         "interview",
         "selected",
         "rejected",
-        "withdrawn"
+        "withdrawn",
+        "on_hold",
+        "offer_received",
+        "offer_accepted",
+        "offer_declined"
     ];
 
     if (!status || !validStatuses.includes(status)) {

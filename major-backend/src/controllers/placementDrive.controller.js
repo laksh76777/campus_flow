@@ -1,13 +1,16 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { PlacementDrive } from "../models/placementDrive.model.js";
+import { PlacementDrive, DEFAULT_STUDENT_REQUIREMENTS } from "../models/placementDrive.model.js";
 import { Company } from "../models/company.model.js";
 import { StudentProfile } from "../models/studentProfile.model.js";
+import { Application } from "../models/application.model.js";
+import { EligibilityService } from "../services/eligibility.service.js";
 
 const createPlacementDrive = asyncHandler(async (req, res) => {
     const {
-        company,jobTitle,jobDescription,jobType,package: salaryPackage,location,eligibleBranches,minimumCGPA,maximumBacklogs,graduationYear,applicationStartDate,applicationDeadline,driveDate,venue,applicationLink
+        company,jobTitle,jobDescription,jobType,package: salaryPackage,location,eligibleBranches,minimumCGPA,maximumBacklogs,graduationYear,applicationStartDate,applicationDeadline,driveDate,venue,applicationLink,
+        placementSession,minimumTenthPercentage,minimumTwelfthPercentage,maximumHistoricalBacklogs
     } = req.body;
     if ( !company || !jobTitle || !jobType || salaryPackage === undefined || !eligibleBranches || minimumCGPA === undefined || graduationYear === undefined || !applicationStartDate || !applicationDeadline || !driveDate ) {
         throw new ApiError(
@@ -80,12 +83,20 @@ const createPlacementDrive = asyncHandler(async (req, res) => {
                 ? maximumBacklogs
                 : 0,
         graduationYear,
+        placementSession: placementSession || null,
+        minimumTenthPercentage: minimumTenthPercentage !== undefined ? Number(minimumTenthPercentage) : 0,
+        minimumTwelfthPercentage: minimumTwelfthPercentage !== undefined ? Number(minimumTwelfthPercentage) : 0,
+        maximumHistoricalBacklogs: maximumHistoricalBacklogs !== undefined && maximumHistoricalBacklogs !== null ? Number(maximumHistoricalBacklogs) : null,
         applicationStartDate: startDate,
         applicationDeadline: deadline,
         driveDate: placementDate,
         venue: venue || "",
         applicationLink: applicationLink || "",
-        createdBy: req.user._id
+        createdBy: req.user._id,
+        requirementsVersion: 1,
+        studentRequirements: Array.isArray(req.body.studentRequirements) && req.body.studentRequirements.length > 0
+            ? req.body.studentRequirements
+            : DEFAULT_STUDENT_REQUIREMENTS
     });
     return res.status(201).json(
         new ApiResponse(
@@ -98,11 +109,15 @@ const createPlacementDrive = asyncHandler(async (req, res) => {
 
 const getAllPlacementDrives = asyncHandler(async (req, res) => {
     const filter = req.user?.role === "admin" ? {} : { isActive: true };
+    if (req.query.session) {
+        filter.placementSession = req.query.session;
+    }
     const placementDrives = await PlacementDrive.find(filter)
         .populate(
             "company",
             "companyName companyDescription companyWebsite companyLogo industry location"
         )
+        .populate("placementSession", "sessionName academicYear graduatingYear isActive")
         .sort({
             applicationDeadline: 1
         });
@@ -165,7 +180,8 @@ const updatePlacementDrive = asyncHandler(async (req, res) => {
         );
     }
     const {
-        company,jobTitle,jobDescription, jobType,package: salaryPackage,location, eligibleBranches, minimumCGPA, maximumBacklogs, graduationYear, applicationStartDate, applicationDeadline,driveDate, venue,applicationLink
+        company,jobTitle,jobDescription, jobType,package: salaryPackage,location, eligibleBranches, minimumCGPA, maximumBacklogs, graduationYear, applicationStartDate, applicationDeadline,driveDate, venue,applicationLink,
+        placementSession, minimumTenthPercentage, minimumTwelfthPercentage, maximumHistoricalBacklogs
     } = req.body;
     if (company !== undefined) {
         const existingCompany = await Company.findOne({
@@ -239,6 +255,18 @@ const updatePlacementDrive = asyncHandler(async (req, res) => {
     if (graduationYear !== undefined) {
         placementDrive.graduationYear = graduationYear;
     }
+    if (placementSession !== undefined) {
+        placementDrive.placementSession = placementSession || null;
+    }
+    if (minimumTenthPercentage !== undefined) {
+        placementDrive.minimumTenthPercentage = Number(minimumTenthPercentage);
+    }
+    if (minimumTwelfthPercentage !== undefined) {
+        placementDrive.minimumTwelfthPercentage = Number(minimumTwelfthPercentage);
+    }
+    if (maximumHistoricalBacklogs !== undefined) {
+        placementDrive.maximumHistoricalBacklogs = maximumHistoricalBacklogs !== null ? Number(maximumHistoricalBacklogs) : null;
+    }
     if (venue !== undefined) {
         placementDrive.venue = venue;
     }
@@ -292,6 +320,10 @@ const updatePlacementDrive = asyncHandler(async (req, res) => {
             400,
             "Drive date must be after application deadline"
         );
+    }
+    if (req.body.studentRequirements !== undefined && Array.isArray(req.body.studentRequirements)) {
+        placementDrive.studentRequirements = req.body.studentRequirements;
+        placementDrive.requirementsVersion = (placementDrive.requirementsVersion || 1) + 1;
     }
     await placementDrive.save();
     return res.status(200).json(
@@ -462,6 +494,122 @@ const getMyEligibleDrives = asyncHandler(async (req, res) => {
         )
     );
 });
+
+// @desc    Check student eligibility breakdown for a specific placement drive
+// @route   GET /api/v1/placementdrive/:placementDriveId/eligibility-check
+// @access  Student
+const checkDriveEligibility = asyncHandler(async (req, res) => {
+    const { placementDriveId } = req.params;
+
+    const studentProfile = await StudentProfile.findOne({ user: req.user._id });
+    if (!studentProfile) {
+        throw new ApiError(404, "Student profile not found. Please create your academic profile first.");
+    }
+
+    const drive = await PlacementDrive.findById(placementDriveId).populate("company");
+    if (!drive) {
+        throw new ApiError(404, "Placement drive not found");
+    }
+
+    // Evaluate against Centralized Eligibility Engine
+    const evaluation = EligibilityService.evaluate(studentProfile, drive);
+
+    // Check if already applied or withdrawn
+    const existingApplication = await Application.findOne({
+        student: studentProfile._id,
+        placementDrive: drive._id
+    });
+
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            {
+                ...evaluation,
+                hasApplied: Boolean(existingApplication),
+                applicationStatus: existingApplication?.status || null,
+                applicationId: existingApplication?._id || null,
+                appliedAt: existingApplication?.appliedAt || null
+            },
+            "Eligibility evaluated successfully"
+        )
+    );
+});
+
+// @desc    Admin preview of cohort eligibility for a placement drive
+// @route   GET /api/v1/placementdrive/:placementDriveId/eligibility-preview
+// @access  Admin
+const getDriveEligibilityPreview = asyncHandler(async (req, res) => {
+    const { placementDriveId } = req.params;
+
+    const drive = await PlacementDrive.findById(placementDriveId).populate("company");
+    if (!drive) {
+        throw new ApiError(404, "Placement drive not found");
+    }
+
+    // Filter students by drive's cohort
+    const students = await StudentProfile.find({
+        $or: [
+            { placementSession: drive.placementSession },
+            { graduationYear: drive.graduationYear }
+        ]
+    }).populate("user", "fullName email");
+
+    let eligibleCount = 0;
+    let ineligibleCount = 0;
+    let missingDataCount = 0;
+    const failureReasonTally = {};
+
+    const studentBreakdown = students.map((st) => {
+        const evalResult = EligibilityService.evaluate(st, drive);
+        if (evalResult.status === "ELIGIBLE") eligibleCount++;
+        else if (evalResult.status === "MISSING_DATA") missingDataCount++;
+        else {
+            ineligibleCount++;
+            evalResult.reasons.forEach((r) => {
+                failureReasonTally[r] = (failureReasonTally[r] || 0) + 1;
+            });
+        }
+
+        return {
+            studentId: st._id,
+            fullName: st.user?.fullName || "Candidate",
+            enrollmentNumber: st.enrollmentNumber,
+            branch: st.branch,
+            cgpa: st.verifiedCGPA != null ? st.verifiedCGPA : st.cgpa,
+            status: evalResult.status,
+            reasons: evalResult.reasons
+        };
+    });
+
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            {
+                totalCohortStudents: students.length,
+                eligibleCount,
+                ineligibleCount,
+                missingDataCount,
+                failureReasonTally,
+                studentBreakdown
+            },
+            "Drive eligibility cohort preview generated"
+        )
+    );
+});
+
+// @desc    Get default student requirements catalogue
+// @route   GET /api/v1/placement-drives/field-catalogue
+// @access  Authenticated Users
+const getFieldCatalogue = asyncHandler(async (req, res) => {
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            DEFAULT_STUDENT_REQUIREMENTS,
+            "Default student requirements catalogue retrieved successfully"
+        )
+    );
+});
+
 export {
     createPlacementDrive,
     getAllPlacementDrives,
@@ -470,5 +618,8 @@ export {
     deactivatePlacementDrive,
     reactivatePlacementDrive,
     getEligibleStudents,
-    getMyEligibleDrives
+    getMyEligibleDrives,
+    checkDriveEligibility,
+    getDriveEligibilityPreview,
+    getFieldCatalogue
 };

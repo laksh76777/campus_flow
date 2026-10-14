@@ -199,20 +199,6 @@ export default function ManageCompanies({
       const msg =
         err.response?.data?.message || err.message || "Failed to save company";
       toast.error(msg);
-      // Resilient fallback for demo mode
-      if (!editingCompany) {
-        const fallbackComp = {
-          _id: `comp-${Date.now()}`,
-          ...formData,
-          isActive: true,
-          companyLogo: logoPreview ? { url: logoPreview } : null,
-        };
-        if (onCompanyCreated) {
-          onCompanyCreated(fallbackComp);
-        }
-        setIsCreateModalOpen(false);
-        toast.success("Company partner registered (demo mode)!");
-      }
     } finally {
       setSubmitting(false);
     }

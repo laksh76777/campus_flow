@@ -145,6 +145,7 @@ export default function ManageApplications({
     };
 
     const rows = targetApps.map((app, index) => {
+      const snap = app.submittedSnapshot || {};
       const student = app.student || {};
       const user = student.user || {};
       const drive = app.placementDrive || {};
@@ -153,19 +154,32 @@ export default function ManageApplications({
           ? drive.company?.companyName
           : drive.companyName || "";
 
+      const fullName = snap.fullName || user.fullName || student.fullName || "";
+      const usn = snap.usn || student.enrollmentNumber || student.usn || "";
+      const email = snap.email || user.email || student.collegeEmail || "";
+      const phone = snap.phone || user.phone || student.alternatePhone || "";
+      const branch = snap.branch || snap.department || student.branch || student.department || "";
+      const semester = snap.currentSemester || student.semester || "";
+      const gradYear = snap.graduationYear || student.graduationYear || "";
+      const cgpa = snap.cgpa ?? student.verifiedCGPA ?? student.cgpa ?? "";
+      const activeBacklogs = snap.activeBacklogs ?? student.activeBacklogs ?? student.backlogs ?? 0;
+      const tenth = snap.tenthDetails?.percentage ?? student.tenthDetails?.percentage ?? student.tenthPercentage ?? "";
+      const twelfth = snap.twelfthOrDiplomaDetails?.percentage ?? student.twelfthOrDiplomaDetails?.percentage ?? student.twelfthPercentage ?? "";
+      const resumeUrl = snap.resume?.url || student.resume?.url || student.resumeUrl || "";
+
       return [
         index + 1,
-        escapeCsv(user.fullName || student.fullName || ""),
-        escapeCsv(student.enrollmentNumber || ""),
-        escapeCsv(user.email || student.email || ""),
-        escapeCsv(user.phone || student.phone || ""),
-        escapeCsv(student.branch || ""),
-        escapeCsv(student.semester ?? ""),
-        escapeCsv(student.graduationYear ?? ""),
-        escapeCsv(student.cgpa ?? ""),
-        escapeCsv(student.backlogs ?? student.activeBacklogs ?? 0),
-        escapeCsv(student.tenthPercentage ?? ""),
-        escapeCsv(student.twelfthPercentage ?? ""),
+        escapeCsv(fullName),
+        escapeCsv(usn),
+        escapeCsv(email),
+        escapeCsv(phone),
+        escapeCsv(branch),
+        escapeCsv(semester),
+        escapeCsv(gradYear),
+        escapeCsv(cgpa),
+        escapeCsv(activeBacklogs),
+        escapeCsv(tenth),
+        escapeCsv(twelfth),
         escapeCsv(Array.isArray(student.skills) ? student.skills.join(", ") : ""),
         escapeCsv(comp),
         escapeCsv(drive.jobTitle || ""),
@@ -183,7 +197,7 @@ export default function ManageApplications({
         escapeCsv(app.interviewLocation || ""),
         escapeCsv(app.offeredPackage ?? ""),
         escapeCsv(app.remarks || ""),
-        escapeCsv(student.resume?.url || student.resumeUrl || "")
+        escapeCsv(resumeUrl)
       ].join(",");
     });
 
@@ -662,13 +676,15 @@ export default function ManageApplications({
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   Recruitment Pipeline Stage
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {[
-                    { id: "applied", label: "Applied", desc: "Initial state" },
+                    { id: "applied", label: "Applied", desc: "Initial stage" },
                     { id: "shortlisted", label: "Shortlisted", desc: "Screening cleared" },
                     { id: "interview", label: "Interview", desc: "Rounds scheduled" },
-                    { id: "selected", label: "Selected", desc: "Job offer extended" },
-                    { id: "rejected", label: "Rejected", desc: "Not progressed" },
+                    { id: "selected", label: "Selected", desc: "Hiring decision" },
+                    { id: "offer_received", label: "Offer Released", desc: "Official offer extended" },
+                    { id: "on_hold", label: "On Hold", desc: "Pending assessment" },
+                    { id: "rejected", label: "Rejected", desc: "Not progressed" }
                   ].map((s) => (
                     <button
                       type="button"

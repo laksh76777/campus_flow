@@ -10,7 +10,10 @@ import {
   Award,
   RefreshCw,
   Eye,
+  Download,
+  FileSpreadsheet,
 } from "lucide-react";
+import toast from "react-hot-toast";
 import { getResumeViewUrl } from "../../utils/resumeHelper";
 import StudentDetailModal from "./StudentDetailModal";
 
@@ -21,6 +24,7 @@ export default function ManageStudents({
   const [searchQuery, setSearchQuery] = useState("");
   const [branchFilter, setBranchFilter] = useState("all");
   const [backlogFilter, setBacklogFilter] = useState("all");
+  const [placedFilter, setPlacedFilter] = useState("all"); // all | placed | unplaced
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
 
@@ -59,9 +63,16 @@ export default function ManageStudents({
           ? (s.backlogs ?? 0) === 0
           : (s.backlogs ?? 0) > 0;
 
-      return matchesSearch && matchesBranch && matchesBacklog;
+      const matchesPlaced =
+        placedFilter === "all"
+          ? true
+          : placedFilter === "placed"
+          ? s.isPlaced === true
+          : s.isPlaced !== true;
+
+      return matchesSearch && matchesBranch && matchesBacklog && matchesPlaced;
     });
-  }, [students, searchQuery, branchFilter, backlogFilter]);
+  }, [students, searchQuery, branchFilter, backlogFilter, placedFilter]);
 
   // Extract unique branches
   const branches = useMemo(() => {
@@ -77,13 +88,90 @@ export default function ManageStudents({
     const total = students.length;
     const zeroBacklogs = students.filter((s) => (s.backlogs ?? 0) === 0).length;
     const withResume = students.filter((s) => s.resume?.url).length;
+    const placed = students.filter((s) => s.isPlaced === true).length;
     const avgCgpa =
       total > 0
         ? (students.reduce((acc, s) => acc + (s.cgpa ?? 0), 0) / total).toFixed(2)
         : "8.45";
 
-    return { total, zeroBacklogs, withResume, avgCgpa };
+    return { total, zeroBacklogs, withResume, avgCgpa, placed };
   }, [students]);
+
+  // Export filtered students to CSV / Excel spreadsheet
+  const handleExportCSV = () => {
+    if (filteredStudents.length === 0) {
+      toast.error("No student records to export matching current filters");
+      return;
+    }
+
+    const headers = [
+      "S.No",
+      "Candidate Name",
+      "Enrollment ID",
+      "Email Address",
+      "Phone",
+      "Department",
+      "Semester",
+      "Graduation Batch",
+      "CGPA",
+      "Active Backlogs",
+      "10th Score (%)",
+      "12th Score (%)",
+      "Skills",
+      "Placement Status",
+      "Placed Company",
+      "Package (LPA)",
+      "Placed Role",
+      "Resume Link"
+    ];
+
+    const escapeCsv = (val) => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const rows = filteredStudents.map((student, idx) => {
+      const user = student.user || {};
+      const skills = Array.isArray(student.skills) ? student.skills.join("; ") : "";
+      const isPlaced = Boolean(student.isPlaced);
+      const rawResume = student.resume?.url || student.resumeUrl || "";
+      const resumeUrl = getResumeViewUrl(rawResume) || "";
+
+      return [
+        idx + 1,
+        escapeCsv(user.fullName || student.fullName || ""),
+        escapeCsv(student.enrollmentNumber || ""),
+        escapeCsv(user.email || student.email || ""),
+        escapeCsv(user.phone || student.phone || ""),
+        escapeCsv(student.branch || ""),
+        student.semester ?? "",
+        student.graduationYear ?? "",
+        student.cgpa ?? "",
+        student.backlogs ?? 0,
+        student.tenthPercentage ?? "",
+        student.twelfthPercentage ?? "",
+        escapeCsv(skills),
+        isPlaced ? "Placed" : "Seeking Placement",
+        escapeCsv(student.placedCompany || ""),
+        student.placedPackage ?? "",
+        escapeCsv(student.placedJobTitle || ""),
+        escapeCsv(resumeUrl)
+      ].join(",");
+    });
+
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\r\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `CampusFlow_Students_Cohort_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${filteredStudents.length} candidate records!`);
+  };
 
   return (
     <div className="space-y-6">
@@ -114,6 +202,10 @@ export default function ManageStudents({
           <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-center">
             <span className="text-[10px] font-bold text-slate-400 uppercase">0 Backlogs</span>
             <p className="text-sm font-extrabold text-indigo-600">{stats.zeroBacklogs}</p>
+          </div>
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-center">
+            <span className="text-[10px] font-bold text-emerald-600 uppercase">✓ Placed</span>
+            <p className="text-sm font-extrabold text-emerald-700">{stats.placed}</p>
           </div>
           {onRefresh && (
             <button
@@ -166,6 +258,27 @@ export default function ManageStudents({
             <option value="zero">Zero Backlogs Only</option>
             <option value="has">With Active Backlogs</option>
           </select>
+
+          {/* Placement Status Filter */}
+          <select
+            value={placedFilter}
+            onChange={(e) => setPlacedFilter(e.target.value)}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 focus:border-blue-500 focus:outline-hidden"
+          >
+            <option value="all">All Placement Status</option>
+            <option value="placed">✓ Placed Students</option>
+            <option value="unplaced">⏳ Unplaced Students</option>
+          </select>
+
+          {/* Export Cohort CSV Button */}
+          <button
+            onClick={handleExportCSV}
+            title="Download CSV spreadsheet of current student records"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 px-3.5 py-2 text-xs font-bold transition active:scale-95 shadow-2xs"
+          >
+            <Download className="h-3.5 w-3.5 text-emerald-600" />
+            <span>Export CSV</span>
+          </button>
         </div>
       </div>
 
@@ -193,6 +306,7 @@ export default function ManageStudents({
                   <th className="py-3.5 px-3">Branch & Semester</th>
                   <th className="py-3.5 px-3 text-center">CGPA</th>
                   <th className="py-3.5 px-3 text-center">Backlogs</th>
+                  <th className="py-3.5 px-3 text-center">Placement</th>
                   <th className="py-3.5 px-3">Skills Portfolio</th>
                   <th className="py-3.5 pl-3 pr-5 text-right">Actions</th>
                 </tr>
@@ -301,6 +415,27 @@ export default function ManageStudents({
                         )}
                       </td>
 
+                      {/* Placement Status */}
+                      <td className="py-3.5 px-3 text-center">
+                        {student.isPlaced ? (
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-300">
+                              ✓ Placed
+                            </span>
+                            {student.placedCompany && (
+                              <span className="text-[10px] text-emerald-600 font-semibold truncate max-w-[80px]" title={student.placedCompany}>
+                                {student.placedCompany}
+                              </span>
+                            )}
+                            {student.placedPackage && (
+                              <span className="text-[9px] text-slate-500">₹{student.placedPackage} LPA</span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 font-medium">⏳ Seeking</span>
+                        )}
+                      </td>
+
                       {/* Skills */}
                       <td className="py-3.5 px-3 max-w-xs">
                         <div className="flex flex-wrap gap-1">
@@ -374,6 +509,10 @@ export default function ManageStudents({
         student={selectedStudent}
         isOpen={!!selectedStudent}
         onClose={() => setSelectedStudent(null)}
+        onStudentVerified={() => {
+          setSelectedStudent(null);
+          if (onRefresh) onRefresh();
+        }}
       />
     </div>
   );

@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   ExternalLink,
   ChevronRight,
+  Calendar,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -59,6 +60,12 @@ export default function AdminSidebar({
       label: "Applicant Review",
       icon: FileCheck2,
       badge: "Actions",
+    },
+    {
+      id: "sessions",
+      label: "Placement Sessions",
+      icon: Calendar,
+      badge: "Cohorts",
     },
   ];
 
