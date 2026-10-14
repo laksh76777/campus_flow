@@ -12,6 +12,7 @@ import ManageCompanies from "../../components/admin/ManageCompanies";
 import ManageApplications from "../../components/admin/ManageApplications";
 import ManageStudents from "../../components/admin/ManageStudents";
 import ManageSessions from "../../components/admin/ManageSessions";
+import ExcelMigrationHub from "../../components/admin/ExcelMigrationHub";
 
 import { useAuth } from "../../context/authContextDef";
 import {
@@ -414,6 +415,14 @@ export default function AdminDashboard({ initialTab = "overview" }) {
           {activeTab === "sessions" && (
             <ManageSessions
               onSessionChanged={() => loadDashboardData(true)}
+            />
+          )}
+
+          {activeTab === "excel_hub" && (
+            <ExcelMigrationHub
+              sessions={sessions}
+              drives={scopedDrives}
+              onRefresh={() => loadDashboardData(true)}
             />
           )}
         </main>

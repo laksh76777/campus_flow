@@ -116,6 +116,7 @@ import dashboardRouter from "./routes/dashboard.routes.js";
 import notificationRouter from "./routes/notification.routes.js";
 import sessionRouter from "./routes/placementSession.routes.js";
 import departmentRouter from "./routes/department.routes.js";
+import excelRouter from "./routes/excel.routes.js";
 
 app.use("/api/v1/users", userRouter);
 app.use("/api/v1/studentprofile", studentRouter);
@@ -127,6 +128,7 @@ app.use("/api/v1/dashboard", dashboardRouter);
 app.use("/api/v1/notifications", notificationRouter);
 app.use("/api/v1/sessions", sessionRouter);
 app.use("/api/v1/departments", departmentRouter);
+app.use("/api/v1/excel", excelRouter);
 
 // Global Error Handler
 app.use((err, req, res, next) => {

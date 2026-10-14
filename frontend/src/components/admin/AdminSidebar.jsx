@@ -11,6 +11,7 @@ import {
   ExternalLink,
   ChevronRight,
   Calendar,
+  FileSpreadsheet,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -66,6 +67,12 @@ export default function AdminSidebar({
       label: "Placement Sessions",
       icon: Calendar,
       badge: "Cohorts",
+    },
+    {
+      id: "excel_hub",
+      label: "Excel Import & Exports",
+      icon: FileSpreadsheet,
+      badge: "Phase 6",
     },
   ];
 
