@@ -25,7 +25,8 @@ import {
   Camera,
   Lock,
   Unlock,
-  FileEdit
+  FileEdit,
+  Calculator
 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
@@ -77,10 +78,10 @@ export default function ProfileDrawer({
   user,
   studentProfile,
   onProfileUpdated,
-  initialSection = "academic",
+  initialSection = "all",
   initialEditing = false
 }) {
-  const [activeSection, setActiveSection] = useState(initialSection || "academic");
+  const [activeSection, setActiveSection] = useState(initialSection || "all");
   const [isEditing, setIsEditing] = useState(Boolean(initialEditing));
   const [saving, setSaving] = useState(false);
   const [resumeFile, setResumeFile] = useState(null);
@@ -333,6 +334,14 @@ export default function ProfileDrawer({
     semMap[s.semester] = s.sgpa;
   });
 
+  // Automatically calculate cumulative CGPA from entered semester SGPAs
+  const validSgpas = semesterResults
+    .map((s) => Number(s.sgpa))
+    .filter((n) => !isNaN(n) && n > 0);
+  const calculatedCgpa = validSgpas.length > 0
+    ? (validSgpas.reduce((a, b) => a + b, 0) / validSgpas.length).toFixed(2)
+    : (studentProfile?.verifiedCGPA ?? studentProfile?.cgpa ?? "");
+
   const handleSaveProfile = async (e) => {
     e.preventDefault();
     setSaving(true);
@@ -355,7 +364,7 @@ export default function ProfileDrawer({
       currentSemester: Number(formData.semester),
       graduationYear: Number(formData.graduationYear),
       admissionYear: Number(formData.admissionYear),
-      cgpa: formData.cgpa === "" ? null : Number(formData.cgpa),
+      cgpa: calculatedCgpa ? Number(calculatedCgpa) : (formData.cgpa === "" ? null : Number(formData.cgpa)),
       about: formData.about.trim(),
       skills: formData.skills
         .split(",")
@@ -452,7 +461,14 @@ export default function ProfileDrawer({
 
     try {
       const res = await updateStudentProfile(payload);
-      toast.success("Academic profile saved successfully!");
+      if (!studentProfile?.isProfileLocked) {
+        try {
+          await lockProfile(studentProfile?.user?._id || user?._id);
+        } catch (lockErr) {
+          console.warn("Auto-lock after confirm & save:", lockErr);
+        }
+      }
+      toast.success("Profile confirmed and saved successfully!");
       setIsEditing(false);
       if (onProfileUpdated && res?.data) {
         onProfileUpdated(res.data);
@@ -709,9 +725,10 @@ export default function ProfileDrawer({
           </div>
         </div>
 
-        {/* Navigation Tabs (7 Dedicated Sections) */}
+        {/* Navigation Tabs (Full Dossier + Dedicated Sections) */}
         <div className="flex items-center gap-1 px-6 border-b border-slate-200 bg-white overflow-x-auto py-2 shrink-0 no-scrollbar">
           {[
+            { id: "all", label: "Full Dossier (Verify)", icon: CheckCircle2 },
             { id: "academic", label: "College & CGPA", icon: BookOpen },
             { id: "secondary", label: "10th & 12th/Diploma", icon: Award },
             { id: "semesters", label: "Semester SGPA", icon: Layers },
@@ -762,7 +779,7 @@ export default function ProfileDrawer({
                     Grad: {studentProfile?.graduationYear ?? "Not assigned"}
                   </span>
                   <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
-                    CGPA: {studentProfile?.verifiedCGPA ?? studentProfile?.cgpa ?? "Not entered"}
+                    CGPA: {calculatedCgpa || studentProfile?.verifiedCGPA || studentProfile?.cgpa || "Not entered"}
                   </span>
                 </div>
               </div>
@@ -770,17 +787,17 @@ export default function ProfileDrawer({
               {!isEditing && (
                 studentProfile?.isProfileLocked ? (
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="inline-flex items-center gap-1 rounded-xl border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-900">
+                    <span className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-900">
                       <Lock className="h-3.5 w-3.5 text-amber-700" />
-                      <span>Locked</span>
+                      <span>Official Record Locked</span>
                     </span>
                     <button
                       type="button"
                       onClick={() => setIsModModalOpen(true)}
-                      className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-red-900 to-orange-700 px-3 py-1.5 text-xs font-black text-white hover:from-red-950 transition active:scale-95 shadow-2xs"
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-red-900 to-orange-700 px-3.5 py-1.5 text-xs font-black text-white hover:from-red-950 transition active:scale-95 shadow-2xs"
                     >
                       <FileEdit className="h-3.5 w-3.5" />
-                      <span>Request Edit</span>
+                      <span>Request TPO Modification</span>
                     </button>
                   </div>
                 ) : (
@@ -788,17 +805,10 @@ export default function ProfileDrawer({
                     <button
                       type="button"
                       onClick={() => setIsEditing(true)}
-                      className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100 transition active:scale-95"
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-blue-700 transition active:scale-95 shadow-2xs"
                     >
-                      Edit Profile
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setIsLockModalOpen(true)}
-                      className="inline-flex items-center gap-1 rounded-xl bg-gradient-to-r from-red-900 to-orange-700 text-white px-3 py-1.5 text-xs font-black hover:from-red-950 transition active:scale-95 shadow-2xs"
-                    >
-                      <Lock className="h-3 w-3" />
-                      <span>Lock & Verify</span>
+                      <FileEdit className="h-3.5 w-3.5" />
+                      <span>Edit Profile</span>
                     </button>
                   </div>
                 )
@@ -806,55 +816,47 @@ export default function ProfileDrawer({
             </div>
           </div>
 
-          {/* Locked Status Banner if locked */}
-          {studentProfile?.isProfileLocked && (
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50/90 p-4 shadow-2xs">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-800 border border-amber-300 shrink-0">
-                  <Lock className="h-5 w-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h4 className="text-xs font-black text-amber-950 uppercase tracking-wider">
-                      Profile Dossier Locked & Uneditable
-                    </h4>
-                    <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-amber-200 text-amber-950">
-                      Official Record
-                    </span>
-                  </div>
-                  <p className="text-xs text-amber-800 font-medium mt-0.5">
-                    Academic marks, backlogs, USN, and parent details are locked. Request TPO permission to modify any records.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsModModalOpen(true)}
-                className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-red-900 to-orange-700 px-4 py-2 text-xs font-black text-white hover:from-red-950 hover:to-orange-800 transition shadow-xs active:scale-95 shrink-0"
-              >
-                <FileEdit className="h-3.5 w-3.5" />
-                <span>Request TPO Modification</span>
-              </button>
-            </div>
-          )}
-
           {/* EDIT MODE: FULL TABBED FORM */}
           {isEditing ? (
             <form onSubmit={handleSaveProfile} className="space-y-6">
+              {studentProfile?.isProfileLocked && (
+                <div className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50/90 px-4 py-2.5 text-xs text-amber-900 shadow-2xs">
+                  <div className="flex items-center gap-2">
+                    <Lock className="h-4 w-4 text-amber-700 shrink-0" />
+                    <span>Official academic records are locked. Request TPO Modification to edit locked items.</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsModModalOpen(true)}
+                    className="font-bold text-amber-900 underline hover:text-black shrink-0 ml-3"
+                  >
+                    Request Modification
+                  </button>
+                </div>
+              )}
+
               {/* SECTION: ACADEMICS & DEGREE */}
               <div className="rounded-2xl border border-slate-200 p-5 bg-white space-y-4">
-                <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
-                  <BookOpen className="h-4 w-4 text-blue-600" />
-                  <span>College, Degree & Official CGPA</span>
-                </h4>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
+                    <BookOpen className="h-4 w-4 text-blue-600" />
+                    <span>College, Degree & Cumulative CGPA</span>
+                  </h4>
+                  {studentProfile?.isProfileLocked && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                      <Lock className="h-3 w-3" /> Locked
+                    </span>
+                  )}
+                </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">Program Level *</label>
                     <select
                       value={formData.programLevel}
+                      disabled={studentProfile?.isProfileLocked}
                       onChange={(e) => setFormData({ ...formData, programLevel: e.target.value, programCode: "" })}
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500"
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                     >
                       <option value="">Select program level</option>
                       <option value="Undergraduate">Undergraduate</option>
@@ -866,9 +868,9 @@ export default function ProfileDrawer({
                     <label className="block text-xs font-bold text-slate-700 mb-1">Academic Program *</label>
                     <select
                       value={formData.programCode}
-                      disabled={!formData.programLevel}
+                      disabled={studentProfile?.isProfileLocked || !formData.programLevel}
                       onChange={(e) => setFormData({ ...formData, programCode: e.target.value })}
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500"
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                     >
                       <option value="">Select academic program</option>
                       {programs.filter((program) => program.programLevel === formData.programLevel).map((program) => (
@@ -883,25 +885,34 @@ export default function ProfileDrawer({
                       type="number"
                       min="1"
                       max="10"
+                      disabled={studentProfile?.isProfileLocked}
                       value={formData.semester}
                       onChange={(e) => setFormData({ ...formData, semester: e.target.value })}
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500"
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Overall Cumulative CGPA (0.0 - 10.0)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      max="10"
-                      value={formData.cgpa}
-                      onChange={(e) => setFormData({ ...formData, cgpa: e.target.value })}
-                      placeholder="e.g. 8.65 (From official record)"
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500"
-                    />
-                    <p className="text-[10px] text-slate-400 mt-1">Official CGPA is entered directly from your transcript and is NOT averaged from SGPA.</p>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-bold text-slate-700">Overall College CGPA</label>
+                      <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+                        Auto-computed from SGPAs
+                      </span>
+                    </div>
+                    <div className="w-full flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">
+                      <div className="flex items-center gap-2">
+                        <Calculator className="h-4 w-4 text-blue-600 shrink-0" />
+                        <span className="font-mono text-sm text-blue-700 font-black">
+                          {calculatedCgpa ? `${calculatedCgpa} / 10.00` : "No SGPA entries yet"}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-slate-500 font-normal">
+                        ({validSgpas.length} semester{validSgpas.length === 1 ? "" : "s"} entered)
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Official CGPA is calculated from each semester's SGPA entered below.
+                    </p>
                   </div>
 
                   <div>
@@ -910,9 +921,10 @@ export default function ProfileDrawer({
                       type="number"
                       min="2018"
                       max="2030"
+                      disabled={studentProfile?.isProfileLocked}
                       value={formData.admissionYear}
                       onChange={(e) => setFormData({ ...formData, admissionYear: e.target.value })}
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500"
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                     />
                   </div>
 
@@ -922,10 +934,49 @@ export default function ProfileDrawer({
                       type="number"
                       min="2020"
                       max="2035"
+                      disabled={studentProfile?.isProfileLocked}
                       value={formData.graduationYear}
                       onChange={(e) => setFormData({ ...formData, graduationYear: e.target.value })}
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500"
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                     />
+                  </div>
+                </div>
+
+                {/* Inline Semester SGPA Quick Input Grid */}
+                <div className="pt-3 border-t border-slate-100 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h5 className="text-xs font-black text-slate-800 uppercase tracking-wider">Semester SGPAs (Sem 1 - 8)</h5>
+                      <p className="text-[11px] text-slate-500">Update individual semester SGPAs to recalculate your cumulative College CGPA.</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => {
+                      const sgpaVal = semMap[sem];
+                      const isRecorded = sgpaVal !== undefined && sgpaVal !== null;
+                      return (
+                        <div key={sem} className="rounded-xl border border-slate-200 bg-slate-50/50 p-2.5 space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-slate-700">Sem {sem}</span>
+                            {isRecorded ? (
+                              <span className="text-[10px] font-mono font-black text-blue-600">{Number(sgpaVal).toFixed(2)}</span>
+                            ) : (
+                              <span className="text-[10px] text-slate-400">Pending</span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingSem({ semester: sem, sgpa: isRecorded ? sgpaVal : "" });
+                              setSemSgpaInput(isRecorded ? String(sgpaVal) : "");
+                            }}
+                            className="w-full text-center py-1 rounded-lg text-[10px] font-bold bg-white hover:bg-blue-50 text-blue-600 border border-slate-200 transition"
+                          >
+                            {isRecorded ? "Edit SGPA" : "+ Enter SGPA"}
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -1333,7 +1384,7 @@ export default function ProfileDrawer({
                 </div>
               </div>
 
-              {/* Form Actions */}
+              {/* Form Actions - Single Unified Action */}
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
                 <button
                   type="button"
@@ -1345,18 +1396,10 @@ export default function ProfileDrawer({
                 <button
                   type="submit"
                   disabled={saving}
-                  className="rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white hover:bg-blue-700 transition disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-2.5 text-xs font-black text-white hover:from-blue-700 hover:to-indigo-700 transition disabled:opacity-50 shadow-sm active:scale-95"
                 >
-                  {saving ? "Saving Changes..." : "Save Academic Profile"}
-                </button>
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={() => setIsLockModalOpen(true)}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-red-900 to-orange-700 px-5 py-2 text-xs font-black text-white hover:from-red-950 hover:to-orange-800 transition disabled:opacity-50 shadow-md shadow-red-950/20 active:scale-95"
-                >
-                  <Lock className="h-3.5 w-3.5" />
-                  <span>Verify & Lock Profile</span>
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span>{saving ? "Saving & Confirming..." : "Confirm & Save Profile"}</span>
                 </button>
               </div>
             </form>
@@ -1364,28 +1407,38 @@ export default function ProfileDrawer({
             /* VIEW MODE: TABBED SECTIONS */
             <div className="space-y-6">
               {/* TAB 1: ACADEMIC SUMMARY */}
-              {activeSection === "academic" && (
-                <div className="space-y-5">
+              {(activeSection === "all" || activeSection === "academic") && (
+                <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
+                      <BookOpen className="h-4 w-4 text-blue-600" />
+                      <span>College & Academic Profile</span>
+                    </h4>
+                    <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-lg border border-blue-100">
+                      Official CGPA: {calculatedCgpa || studentProfile?.verifiedCGPA || studentProfile?.cgpa || "—"}
+                    </span>
+                  </div>
+
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div className="rounded-xl border border-slate-200 bg-white p-3.5">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3.5">
                       <span className="text-[11px] font-bold text-slate-400">Official CGPA</span>
                       <p className="text-xl font-black text-blue-600 mt-0.5">
-                        {studentProfile?.verifiedCGPA ?? studentProfile?.cgpa ?? "Not entered"}
+                        {calculatedCgpa || studentProfile?.verifiedCGPA || studentProfile?.cgpa || "Not entered"}
                       </p>
                     </div>
-                    <div className="rounded-xl border border-slate-200 bg-white p-3.5">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3.5">
                       <span className="text-[11px] font-bold text-slate-400">Active Arrears</span>
                       <p className={`text-xl font-black mt-0.5 ${activeBacklogsCount === 0 ? "text-emerald-600" : "text-rose-600"}`}>
                         {activeBacklogsCount}
                       </p>
                     </div>
-                    <div className="rounded-xl border border-slate-200 bg-white p-3.5">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3.5">
                       <span className="text-[11px] font-bold text-slate-400">Current Sem</span>
                       <p className="text-xl font-black text-slate-800 mt-0.5">
                         Sem {studentProfile?.semester ?? studentProfile?.currentSemester ?? "N/A"}
                       </p>
                     </div>
-                    <div className="rounded-xl border border-slate-200 bg-white p-3.5">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3.5">
                       <span className="text-[11px] font-bold text-slate-400">Session Cohort</span>
                       <p className="text-xl font-black text-indigo-600 mt-0.5">
                         {studentProfile?.graduationYear ?? ""}
@@ -1393,8 +1446,8 @@ export default function ProfileDrawer({
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
-                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-400">Technical Skills</h4>
+                  <div className="space-y-2 pt-1">
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Technical Skills</span>
                     <div className="flex flex-wrap gap-1.5">
                       {(Array.isArray(studentProfile?.skills) ? studentProfile.skills : ["React", "Python", "SQL"]).map((skill, idx) => (
                         <span key={idx} className="rounded-lg bg-slate-100 border border-slate-200 px-2.5 py-1 text-xs font-bold text-slate-700">
@@ -1406,50 +1459,18 @@ export default function ProfileDrawer({
                 </div>
               )}
 
-              {/* TAB 2: SECONDARY & HIGHER SECONDARY */}
-              {activeSection === "secondary" && (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* 10th Card */}
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-black text-slate-900 uppercase">10th Standard (SSC)</span>
-                        <span className="text-base font-black text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100">
-                          {studentProfile?.tenthDetails?.percentage ?? studentProfile?.tenthPercentage ?? "Not entered"}%
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-600 font-bold">{studentProfile?.tenthDetails?.schoolName || "School Name not entered"}</p>
-                      <p className="text-xs text-slate-400">
-                        Board: {studentProfile?.tenthDetails?.board || "CBSE"} • Year: {studentProfile?.tenthDetails?.passingYear || "N/A"}
-                      </p>
-                    </div>
-
-                    {/* 12th/Diploma Card */}
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-black text-slate-900 uppercase">
-                          {studentProfile?.twelfthOrDiplomaDetails?.qualificationType || "Class 12"} Record
-                        </span>
-                        <span className="text-base font-black text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100">
-                          {studentProfile?.twelfthOrDiplomaDetails?.percentage ?? studentProfile?.twelfthPercentage ?? "Not entered"}%
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-600 font-bold">{studentProfile?.twelfthOrDiplomaDetails?.institutionName || "Institution not entered"}</p>
-                      <p className="text-xs text-slate-400">
-                        Authority: {studentProfile?.twelfthOrDiplomaDetails?.boardOrUniversity || "CBSE"} • Year: {studentProfile?.twelfthOrDiplomaDetails?.passingYear || "N/A"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {/* TAB 3: SEMESTER SGPA LEDGER (Semesters 1-8 independent) */}
-              {activeSection === "semesters" && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
+              {(activeSection === "all" || activeSection === "semesters") && (
+                <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                     <div>
-                      <h4 className="text-xs font-black uppercase tracking-wider text-slate-700">Semester-Wise SGPA</h4>
-                      <p className="text-[11px] text-slate-400">Enter each semester's SGPA individually from your official grade card.</p>
+                      <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
+                        <Layers className="h-4 w-4 text-blue-600" />
+                        <span>Semester-Wise SGPA Records</span>
+                      </h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Cumulative College CGPA is calculated from entered semester SGPAs: <span className="font-bold text-blue-600">{calculatedCgpa || "—"}</span>
+                      </p>
                     </div>
                   </div>
 
@@ -1458,7 +1479,7 @@ export default function ProfileDrawer({
                       const sgpaVal = semMap[sem];
                       const isRecorded = sgpaVal !== undefined && sgpaVal !== null;
                       return (
-                        <div key={sem} className="rounded-2xl border border-slate-200 bg-white p-3.5 space-y-2 shadow-2xs">
+                        <div key={sem} className="rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 space-y-2">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-black text-slate-800">Semester {sem}</span>
                             {isRecorded ? (
@@ -1476,7 +1497,7 @@ export default function ProfileDrawer({
                               setEditingSem({ semester: sem, sgpa: isRecorded ? sgpaVal : "" });
                               setSemSgpaInput(isRecorded ? String(sgpaVal) : "");
                             }}
-                            className="w-full text-center py-1 text-[11px] font-bold text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                            className="w-full text-center py-1 text-[11px] font-bold text-blue-600 hover:bg-blue-100/50 rounded-lg transition"
                           >
                             {isRecorded ? "Edit SGPA" : "+ Enter SGPA"}
                           </button>
@@ -1487,12 +1508,58 @@ export default function ProfileDrawer({
                 </div>
               )}
 
+              {/* TAB 2: SECONDARY & HIGHER SECONDARY */}
+              {(activeSection === "all" || activeSection === "secondary") && (
+                <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
+                      <Award className="h-4 w-4 text-emerald-600" />
+                      <span>Secondary & Higher Secondary Education (10th & 12th/Diploma)</span>
+                    </h4>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* 10th Card */}
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-slate-900 uppercase">10th Standard (SSC)</span>
+                        <span className="text-base font-black text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100">
+                          {studentProfile?.tenthDetails?.percentage ?? studentProfile?.tenthPercentage ?? "Not entered"}%
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-700 font-bold">{studentProfile?.tenthDetails?.schoolName || "School Name not entered"}</p>
+                      <p className="text-xs text-slate-500">
+                        Board: {studentProfile?.tenthDetails?.board || "CBSE"} • Passing Year: {studentProfile?.tenthDetails?.passingYear || "N/A"}
+                      </p>
+                    </div>
+
+                    {/* 12th/Diploma Card */}
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-slate-900 uppercase">
+                          {studentProfile?.twelfthOrDiplomaDetails?.qualificationType || "Class 12"} Record
+                        </span>
+                        <span className="text-base font-black text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100">
+                          {studentProfile?.twelfthOrDiplomaDetails?.percentage ?? studentProfile?.twelfthPercentage ?? "Not entered"}%
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-700 font-bold">{studentProfile?.twelfthOrDiplomaDetails?.institutionName || "Institution not entered"}</p>
+                      <p className="text-xs text-slate-500">
+                        Authority: {studentProfile?.twelfthOrDiplomaDetails?.boardOrUniversity || "CBSE"} • Passing Year: {studentProfile?.twelfthOrDiplomaDetails?.passingYear || "N/A"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* TAB 4: BACKLOGS */}
-              {activeSection === "backlogs" && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
+              {(activeSection === "all" || activeSection === "backlogs") && (
+                <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                     <div>
-                      <h4 className="text-xs font-black uppercase tracking-wider text-slate-700">Backlog Records</h4>
+                      <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4 text-amber-500" />
+                        <span>Backlog & Arrear History</span>
+                      </h4>
                       <p className="text-[11px] text-slate-400">Distinguishes active backlogs from cleared historical attempts.</p>
                     </div>
                     <button
@@ -1516,11 +1583,11 @@ export default function ProfileDrawer({
                   </div>
 
                   {backlogDetails.length === 0 ? (
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 text-center text-xs text-slate-500 font-bold">
-                      No arrears or backlogs recorded. Excellent!
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-center text-xs text-slate-500 font-bold">
+                      No arrears or backlogs recorded. Clean academic track record!
                     </div>
                   ) : (
-                    <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white">
+                    <div className="rounded-xl border border-slate-200 overflow-hidden bg-white">
                       <table className="w-full text-left text-xs">
                         <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold">
                           <tr>
@@ -1549,12 +1616,15 @@ export default function ProfileDrawer({
               )}
 
               {/* TAB 5: EDUCATION GAPS */}
-              {activeSection === "gaps" && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
+              {(activeSection === "all" || activeSection === "gaps") && (
+                <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                     <div>
-                      <h4 className="text-xs font-black uppercase tracking-wider text-slate-700">Education Gap History</h4>
-                      <p className="text-[11px] text-slate-400">Declaration of legitimate breaks taken during schooling or preparatory years.</p>
+                      <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-purple-600" />
+                        <span>Education Gap History</span>
+                      </h4>
+                      <p className="text-[11px] text-slate-400">Declaration of breaks taken during schooling or entrance prep.</p>
                     </div>
                     <button
                       onClick={() => setIsEditing(true)}
@@ -1565,13 +1635,13 @@ export default function ProfileDrawer({
                   </div>
 
                   {!formData.hasEducationGap || educationGapsList.length === 0 ? (
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 text-center text-xs text-slate-500 font-bold">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-center text-xs text-slate-500 font-bold">
                       No education gaps declared. Continuous academic track record.
                     </div>
                   ) : (
-                    <div className="space-y-3">
+                    <div className="space-y-2.5">
                       {educationGapsList.map((gap, idx) => (
-                        <div key={idx} className="rounded-2xl border border-slate-200 bg-white p-4 space-y-1">
+                        <div key={idx} className="rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 space-y-1">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-bold text-slate-900">{gap.reason}</span>
                             <span className="text-xs font-mono font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
@@ -1589,11 +1659,14 @@ export default function ProfileDrawer({
               )}
 
               {/* TAB 6: FAMILY & ADDRESS */}
-              {activeSection === "family" && (
+              {(activeSection === "all" || activeSection === "family") && (
                 <div className="space-y-4">
-                  <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-2xs">
                     <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                      <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">Parents & Guardians</h4>
+                      <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
+                        <UsersIcon className="h-4 w-4 text-indigo-600" />
+                        <span>Parents & Guardians</span>
+                      </h4>
                       <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
                         Confidential to TPO
                       </span>
@@ -1612,8 +1685,11 @@ export default function ProfileDrawer({
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3">
-                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">Address Details</h4>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-2xs">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
+                      <Home className="h-4 w-4 text-slate-600" />
+                      <span>Address Details</span>
+                    </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                       <div>
                         <span className="text-slate-400 font-bold block mb-1">Current Address</span>
@@ -1635,7 +1711,7 @@ export default function ProfileDrawer({
               )}
 
               {/* TAB 7: RESUME & DOCUMENTS */}
-              {activeSection === "resume" && (
+              {(activeSection === "all" || activeSection === "resume") && (
                 <div className="space-y-4">
                   {/* Master Placement Resume Card */}
                   <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4 shadow-xs">
@@ -1980,7 +2056,7 @@ export default function ProfileDrawer({
         isOpen={isLockModalOpen}
         onClose={() => setIsLockModalOpen(false)}
         onConfirmLock={handleConfirmLock}
-        formData={formData}
+        formData={{ ...formData, cgpa: calculatedCgpa || formData.cgpa }}
         studentProfile={studentProfile}
         user={user}
         saving={saving}
