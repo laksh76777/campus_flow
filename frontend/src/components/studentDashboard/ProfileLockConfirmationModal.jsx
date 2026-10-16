@@ -191,6 +191,28 @@ export default function ProfileLockConfirmationModal({
                 </div>
               </div>
             </div>
+
+            {/* Certificates & Credentials Summary */}
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-200/70 pb-2">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Certificates & External Credentials</span>
+                <span className="text-xs font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                  {(formData.certificates || studentProfile.certificates || []).length} Attached
+                </span>
+              </div>
+              {(formData.certificates || studentProfile.certificates || []).length > 0 ? (
+                <div className="space-y-1.5">
+                  {(formData.certificates || studentProfile.certificates || []).map((c, i) => (
+                    <div key={i} className="flex items-center justify-between text-xs bg-white p-2 rounded-xl border border-slate-200">
+                      <span className="font-bold text-slate-800">{c.title || "Certificate"}</span>
+                      <span className="text-slate-500 text-[11px]">{c.issuer || "Online Credential"}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500 italic">No external certificates attached.</p>
+              )}
+            </div>
           </div>
 
           {/* Confirmation Checkbox */}
@@ -203,7 +225,7 @@ export default function ProfileLockConfirmationModal({
                 className="mt-0.5 h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-red-500"
               />
               <span className="text-xs font-bold text-slate-800 leading-relaxed">
-                I hereby verify that all the personal, 10th/12th marks, semester SGPA, backlogs, and parent details listed above are completely accurate. I understand that confirming will <u>LOCK</u> these records and prevent any direct editing.
+                I hereby declare and verify that all personal, contact, 10th/12th marks, semester SGPA, backlogs, certificates, and parent details listed above are true, complete, and correct with no falsification. I understand that confirming will officially <u>LOCK</u> these records and prevent any further direct editing.
               </span>
             </label>
           </div>

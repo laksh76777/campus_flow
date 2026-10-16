@@ -26,7 +26,9 @@ import {
   Lock,
   Unlock,
   FileEdit,
-  Calculator
+  Calculator,
+  Phone,
+  Mail
 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
@@ -96,9 +98,16 @@ export default function ProfileDrawer({
   useEffect(() => {
     if (isOpen) {
       if (initialSection) setActiveSection(initialSection);
-      if (initialEditing) setIsEditing(true);
+      if (initialEditing !== undefined) setIsEditing(Boolean(initialEditing));
     }
   }, [isOpen, initialSection, initialEditing]);
+
+  // Modal for adding a certificate
+  const [isAddCertOpen, setIsAddCertOpen] = useState(false);
+  const [certTitle, setCertTitle] = useState("");
+  const [certIssuer, setCertIssuer] = useState("");
+  const [certIssueDate, setCertIssueDate] = useState("");
+  const [certUrl, setCertUrl] = useState("");
 
   useEffect(() => {
     if (!isOpen) return;
@@ -258,9 +267,9 @@ export default function ProfileDrawer({
         // Personal
         gender: studentProfile.gender || "Prefer not to say",
         dob: studentProfile.dob ? new Date(studentProfile.dob).toISOString().slice(0, 10) : "",
-        personalEmail: studentProfile.personalEmail || "",
+        personalEmail: studentProfile.personalEmail || user?.email || "",
         collegeEmail: studentProfile.collegeEmail || "",
-        alternatePhone: studentProfile.alternatePhone || "",
+        alternatePhone: studentProfile.alternatePhone || studentProfile.phone || user?.phone || "",
 
         // Family
         fatherName: studentProfile.family?.fatherName || "",
@@ -298,7 +307,7 @@ export default function ProfileDrawer({
         Array.isArray(studentProfile.certificates) ? studentProfile.certificates : []
       );
     }
-  }, [studentProfile]);
+  }, [studentProfile, user]);
 
   useEffect(() => {
     if (!studentProfile || programs.length === 0) return;
@@ -343,24 +352,41 @@ export default function ProfileDrawer({
     ? (validSgpas.reduce((a, b) => a + b, 0) / validSgpas.length).toFixed(2)
     : (studentProfile?.verifiedCGPA ?? studentProfile?.cgpa ?? "");
 
-  const handleSaveProfile = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-
-    const selectedProgram = programs.find((program) => program.code === formData.programCode);
-    if (!selectedProgram || selectedProgram.programLevel !== formData.programLevel) {
-      toast.error("Select a valid approved academic program before saving");
-      setSaving(false);
+  const handleAddCertificate = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!certTitle.trim()) {
+      toast.error("Please enter credential or certificate title");
       return;
     }
+    const newCert = {
+      title: certTitle.trim(),
+      issuer: certIssuer.trim() || "Online Provider",
+      issueDate: certIssueDate || undefined,
+      url: certUrl.trim() || undefined
+    };
+    setCertificates((prev) => [...prev, newCert]);
+    setCertTitle("");
+    setCertIssuer("");
+    setCertIssueDate("");
+    setCertUrl("");
+    setIsAddCertOpen(false);
+    toast.success("Certificate added! Save or Submit your profile to persist.");
+  };
 
-    const payload = {
-      programCode: selectedProgram.code,
-      programLevel: selectedProgram.programLevel,
-      degreeType: selectedProgram.degreeType,
-      course: selectedProgram.degreeType,
-      branch: selectedProgram.name,
-      department: selectedProgram.name,
+  const handleDeleteCertificate = (idx) => {
+    setCertificates((prev) => prev.filter((_, i) => i !== idx));
+    toast.success("Certificate removed from list");
+  };
+
+  const buildProfilePayload = () => {
+    const selectedProgram = programs.find((program) => program.code === formData.programCode);
+    return {
+      programCode: selectedProgram?.code || formData.programCode,
+      programLevel: selectedProgram?.programLevel || formData.programLevel,
+      degreeType: selectedProgram?.degreeType || "B.E.",
+      course: selectedProgram?.degreeType || "B.E.",
+      branch: selectedProgram?.name || formData.programCode,
+      department: selectedProgram?.name || formData.programCode,
       semester: Number(formData.semester),
       currentSemester: Number(formData.semester),
       graduationYear: Number(formData.graduationYear),
@@ -404,11 +430,12 @@ export default function ProfileDrawer({
       hasEducationGap: formData.hasEducationGap,
       educationGaps: formData.educationGaps,
 
-      // Personal & Family
+      // Personal & Contact
       gender: formData.gender,
       dob: formData.dob || null,
       personalEmail: formData.personalEmail.trim(),
       collegeEmail: formData.collegeEmail.trim(),
+      phone: formData.alternatePhone.trim(),
       alternatePhone: formData.alternatePhone.trim(),
       family: {
         fatherName: formData.fatherName.trim(),
@@ -459,16 +486,31 @@ export default function ProfileDrawer({
       sameAsCurrent: formData.sameAsCurrent,
       certificates
     };
+  };
 
+  const handleSaveProfile = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const selectedProgram = programs.find((program) => program.code === formData.programCode);
+    if (!selectedProgram || selectedProgram.programLevel !== formData.programLevel) {
+      toast.error("Select a valid approved academic program before submitting");
+      return;
+    }
+    // Per institutional workflow: Open verification modal with complete dossier & declaration
+    setIsLockModalOpen(true);
+  };
+
+  const handleSaveDraft = async () => {
+    setSaving(true);
     try {
+      const payload = buildProfilePayload();
       const res = await updateStudentProfile(payload);
-      toast.success("Profile confirmed and saved successfully!");
+      toast.success("Profile draft saved successfully!");
       setIsEditing(false);
       if (onProfileUpdated && res?.data) {
         onProfileUpdated(res.data);
       }
     } catch (err) {
-      const msg = err.response?.data?.message || err.message || "Failed to update profile";
+      const msg = err.response?.data?.message || err.message || "Failed to save profile draft";
       toast.error(msg);
     } finally {
       setSaving(false);
@@ -478,15 +520,17 @@ export default function ProfileDrawer({
   const handleConfirmLock = async () => {
     setSaving(true);
     try {
-      const res = await lockProfile(studentProfile?.user?._id || user?._id);
-      toast.success("Profile verified & permanently locked for placement drives!");
+      const payload = buildProfilePayload();
+      const saveRes = await updateStudentProfile(payload);
+      const lockRes = await lockProfile(studentProfile?.user?._id || user?._id);
+      toast.success("Profile verified, saved & permanently locked for placement drives!");
       setIsLockModalOpen(false);
       setIsEditing(false);
-      if (onProfileUpdated && res?.data) {
-        onProfileUpdated(res.data);
+      if (onProfileUpdated && (lockRes?.data || saveRes?.data)) {
+        onProfileUpdated(lockRes?.data || saveRes?.data);
       }
     } catch (err) {
-      toast.error(err.response?.data?.message || "Failed to lock profile");
+      toast.error(err.response?.data?.message || "Failed to confirm and lock profile");
     } finally {
       setSaving(false);
     }
@@ -757,6 +801,7 @@ export default function ProfileDrawer({
             { id: "secondary", label: "10th & 12th/Diploma", icon: Award },
             { id: "semesters", label: "Semester SGPA", icon: Layers },
             { id: "backlogs", label: `Backlogs (${activeBacklogsCount})`, icon: AlertTriangle },
+            { id: "certificates", label: `Certificates (${certificates.length})`, icon: Award },
             { id: "gaps", label: `Education Gaps ${formData.hasEducationGap ? "(!)" : ""}`, icon: Clock },
             { id: "family", label: "Family & Address", icon: UsersIcon },
             { id: "resume", label: "Resume & Documents", icon: FileText }
@@ -794,6 +839,10 @@ export default function ProfileDrawer({
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <span className="font-mono text-[11px] font-bold text-slate-700 bg-white px-2 py-0.5 rounded-md border border-slate-200">
                     USN: {enrollment}
+                  </span>
+                  <span className="font-mono text-[11px] font-bold text-blue-800 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 flex items-center gap-1">
+                    <Phone className="h-3 w-3 text-blue-600" />
+                    <span>{formData.alternatePhone || studentProfile?.phone || user?.phone || "No phone entered"}</span>
                   </span>
                   <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
                     {programs.find((program) => program.code === (studentProfile?.programCode || formData.programCode))?.name
@@ -840,6 +889,13 @@ export default function ProfileDrawer({
             </div>
           </div>
 
+          {verification === "REVERIFICATION_REQUESTED" && (
+            <div className="flex items-center gap-2.5 rounded-2xl border border-cyan-200 bg-cyan-50/90 p-4 text-xs text-cyan-950 font-bold shadow-2xs">
+              <Unlock className="h-4 w-4 text-cyan-700 shrink-0" />
+              <span>TPO Administrator has requested a profile re-check. All academic marks, backlogs, and contact fields are unlocked and directly editable!</span>
+            </div>
+          )}
+
           {/* EDIT MODE: FULL TABBED FORM */}
           {isEditing ? (
             <form onSubmit={handleSaveProfile} className="space-y-6">
@@ -858,6 +914,91 @@ export default function ProfileDrawer({
                   </button>
                 </div>
               )}
+
+              {/* SECTION: CANDIDATE IDENTITY & CONTACT */}
+              <div className="rounded-2xl border border-slate-200 p-5 bg-white space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
+                    <UsersIcon className="h-4 w-4 text-blue-600" />
+                    <span>Candidate Identity & Contact Information</span>
+                  </h4>
+                  <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-md border border-blue-100">
+                    Required for Recruitment Drives
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Candidate Full Name</label>
+                    <input
+                      type="text"
+                      disabled
+                      value={displayName}
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 bg-slate-100 cursor-not-allowed"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">University Seat Number (USN)</label>
+                    <input
+                      type="text"
+                      disabled
+                      value={enrollment}
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-mono font-bold text-slate-600 bg-slate-100 cursor-not-allowed"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Primary Email Address</label>
+                    <input
+                      type="email"
+                      disabled
+                      value={displayEmail}
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 bg-slate-100 cursor-not-allowed"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                      <Phone className="h-3 w-3 text-blue-600" />
+                      <span>Mobile / Phone Number *</span>
+                    </label>
+                    <input
+                      type="tel"
+                      value={formData.alternatePhone}
+                      onChange={(e) => setFormData({ ...formData, alternatePhone: e.target.value })}
+                      placeholder="e.g. +91 9876543210"
+                      className="w-full rounded-xl border-2 border-blue-200 px-3 py-2 text-xs font-bold text-slate-900 outline-none focus:border-blue-600 bg-blue-50/20"
+                    />
+                    <span className="text-[10px] text-slate-400 mt-0.5 block">Primary phone number for placement screening & alerts</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Alternate / Personal Email</label>
+                    <input
+                      type="email"
+                      value={formData.personalEmail}
+                      onChange={(e) => setFormData({ ...formData, personalEmail: e.target.value })}
+                      placeholder="e.g. personal@gmail.com"
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Gender</label>
+                    <select
+                      value={formData.gender}
+                      onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500"
+                    >
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Other">Other</option>
+                      <option value="Prefer not to say">Prefer not to say</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
 
               {/* SECTION: ACADEMICS & DEGREE */}
               <div className="rounded-2xl border border-slate-200 p-5 bg-white space-y-4">
@@ -1225,6 +1366,57 @@ export default function ProfileDrawer({
                 )}
               </div>
 
+              {/* SECTION: CERTIFICATES & CREDENTIALS */}
+              <div className="rounded-2xl border border-slate-200 p-5 bg-white space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
+                      <Award className="h-4 w-4 text-purple-600" />
+                      <span>Certificates & External Credentials ({certificates.length})</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-400">Professional credentials and certifications to highlight to recruiters.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsAddCertOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-purple-50 text-purple-700 border border-purple-200 px-3 py-1.5 text-xs font-bold hover:bg-purple-100 transition"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>+ Add Certificate</span>
+                  </button>
+                </div>
+
+                {certificates.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-xs text-slate-400 font-medium">
+                    No external credentials attached. Click "+ Add Certificate" to attach online certifications.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {certificates.map((c, i) => (
+                      <div key={i} className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50/60 text-xs">
+                        <div>
+                          <strong className="text-slate-800 font-bold block">{c.title || "Certificate"}</strong>
+                          <span className="text-slate-500 text-[11px]">{c.issuer || "Online Credential"} {c.issueDate && `• ${new Date(c.issueDate).toLocaleDateString()}`}</span>
+                          {c.url && (
+                            <a href={c.url} target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:underline block text-[11px] mt-0.5">
+                              {c.url}
+                            </a>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCertificate(i)}
+                          className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition"
+                          title="Remove certificate"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* SECTION: FAMILY DETAILS (PRIVACY SENSITIVE) */}
               <div className="rounded-2xl border border-slate-200 p-5 bg-white space-y-4">
                 <div className="flex items-center justify-between">
@@ -1415,12 +1607,20 @@ export default function ProfileDrawer({
                   Cancel
                 </button>
                 <button
+                  type="button"
+                  onClick={handleSaveDraft}
+                  disabled={saving}
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-2xs disabled:opacity-50"
+                >
+                  {saving ? "Saving..." : "Save Draft"}
+                </button>
+                <button
                   type="submit"
                   disabled={saving}
                   className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-2.5 text-xs font-black text-white hover:from-blue-700 hover:to-indigo-700 transition disabled:opacity-50 shadow-sm active:scale-95"
                 >
                   <CheckCircle2 className="h-4 w-4" />
-                  <span>{saving ? "Saving & Confirming..." : "Confirm & Save Profile"}</span>
+                  <span>{saving ? "Processing..." : "Confirm & Save Profile"}</span>
                 </button>
               </div>
             </form>
@@ -1667,6 +1867,69 @@ export default function ProfileDrawer({
                           </div>
                           {gap.explanation && (
                             <p className="text-xs text-slate-600 mt-1">{gap.explanation}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB: CERTIFICATES & CREDENTIALS */}
+              {(activeSection === "all" || activeSection === "certificates") && (
+                <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <div>
+                      <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
+                        <Award className="h-4 w-4 text-purple-600" />
+                        <span>Certificates & External Credentials ({certificates.length})</span>
+                      </h4>
+                      <p className="text-[11px] text-slate-400">Verified credentials and certifications to showcase to campus recruiters.</p>
+                    </div>
+                    {!studentProfile?.isProfileLocked && (
+                      <button
+                        type="button"
+                        onClick={() => setIsAddCertOpen(true)}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-purple-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-purple-700 transition active:scale-95 shadow-2xs"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        <span>+ Add Credential</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {certificates.length === 0 ? (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-center text-xs text-slate-500 font-bold">
+                      No certifications added yet. Click "+ Add Credential" or "Edit Profile" to add online credentials or course certificates.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {certificates.map((cert, idx) => (
+                        <div key={idx} className="rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <h5 className="text-xs font-bold text-slate-900 truncate">{cert.title || "Certificate"}</h5>
+                            <p className="text-[11px] text-slate-500">{cert.issuer || "Online Credential"} {cert.issueDate && `• ${new Date(cert.issueDate).toLocaleDateString()}`}</p>
+                            {cert.url && (
+                              <a
+                                href={cert.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-[11px] font-bold text-purple-600 hover:text-purple-800 mt-1"
+                              >
+                                <span>View Credential</span>
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                            )}
+                          </div>
+                          {!studentProfile?.isProfileLocked && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCertificate(idx)}
+                              className="text-rose-500 hover:text-rose-700 p-1"
+                              title="Remove certificate"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
                           )}
                         </div>
                       ))}
@@ -2068,12 +2331,78 @@ export default function ProfileDrawer({
           </div>
         </div>
       )}
+      {/* MODAL: ADD CERTIFICATE / CREDENTIAL */}
+      {isAddCertOpen && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl space-y-4">
+            <h4 className="text-sm font-black text-slate-900">Add Certificate / Credential</h4>
+            <form onSubmit={handleAddCertificate} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Certificate Title *</label>
+                <input
+                  type="text"
+                  required
+                  value={certTitle}
+                  onChange={(e) => setCertTitle(e.target.value)}
+                  placeholder="e.g. AWS Certified Cloud Practitioner"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Issuing Authority / Provider</label>
+                <input
+                  type="text"
+                  value={certIssuer}
+                  onChange={(e) => setCertIssuer(e.target.value)}
+                  placeholder="e.g. Amazon Web Services / Coursera"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Issue Date</label>
+                <input
+                  type="date"
+                  value={certIssueDate}
+                  onChange={(e) => setCertIssueDate(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Verification URL / Link</label>
+                <input
+                  type="url"
+                  value={certUrl}
+                  onChange={(e) => setCertUrl(e.target.value)}
+                  placeholder="https://credly.com/..."
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500"
+                />
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddCertOpen(false)}
+                  className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-purple-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-purple-700"
+                >
+                  Add Credential
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Institutional Profile Lock Confirmation Modal */}
       <ProfileLockConfirmationModal
         isOpen={isLockModalOpen}
         onClose={() => setIsLockModalOpen(false)}
         onConfirmLock={handleConfirmLock}
-        formData={{ ...formData, cgpa: calculatedCgpa || formData.cgpa }}
+        formData={{ ...formData, certificates, cgpa: calculatedCgpa || formData.cgpa }}
         studentProfile={studentProfile}
         user={user}
         saving={saving}

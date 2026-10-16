@@ -360,7 +360,12 @@ const updateStudentProfile = asyncHandler(async (req, res) => {
     if (dob !== undefined) studentProfile.dob = dob ? new Date(dob) : null;
     if (personalEmail !== undefined) studentProfile.personalEmail = personalEmail;
     if (collegeEmail !== undefined) studentProfile.collegeEmail = collegeEmail;
-    if (alternatePhone !== undefined) studentProfile.alternatePhone = alternatePhone;
+    const phoneToSet = req.body.phone || alternatePhone;
+    if (phoneToSet !== undefined) {
+        studentProfile.alternatePhone = String(phoneToSet).trim();
+        studentProfile.phone = String(phoneToSet).trim();
+        await User.findByIdAndUpdate(targetUserId, { $set: { phone: String(phoneToSet).trim() } });
+    }
     if (aadharNumber !== undefined) studentProfile.aadharNumber = aadharNumber;
 
     if (family !== undefined) {

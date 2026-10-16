@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Mail,
+  Phone,
   Award,
   RefreshCw,
   Eye,
@@ -695,6 +696,11 @@ export default function ManageStudents({
                                 <span className="font-mono text-[10px] text-slate-500 truncate block">
                                   {student.enrollmentNumber || student.usn || "No USN"}
                                 </span>
+                                {(student.phone || student.alternatePhone || student.user?.phone) && (
+                                  <span className="font-mono text-[10px] text-slate-500 truncate block">
+                                    📞 {student.phone || student.alternatePhone || student.user?.phone}
+                                  </span>
+                                )}
                               </div>
                             </div>
 
@@ -819,6 +825,10 @@ export default function ManageStudents({
                               <div className="flex items-center gap-1 text-[11px] text-slate-400 mt-2 truncate">
                                 <Mail className="h-3 w-3 shrink-0" />
                                 <span className="truncate">{email}</span>
+                              </div>
+                              <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-1 truncate">
+                                <Phone className="h-3 w-3 shrink-0 text-slate-400" />
+                                <span className="truncate">{student.phone || student.alternatePhone || student.user?.phone || "No phone"}</span>
                               </div>
 
                               <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-slate-100 text-center">
@@ -968,6 +978,10 @@ export default function ManageStudents({
                             <div className="flex items-center gap-1 text-[10px] text-slate-400 mt-0.5 truncate max-w-[160px]">
                               <Mail className="h-2.5 w-2.5 shrink-0" />
                               <span className="truncate">{email}</span>
+                            </div>
+                            <div className="flex items-center gap-1 text-[10px] text-slate-500 truncate max-w-[160px]">
+                              <Phone className="h-2.5 w-2.5 shrink-0 text-slate-400" />
+                              <span className="truncate">{student.phone || student.alternatePhone || student.user?.phone || "—"}</span>
                             </div>
                           </div>
                         </div>
