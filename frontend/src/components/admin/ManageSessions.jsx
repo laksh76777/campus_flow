@@ -48,12 +48,13 @@ export default function ManageSessions({ onSessionChanged }) {
   const [inspectedSession, setInspectedSession] = useState(null);
 
   // Form State
-  const [sessionYear, setSessionYear] = useState("");
-  const [sessionName, setSessionName] = useState("");
-  const [academicYear, setAcademicYear] = useState("");
+  const [sessionBatch, setSessionBatch] = useState("2024-2028");
+  const [sessionYear, setSessionYear] = useState("2028");
+  const [sessionName, setSessionName] = useState("Session 2024-2028 (Class of 2028)");
+  const [academicYear, setAcademicYear] = useState("2024-2028");
   const [targetPercentage, setTargetPercentage] = useState(90);
   const [description, setDescription] = useState("");
-  const [makeActive, setMakeActive] = useState(true);
+  const [makeActive, setMakeActive] = useState(false);
 
   const fetchSessions = async () => {
     setLoading(true);
@@ -74,40 +75,61 @@ export default function ManageSessions({ onSessionChanged }) {
     fetchSessions();
   }, []);
 
+  const handleSelectPreset = (presetRange) => {
+    const parts = presetRange.split("-");
+    const startYr = parseInt(parts[0], 10);
+    const gradYr = parseInt(parts[1], 10);
+    setSessionBatch(presetRange);
+    setSessionYear(String(gradYr));
+    setAcademicYear(presetRange);
+    setSessionName(`Session ${presetRange} (Class of ${gradYr})`);
+  };
+
   const handleCreateSession = async (e) => {
     e.preventDefault();
-    if (!sessionYear) {
-      toast.error("Please enter a graduation year");
+    let yearNum = parseInt(sessionYear, 10);
+    let acadYr = academicYear?.trim() || "";
+
+    if (!acadYr && sessionBatch) {
+      acadYr = sessionBatch.trim();
+    }
+
+    if (acadYr && isNaN(yearNum)) {
+      const parts = acadYr.match(/\b(20\d\d)\b/g);
+      if (parts && parts.length >= 2) {
+        yearNum = parseInt(parts[1], 10);
+      }
+    }
+
+    if (!yearNum || isNaN(yearNum)) {
+      toast.error("Please enter a valid graduating cohort year (e.g. 2027, 2028)");
       return;
     }
 
     setSubmitting(true);
     try {
-      const yearNum = parseInt(sessionYear);
       await createPlacementSession({
         sessionYear: yearNum,
-        name: sessionName || `Class of ${yearNum} Placement Session`,
-        academicYear: academicYear || `${yearNum - 1}-${yearNum}`,
+        name: sessionName || `Session ${acadYr || `${yearNum - 4}-${yearNum}`} (Class of ${yearNum})`,
+        academicYear: acadYr || `${yearNum - 4}-${yearNum}`,
         targetPlacementPercentage: Number(targetPercentage) || 90,
         description,
         isActive: makeActive,
         admissionYearMapping: [
           { course: "B.E.", courseDurationYears: 4, admissionYear: yearNum - 4 },
+          { course: "B.Tech", courseDurationYears: 4, admissionYear: yearNum - 4 },
           { course: "MBA", courseDurationYears: 2, admissionYear: yearNum - 2 },
           { course: "MCA", courseDurationYears: 2, admissionYear: yearNum - 2 },
           { course: "M.Tech", courseDurationYears: 2, admissionYear: yearNum - 2 }
         ]
       });
 
-      toast.success(`Placement session for Class of ${yearNum} created!`);
+      toast.success(`Placement session for ${acadYr || `Class of ${yearNum}`} created!`);
       setIsCreateOpen(false);
-      setSessionYear("");
-      setSessionName("");
-      setAcademicYear("");
-      setDescription("");
       fetchSessions();
       if (onSessionChanged) onSessionChanged();
     } catch (err) {
+
       const msg = err.response?.data?.message || err.message || "Failed to create session";
       toast.error(msg);
     } finally {
@@ -204,7 +226,7 @@ export default function ManageSessions({ onSessionChanged }) {
               Placement Sessions & Academic Cohorts
             </h2>
             <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-black text-blue-700 border border-blue-100">
-              V2 Architecture
+              {sessions.length} Cohort{sessions.length === 1 ? "" : "s"}
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1 max-w-2xl">
@@ -560,7 +582,7 @@ export default function ManageSessions({ onSessionChanged }) {
       {/* Create Session Modal */}
       {isCreateOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="relative w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 sm:p-7 shadow-2xl animate-in zoom-in-95 duration-150">
+          <div className="relative w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 sm:p-7 shadow-2xl animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setIsCreateOpen(false)}
               className="absolute top-5 right-5 h-8 w-8 flex items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
@@ -573,26 +595,84 @@ export default function ManageSessions({ onSessionChanged }) {
                 <Calendar className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-slate-900">Create Placement Session</h3>
-                <p className="text-xs text-slate-500">Configure new student graduating cohort</p>
+                <h3 className="text-lg font-bold text-slate-900">Add Placement Session</h3>
+                <p className="text-xs text-slate-500">Configure academic session batch (e.g. 2023-2027, 2024-2028)</p>
+              </div>
+            </div>
+
+            {/* Quick Presets */}
+            <div className="mb-4">
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                Quick Select Batch Session:
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {["2023-2027", "2024-2028", "2025-2029", "2026-2030"].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => handleSelectPreset(preset)}
+                    className={`rounded-xl border py-2 px-2.5 text-xs font-bold transition text-center ${
+                      sessionBatch === preset
+                        ? "border-blue-600 bg-blue-50 text-blue-700 shadow-xs"
+                        : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    {preset}
+                  </button>
+                ))}
               </div>
             </div>
 
             <form onSubmit={handleCreateSession} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Graduation Year *
-                </label>
-                <input
-                  type="number"
-                  required
-                  min="2020"
-                  max="2035"
-                  value={sessionYear}
-                  onChange={(e) => setSessionYear(e.target.value)}
-                  placeholder="e.g. 2026"
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm font-bold text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Academic Session *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={academicYear}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setAcademicYear(val);
+                      setSessionBatch(val);
+                      const parts = val.match(/\b(20\d\d)\b/g);
+                      if (parts && parts.length >= 2) {
+                        setSessionYear(parts[1]);
+                        setSessionName(`Session ${val} (Class of ${parts[1]})`);
+                      }
+                    }}
+                    placeholder="e.g. 2024-2028"
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm font-bold text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+                  <p className="mt-1 text-[10px] text-slate-400">e.g. 2023-2027 or 2024-2028</p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Graduation Year (Class Of) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="2020"
+                    max="2035"
+                    value={sessionYear}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSessionYear(val);
+                      const yr = parseInt(val, 10);
+                      if (yr && !isNaN(yr)) {
+                        setAcademicYear(`${yr - 4}-${yr}`);
+                        setSessionName(`Session ${yr - 4}-${yr} (Class of ${yr})`);
+                      }
+                    }}
+                    placeholder="e.g. 2028"
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm font-bold text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+                  <p className="mt-1 text-[10px] text-slate-400">Final year of course</p>
+                </div>
               </div>
 
               <div>
@@ -603,41 +683,49 @@ export default function ManageSessions({ onSessionChanged }) {
                   type="text"
                   value={sessionName}
                   onChange={(e) => setSessionName(e.target.value)}
-                  placeholder={`Class of ${sessionYear} Placement Session`}
+                  placeholder={`Session ${academicYear || `${sessionYear - 4}-${sessionYear}`} (Class of ${sessionYear})`}
                   className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Academic Year
-                  </label>
-                  <input
-                    type="text"
-                    value={academicYear}
-                    onChange={(e) => setAcademicYear(e.target.value)}
-                    placeholder={`${sessionYear - 1}-${sessionYear}`}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs text-slate-800 outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Target Placement %
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="100"
-                    value={targetPercentage}
-                    onChange={(e) => setTargetPercentage(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-bold text-slate-800 outline-none focus:border-blue-500"
-                  />
-                </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Target Placement %
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={targetPercentage}
+                  onChange={(e) => setTargetPercentage(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-bold text-slate-800 outline-none focus:border-blue-500"
+                />
               </div>
 
-              <div className="flex items-center gap-2 pt-2">
+              {/* Dynamic Auto-Mapping Preview Box */}
+              {sessionYear && (
+                <div className="rounded-2xl border border-blue-200 bg-blue-50/70 p-3.5 text-xs text-blue-900">
+                  <div className="flex items-center gap-1.5 font-bold text-blue-800 mb-1">
+                    <Sparkles className="h-4 w-4 text-blue-600" />
+                    <span>Automatic Student Registration Mapping</span>
+                  </div>
+                  <p className="text-[11px] text-blue-700 mb-2">
+                    Creating this session automatically enables these admission years on the student registration form:
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div className="rounded-lg bg-white/80 p-2 border border-blue-100">
+                      <span className="font-bold text-slate-700 block">4-Year Degree (B.E./B.Tech):</span>
+                      <span className="text-emerald-700 font-extrabold">Admission Year {parseInt(sessionYear, 10) - 4}</span>
+                    </div>
+                    <div className="rounded-lg bg-white/80 p-2 border border-blue-100">
+                      <span className="font-bold text-slate-700 block">2-Year PG (MBA/MCA/M.Tech):</span>
+                      <span className="text-emerald-700 font-extrabold">Admission Year {parseInt(sessionYear, 10) - 2}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 pt-1">
                 <input
                   type="checkbox"
                   id="makeActive"
@@ -645,12 +733,12 @@ export default function ManageSessions({ onSessionChanged }) {
                   onChange={(e) => setMakeActive(e.target.checked)}
                   className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                 />
-                <label htmlFor="makeActive" className="text-xs font-bold text-slate-700">
+                <label htmlFor="makeActive" className="text-xs font-bold text-slate-700 cursor-pointer">
                   Set as Active Campus Placement Session immediately
                 </label>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setIsCreateOpen(false)}
@@ -663,7 +751,7 @@ export default function ManageSessions({ onSessionChanged }) {
                   disabled={submitting}
                   className="rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white shadow-md shadow-blue-500/20 hover:bg-blue-700 transition disabled:opacity-50"
                 >
-                  {submitting ? "Creating..." : "Create Cohort Session"}
+                  {submitting ? "Creating..." : "Save & Activate Session"}
                 </button>
               </div>
             </form>

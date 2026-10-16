@@ -139,15 +139,26 @@ const registerUser = asyncHandler(async (req, res) => {
                 throw new ApiError(404, "Specified placement session not found");
             }
             if (targetSession.sessionYear !== resolvedGraduationYear) {
-                throw new ApiError(
-                    400,
-                    `Placement session mismatch: selected session is for Class of ${targetSession.sessionYear}, but your academic details indicate Class of ${resolvedGraduationYear}.`
+                const hasMatchingMapping = (targetSession.admissionYearMapping || []).some(
+                    (m) => Number(m.admissionYear) === resolvedAdmissionYear
                 );
+                if (!hasMatchingMapping && targetSession.sessionYear !== resolvedAdmissionYear) {
+                    throw new ApiError(
+                        400,
+                        `Placement session mismatch: selected session is for Class of ${targetSession.sessionYear}, but your academic details indicate Class of ${resolvedGraduationYear}.`
+                    );
+                }
             }
         } else {
-            targetSession = await PlacementSession.findOne({ sessionYear: resolvedGraduationYear });
+            targetSession = await PlacementSession.findOne({
+                $or: [
+                    { sessionYear: resolvedGraduationYear },
+                    { "admissionYearMapping.admissionYear": resolvedAdmissionYear }
+                ]
+            });
         }
     }
+
 
     if (!targetSession) {
         throw new ApiError(

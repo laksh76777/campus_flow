@@ -117,23 +117,66 @@ export default function Signup() {
   const programsForLevel = departments.filter((program) => program.programLevel === formData.programLevel);
   const admissionYearOptions = useMemo(() => {
     if (!selectedProgram) return [];
+    const duration = Number(selectedProgram.durationYears) || 4;
     const degreeAliases = selectedProgram.degreeType === "B.E." ? ["B.E.", "B.Tech"] : [selectedProgram.degreeType];
-    return [...new Set(sessions.flatMap((session) =>
-      (session.admissionYearMapping || [])
-        .filter((mapping) => degreeAliases.includes(mapping.course))
-        .map((mapping) => Number(mapping.admissionYear))
-        .filter(Number.isInteger)
-    ))].sort((a, b) => b - a);
+
+    const yearMap = new Map();
+
+    (sessions || []).filter((s) => !s.isArchived).forEach((session) => {
+      // 1. From explicit admissionYearMapping
+      (session.admissionYearMapping || []).forEach((mapping) => {
+        if (degreeAliases.includes(mapping.course) && Number.isInteger(Number(mapping.admissionYear))) {
+          const yr = Number(mapping.admissionYear);
+          const label = session.academicYear
+            ? `${yr} (Session ${session.academicYear})`
+            : `${yr} (Class of ${session.sessionYear})`;
+          if (!yearMap.has(yr)) yearMap.set(yr, label);
+        }
+      });
+
+      // 2. Computed from session.sessionYear (graduation year - course duration)
+      if (Number.isInteger(Number(session.sessionYear))) {
+        const computedYr = Number(session.sessionYear) - duration;
+        const label = session.academicYear
+          ? `${computedYr} (Session ${session.academicYear})`
+          : `${computedYr} (Class of ${session.sessionYear})`;
+        if (!yearMap.has(computedYr)) yearMap.set(computedYr, label);
+      }
+
+      // 3. Extracted from session.academicYear range (e.g. "2024-2028")
+      if (session.academicYear && typeof session.academicYear === "string") {
+        const parts = session.academicYear.match(/\b(20\d\d)\b/g);
+        if (parts && parts.length >= 2) {
+          const admYr = Number(parts[0]);
+          const gradYr = Number(parts[1]);
+          if (gradYr - admYr === duration) {
+            const label = `${admYr} (Session ${parts[0]}-${parts[1]})`;
+            if (!yearMap.has(admYr)) yearMap.set(admYr, label);
+          }
+        }
+      }
+    });
+
+    return Array.from(yearMap.entries())
+      .map(([year, label]) => ({ year: Number(year), label }))
+      .sort((a, b) => b.year - a.year);
   }, [selectedProgram, sessions]);
 
   // Match corresponding Placement Session from fetched sessions
   const matchingSession = useMemo(() => {
     if (!sessions || sessions.length === 0) return null;
-    return sessions.find((session) =>
-      Number(session.sessionYear) === expectedGraduationYear &&
-      !session.isArchived && !session.isClosed
-    );
-  }, [sessions, expectedGraduationYear]);
+    return sessions.find((session) => {
+      if (session.isArchived || session.isClosed) return false;
+      if (Number(session.sessionYear) === expectedGraduationYear) return true;
+      if (session.academicYear && typeof session.academicYear === "string") {
+        const parts = session.academicYear.match(/\b(20\d\d)\b/g);
+        if (parts && parts.length >= 2 && Number(parts[1]) === expectedGraduationYear) return true;
+      }
+      return (session.admissionYearMapping || []).some(
+        (m) => Number(m.admissionYear) === Number(formData.admissionYear)
+      );
+    });
+  }, [sessions, expectedGraduationYear, formData.admissionYear]);
 
   const handleChange = (e) => {
     const { name, value, files, type, checked } = e.target;
@@ -189,7 +232,8 @@ export default function Signup() {
     if (!formData.programLevel) return "Please select your program level.";
     if (!selectedProgram) return "Please select an approved academic program.";
     if (!formData.admissionYear) return "Please select your admission year.";
-    if (!admissionYearOptions.includes(Number(formData.admissionYear))) return "The selected admission year is not configured for this program.";
+    const valid = admissionYearOptions.some((opt) => opt.year === Number(formData.admissionYear));
+    if (!valid) return "The selected admission year is not configured for this program.";
     return null;
   };
 
@@ -651,14 +695,14 @@ export default function Signup() {
                       </div>
                       <select
                         name="admissionYear"
-                        value=                        {formData.admissionYear || "Not selected"}
+                        value={formData.admissionYear || ""}
                         onChange={handleChange}
                         className="w-full rounded-xl border border-slate-800 bg-slate-950/80 py-2.5 pr-4 pl-10 text-sm text-white transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
                       >
                         <option value="">Select admission year</option>
-                        {admissionYearOptions.map((yr) => (
-                          <option key={yr} value={yr}>
-                            {yr} (Admission Cohort)
+                        {admissionYearOptions.map((item) => (
+                          <option key={item.year} value={item.year}>
+                            {item.label}
                           </option>
                         ))}
                       </select>
