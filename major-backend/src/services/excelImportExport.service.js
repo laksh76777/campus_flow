@@ -834,28 +834,33 @@ export const commitImportBatch = async (batchId, adminUser) => {
                         isActive: true
                     });
 
-                    await StudentProfile.create({
-                        user: newUser._id,
-                        enrollmentNumber: d.usn,
-                        usn: d.usn,
-                        course: d.course,
-                        programCode: d.programCode,
-                        programLevel: d.programLevel,
-                        degreeType: d.degreeType,
-                        department: d.department,
-                        branch: d.department,
-                        admissionYear: d.admissionYear,
-                        graduationYear: d.graduationYear,
-                        currentSemester: d.currentSemester,
-                        semester: d.currentSemester,
-                        placementSession: session?._id,
-                        gender: d.gender,
-                        cgpa: null,
-                        semesterResults: [],
-                        activeBacklogs: 0,
-                        historicalBacklogs: 0
-                    });
-                    inserted++;
+                    try {
+                        await StudentProfile.create({
+                            user: newUser._id,
+                            enrollmentNumber: d.usn,
+                            usn: d.usn,
+                            course: d.course,
+                            programCode: d.programCode,
+                            programLevel: d.programLevel,
+                            degreeType: d.degreeType,
+                            department: d.department,
+                            branch: d.department,
+                            admissionYear: d.admissionYear,
+                            graduationYear: d.graduationYear,
+                            currentSemester: d.currentSemester,
+                            semester: d.currentSemester,
+                            placementSession: session?._id,
+                            gender: d.gender,
+                            cgpa: null,
+                            semesterResults: [],
+                            activeBacklogs: 0,
+                            historicalBacklogs: 0
+                        });
+                        inserted++;
+                    } catch (profileErr) {
+                        await User.findByIdAndDelete(newUser._id);
+                        throw profileErr;
+                    }
                 } else if (item.action === "UPDATE") {
                     const updatedProfile = await StudentProfile.findOneAndUpdate(
                         {

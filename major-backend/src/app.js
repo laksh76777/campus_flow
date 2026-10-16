@@ -88,10 +88,14 @@ app.get("/", (req, res) => {
 
 app.get("/health", (req, res) => {
     const databaseReady = mongoose.connection.readyState === 1;
-    return res.status(databaseReady ? 200 : 503).json({
+    const body = {
         status: databaseReady ? "ok" : "unavailable",
         database: databaseReady ? "connected" : "disconnected"
-    });
+    };
+    if (databaseReady) {
+        body.databaseName = mongoose.connection.name;
+    }
+    return res.status(databaseReady ? 200 : 503).json(body);
 });
 
 import userRouter from "./routes/user.routes.js";
