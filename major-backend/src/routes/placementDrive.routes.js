@@ -18,6 +18,7 @@ import {
     verifyJWT,
     verifyAdmin
 } from "../middlewares/auth.middleware.js";
+import { upload } from "../middlewares/multer.middleware.js";
 
 
 const router = Router();
@@ -28,6 +29,7 @@ router
     .post(
         verifyJWT,
         verifyAdmin,
+        upload.single("jdPdf"),
         createPlacementDrive
     );
 router
@@ -84,6 +86,7 @@ router
     .patch(
         verifyJWT,
         verifyAdmin,
+        upload.single("jdPdf"),
         updatePlacementDrive
     );
 
