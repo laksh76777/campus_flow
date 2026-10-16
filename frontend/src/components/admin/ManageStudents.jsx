@@ -11,6 +11,10 @@ import {
   RefreshCw,
   Eye,
   Download,
+  Calendar,
+  GraduationCap,
+  Layers,
+  ChevronRight,
   FileSpreadsheet,
 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -21,15 +25,32 @@ import StudentDetailModal from "./StudentDetailModal";
 export default function ManageStudents({
   students = [],
   dataStatus = "loaded",
+  sessions = [],
+  activeSessionId = "all",
+  onSelectSession,
   onRefresh,
 }) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [internalSessionFilter, setInternalSessionFilter] = useState(activeSessionId || "all");
   const [branchFilter, setBranchFilter] = useState("all");
   const [backlogFilter, setBacklogFilter] = useState("all");
   const [placedFilter, setPlacedFilter] = useState("all"); // all | placed | unplaced
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [programs, setPrograms] = useState([]);
+  const [viewMode, setViewMode] = useState("hierarchical"); // 'hierarchical' | 'table'
+
+  useEffect(() => {
+    if (activeSessionId) {
+      setInternalSessionFilter(activeSessionId);
+    }
+  }, [activeSessionId]);
+
+  const handleSessionChange = (e) => {
+    const val = e.target.value;
+    setInternalSessionFilter(val);
+    if (onSelectSession) onSelectSession(val);
+  };
 
   useEffect(() => {
     getPublicDepartments()
@@ -66,11 +87,20 @@ export default function ManageStudents({
         enrollment.toLowerCase().includes(searchQuery.toLowerCase()) ||
         branch.toLowerCase().includes(searchQuery.toLowerCase());
 
-      const matchesBranch = branchFilter === "all"
-        ? true
-        : branchFilter === "unresolved"
+      const sSessId = s.placementSession?._id || s.placementSession;
+      const sSessYear = s.placementSession?.sessionYear || s.graduationYear;
+      const matchesSession =
+        internalSessionFilter === "all"
+          ? true
+          : sSessId === internalSessionFilter ||
+            String(sSessYear) === String(internalSessionFilter);
+
+      const matchesBranch =
+        branchFilter === "all"
+          ? true
+          : branchFilter === "unresolved"
           ? !program
-          : s.programCode === branchFilter;
+          : s.programCode === branchFilter || branch === branchFilter;
 
       const matchesBacklog =
         backlogFilter === "all"
@@ -86,9 +116,33 @@ export default function ManageStudents({
           ? s.isPlaced === true
           : s.isPlaced !== true;
 
-      return matchesSearch && matchesBranch && matchesBacklog && matchesPlaced;
+      return matchesSearch && matchesSession && matchesBranch && matchesBacklog && matchesPlaced;
     });
-  }, [students, programs, searchQuery, branchFilter, backlogFilter, placedFilter]);
+  }, [students, programs, searchQuery, internalSessionFilter, branchFilter, backlogFilter, placedFilter]);
+
+  // Group filtered students by Department for hierarchical drill-down
+  const departmentGroups = useMemo(() => {
+    const groups = {};
+    filteredStudents.forEach((student) => {
+      const program = programs.find((p) => p.code === student.programCode);
+      const deptName = program?.name || student.branch || student.department || "General Department";
+      if (!groups[deptName]) {
+        groups[deptName] = {
+          name: deptName,
+          program,
+          students: []
+        };
+      }
+      groups[deptName].students.push(student);
+    });
+
+    return Object.values(groups).sort((a, b) => a.name.localeCompare(b.name));
+  }, [filteredStudents, programs]);
+
+  const activeSessionObj = useMemo(() => {
+    if (internalSessionFilter === "all") return null;
+    return sessions.find((s) => s._id === internalSessionFilter || String(s.sessionYear) === String(internalSessionFilter)) || null;
+  }, [internalSessionFilter, sessions]);
 
   // Cohort statistics
   const stats = useMemo(() => {
@@ -253,7 +307,21 @@ export default function ManageStudents({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Branch Filter */}
+          {/* Placement Session Filter */}
+          <select
+            value={internalSessionFilter}
+            onChange={handleSessionChange}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-800 focus:border-blue-500 focus:outline-hidden"
+          >
+            <option value="all">All Placement Sessions</option>
+            {sessions.map((sess) => (
+              <option key={sess._id} value={sess._id}>
+                {sess.academicYear ? `${sess.academicYear} Session` : `Class of ${sess.sessionYear}`} {sess.isActive ? "• Active" : ""}
+              </option>
+            ))}
+          </select>
+
+          {/* Branch / Department Filter */}
           <select
             value={branchFilter}
             onChange={(e) => setBranchFilter(e.target.value)}
@@ -276,9 +344,9 @@ export default function ManageStudents({
             onChange={(e) => setBacklogFilter(e.target.value)}
             className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 focus:border-blue-500 focus:outline-hidden"
           >
-            <option value="all">All Academic Standing</option>
-            <option value="zero">Zero Backlogs Only</option>
-            <option value="has">With Active Backlogs</option>
+            <option value="all">All Standing</option>
+            <option value="zero">Zero Backlogs</option>
+            <option value="has">With Backlogs</option>
           </select>
 
           {/* Placement Status Filter */}
@@ -287,10 +355,38 @@ export default function ManageStudents({
             onChange={(e) => setPlacedFilter(e.target.value)}
             className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 focus:border-blue-500 focus:outline-hidden"
           >
-            <option value="all">All Placement Status</option>
-            <option value="placed">✓ Placed Students</option>
-            <option value="unplaced">⏳ Unplaced Students</option>
+            <option value="all">All Status</option>
+            <option value="placed">✓ Placed</option>
+            <option value="unplaced">⏳ Unplaced</option>
           </select>
+
+          {/* View Mode Toggle: Hierarchical vs Table */}
+          <div className="flex items-center rounded-xl border border-slate-200 bg-slate-100 p-1">
+            <button
+              type="button"
+              onClick={() => setViewMode("hierarchical")}
+              className={`rounded-lg px-2.5 py-1 text-xs font-bold transition flex items-center gap-1.5 ${
+                viewMode === "hierarchical"
+                  ? "bg-white text-blue-700 shadow-2xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Layers className="h-3.5 w-3.5" />
+              <span>Department View</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("table")}
+              className={`rounded-lg px-2.5 py-1 text-xs font-bold transition flex items-center gap-1.5 ${
+                viewMode === "table"
+                  ? "bg-white text-blue-700 shadow-2xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5" />
+              <span>Table View</span>
+            </button>
+          </div>
 
           {/* Export Cohort CSV Button */}
           <button
@@ -304,7 +400,7 @@ export default function ManageStudents({
         </div>
       </div>
 
-      {/* Students Directory List / Table */}
+      {/* Empty State */}
       {filteredStudents.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center">
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400 mb-3">
@@ -322,19 +418,216 @@ export default function ManageStudents({
               ? "Student records are being retrieved."
               : dataStatus === "error"
               ? "The student request failed. Check the admin session and API connection, then refresh."
-              : searchQuery || branchFilter !== "all"
+              : searchQuery || branchFilter !== "all" || internalSessionFilter !== "all"
               ? "No registered students match the selected filter criteria."
               : "Students will appear here once they register and activate their academic profiles."}
           </p>
         </div>
+      ) : viewMode === "hierarchical" ? (
+        /* HIERARCHICAL VIEW: Session -> Department -> Student Names */
+        <div className="space-y-6 animate-in fade-in-50 duration-150">
+          {/* Active Session Scope Summary Banner */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-blue-50/80 via-indigo-50/50 to-white border border-blue-200/80 rounded-2xl p-4 shadow-2xs">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                <Calendar className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-sm font-extrabold text-slate-900">
+                    {activeSessionObj
+                      ? `${activeSessionObj.name || activeSessionObj.academicYear || `Class of ${activeSessionObj.sessionYear}`}`
+                      : "All Academic Cohorts & Sessions"}
+                  </h3>
+                  {activeSessionObj?.academicYear && (
+                    <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 text-[10px] font-black border border-blue-200">
+                      Session {activeSessionObj.academicYear}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Hierarchical Overview: {departmentGroups.length} Department{departmentGroups.length === 1 ? "" : "s"} • {filteredStudents.length} Candidate{filteredStudents.length === 1 ? "" : "s"}
+                </p>
+              </div>
+            </div>
+            <span className="text-xs font-bold text-blue-700 bg-white px-3 py-1.5 rounded-xl border border-blue-200 shadow-2xs self-start sm:self-auto">
+              Session → Department → Students
+            </span>
+          </div>
+
+          {/* Department Groups */}
+          {departmentGroups.map((group) => {
+            const deptStudents = group.students;
+            const deptPlaced = deptStudents.filter((s) => s.isPlaced === true).length;
+            const deptClean = deptStudents.filter((s) => (s.activeBacklogs ?? s.backlogs) === 0).length;
+
+            return (
+              <div
+                key={group.name}
+                className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden transition-all"
+              >
+                {/* Department Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 sm:p-5 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 text-white flex items-center justify-center font-bold shadow-xs shrink-0">
+                      <GraduationCap className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="text-sm sm:text-base font-extrabold text-slate-900">
+                          {group.name}
+                        </h4>
+                        {group.program?.degreeType && (
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-bold">
+                            {group.program.degreeType} ({group.program.durationYears || 4} Yrs)
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {deptStudents.length} Student{deptStudents.length === 1 ? "" : "s"} enrolled in this department
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-blue-50 text-blue-700 px-2.5 py-1 rounded-lg border border-blue-100">
+                      <Users className="h-3 w-3" />
+                      <span>{deptStudents.length} Total</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-lg border border-emerald-200">
+                      <CheckCircle2 className="h-3 w-3" />
+                      <span>{deptPlaced} Placed</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-lg border border-indigo-100">
+                      <Award className="h-3 w-3" />
+                      <span>{deptClean} 0 Backlogs</span>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Student Cards Grid in Department */}
+                <div className="p-4 sm:p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                  {deptStudents.map((student) => {
+                    const name = student.user?.fullName || student.fullName || "Candidate";
+                    const email = student.user?.email || student.email || "No email available";
+                    const initial = name.charAt(0).toUpperCase();
+                    const cgpa = student.verifiedCGPA ?? student.cgpa;
+                    const backlogs = student.activeBacklogs ?? student.backlogs;
+                    const hasResume = !!student.resume?.url;
+
+                    const sessObj = sessions.find((s) => s._id === (student.placementSession?._id || student.placementSession));
+                    const sessionLabel = sessObj?.academicYear
+                      ? `Session ${sessObj.academicYear}`
+                      : sessObj?.name
+                      ? sessObj.name
+                      : student.graduationYear
+                      ? `Class of ${student.graduationYear}`
+                      : "General";
+
+                    return (
+                      <div
+                        key={student._id || student.enrollmentNumber}
+                        onClick={() => setSelectedStudent(student)}
+                        className="flex flex-col justify-between rounded-xl border border-slate-200/90 bg-white p-4 hover:border-blue-400 hover:shadow-md cursor-pointer transition group"
+                      >
+                        <div>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-xs shadow-xs group-hover:scale-105 transition-transform">
+                                {initial}
+                              </div>
+                              <div className="min-w-0">
+                                <h5 className="font-bold text-slate-900 text-xs truncate group-hover:text-blue-700 transition-colors">
+                                  {name}
+                                </h5>
+                                <span className="font-mono text-[10px] text-slate-500 font-semibold block">
+                                  {student.enrollmentNumber || student.usn || "No USN"}
+                                </span>
+                              </div>
+                            </div>
+
+                            <span className="shrink-0 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-bold border border-slate-200">
+                              {sessionLabel}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1 text-[11px] text-slate-400 mt-2 truncate">
+                            <Mail className="h-3 w-3 shrink-0" />
+                            <span className="truncate">{email}</span>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-slate-100 text-center">
+                            <div className="rounded-lg bg-slate-50 p-1.5 border border-slate-100">
+                              <span className="text-[9px] font-bold text-slate-400 block uppercase">CGPA</span>
+                              <span className="text-xs font-black text-blue-700">{cgpa ?? "N/A"}</span>
+                            </div>
+                            <div className="rounded-lg bg-slate-50 p-1.5 border border-slate-100">
+                              <span className="text-[9px] font-bold text-slate-400 block uppercase">Backlogs</span>
+                              <span className={`text-xs font-black ${backlogs === 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                                {backlogs ?? 0}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2 mt-3 pt-2.5 border-t border-slate-100">
+                          <div>
+                            {student.isPlaced ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                ✓ Placed {student.placedCompany ? `• ${student.placedCompany}` : ""}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-semibold text-slate-400">
+                                ⏳ Seeking Placement
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            {hasResume && (
+                              <a
+                                href={getResumeViewUrl(student.resume.url)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-700 border border-blue-200 hover:bg-blue-100 transition"
+                                title="Open resume"
+                              >
+                                <FileText className="h-2.5 w-2.5" />
+                                <span>CV</span>
+                              </a>
+                            )}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedStudent(student);
+                              }}
+                              className="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-2.5 py-1 text-[10px] font-bold text-white hover:bg-slate-800 transition active:scale-95 shadow-2xs"
+                            >
+                              <Eye className="h-3 w-3" />
+                              <span>View</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-xs">
+        /* TABLE VIEW: Standard Columns */
+        <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-xs animate-in fade-in-50 duration-150">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/75 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                   <th className="py-3.5 pl-5 pr-3">Student Candidate</th>
                   <th className="py-3.5 px-3">Enrollment ID</th>
+                  <th className="py-3.5 px-3">Session Batch</th>
                   <th className="py-3.5 px-3">Branch & Semester</th>
                   <th className="py-3.5 px-3 text-center">CGPA</th>
                   <th className="py-3.5 px-3 text-center">Backlogs</th>
@@ -353,6 +646,15 @@ export default function ManageStudents({
                   const cgpa = student.verifiedCGPA ?? student.cgpa;
                   const backlogs = student.activeBacklogs ?? student.backlogs;
                   const hasResume = !!student.resume?.url;
+
+                  const sessObj = sessions.find((s) => s._id === (student.placementSession?._id || student.placementSession));
+                  const sessionLabel = sessObj?.academicYear
+                    ? `Session ${sessObj.academicYear}`
+                    : sessObj?.name
+                    ? sessObj.name
+                    : student.graduationYear
+                    ? `Class of ${student.graduationYear}`
+                    : "General";
 
                   return (
                     <tr
@@ -383,6 +685,13 @@ export default function ManageStudents({
                       <td className="py-3.5 px-3">
                         <span className="font-mono text-[11px] font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/60">
                           {student.enrollmentNumber || student.usn || "Not assigned"}
+                        </span>
+                      </td>
+
+                      {/* Session Batch */}
+                      <td className="py-3.5 px-3">
+                        <span className="font-bold text-[11px] text-blue-800 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+                          {sessionLabel}
                         </span>
                       </td>
 

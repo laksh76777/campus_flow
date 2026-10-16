@@ -21,7 +21,34 @@ const createPlacementSession = asyncHandler(async (req, res) => {
         isActive
     } = req.body;
 
-    const yearNum = Number(sessionYear);
+    let yearNum = Number(sessionYear);
+    let resolvedAcademicYear = academicYear?.trim() || "";
+
+    // If sessionYear was given as a string range like "2024-2028" or "2023-2027"
+    if (isNaN(yearNum) && typeof sessionYear === "string") {
+        const parts = sessionYear.match(/\b(20\d\d)\b/g);
+        if (parts && parts.length >= 2) {
+            yearNum = Number(parts[1]); // graduation year
+            if (!resolvedAcademicYear) {
+                resolvedAcademicYear = `${parts[0]}-${parts[1]}`;
+            }
+        } else if (parts && parts.length === 1) {
+            yearNum = Number(parts[0]);
+        }
+    }
+
+    // If academicYear contains range like "2024-2028"
+    if (resolvedAcademicYear) {
+        const parts = resolvedAcademicYear.match(/\b(20\d\d)\b/g);
+        if (parts && parts.length >= 2) {
+            const startYear = Number(parts[0]);
+            const endYear = Number(parts[1]);
+            if (yearNum === startYear && endYear > startYear) {
+                yearNum = endYear;
+            }
+        }
+    }
+
     if (!Number.isInteger(yearNum) || yearNum < 1900 || yearNum > 2200) {
         throw new ApiError(400, "A valid placement session graduation year is required");
     }
@@ -30,8 +57,11 @@ const createPlacementSession = asyncHandler(async (req, res) => {
         throw new ApiError(409, `Placement session for year ${yearNum} already exists`);
     }
 
-    const sessionName = name?.trim() || `Class of ${yearNum} Placement Session`;
-    const acadYear = academicYear?.trim() || `${yearNum - 1}-${yearNum}`;
+    if (!resolvedAcademicYear) {
+        resolvedAcademicYear = `${yearNum - 4}-${yearNum}`;
+    }
+
+    const sessionName = name?.trim() || `Session ${resolvedAcademicYear} (Class of ${yearNum})`;
 
     // If marked active, deactivate others
     if (isActive) {
@@ -43,6 +73,7 @@ const createPlacementSession = asyncHandler(async (req, res) => {
         ? admissionYearMapping
         : [
               { course: "B.E.", courseDurationYears: 4, admissionYear: yearNum - 4 },
+              { course: "B.Tech", courseDurationYears: 4, admissionYear: yearNum - 4 },
               { course: "MBA", courseDurationYears: 2, admissionYear: yearNum - 2 },
               { course: "MCA", courseDurationYears: 2, admissionYear: yearNum - 2 },
               { course: "M.Tech", courseDurationYears: 2, admissionYear: yearNum - 2 }
@@ -51,7 +82,7 @@ const createPlacementSession = asyncHandler(async (req, res) => {
     const session = await PlacementSession.create({
         sessionYear: yearNum,
         name: sessionName,
-        academicYear: acadYear,
+        academicYear: resolvedAcademicYear,
         description: description || "",
         startDate: startDate ? new Date(startDate) : new Date(),
         endDate: endDate ? new Date(endDate) : null,

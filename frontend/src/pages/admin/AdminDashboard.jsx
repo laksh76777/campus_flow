@@ -357,7 +357,7 @@ export default function AdminDashboard({ initialTab = "overview" }) {
                   <option value="all">All Cohorts (Unfiltered)</option>
                   {sessions.map((sess) => (
                     <option key={sess._id} value={sess._id}>
-                      Class of {sess.sessionYear} {sess.isActive ? "• Active" : sess.isClosed ? "• Closed" : ""}
+                      {sess.academicYear ? `${sess.academicYear} Session` : `Class of ${sess.sessionYear}`} {sess.isActive ? "• Active" : sess.isClosed ? "• Closed" : ""}
                     </option>
                   ))}
                 </select>
@@ -416,9 +416,11 @@ export default function AdminDashboard({ initialTab = "overview" }) {
 
           {activeTab === "students" && (
             <ManageStudents
-              students={scopedStudents}
+              students={students}
               dataStatus={studentsLoadState}
               sessions={sessions}
+              activeSessionId={selectedSessionId}
+              onSelectSession={setSelectedSessionId}
               onRefresh={() => loadDashboardData(true)}
             />
           )}
