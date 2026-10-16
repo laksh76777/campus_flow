@@ -37,30 +37,47 @@ export default function Navbar() {
     <header
       className={`sticky top-0 z-50 w-full transition-all duration-300 ${
         isScrolled
-          ? "border-b border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-md"
-          : "border-b border-slate-100 bg-white/75 backdrop-blur-sm"
+          ? "border-b border-orange-200/90 bg-white/95 shadow-md backdrop-blur-md"
+          : "border-b border-orange-100/90 bg-gradient-to-r from-orange-50/90 via-white/95 to-rose-50/80 backdrop-blur-sm"
       }`}
     >
-      <nav className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+      {/* Official JSS Institutional Top Ribbon (JSS Website Signature Reddish-Maroon & Gold Theme) */}
+      <div className="bg-gradient-to-r from-red-950 via-red-900 to-orange-900 text-white text-[10px] sm:text-[11px] font-semibold py-1.5 px-4 border-b border-orange-800/40">
+        <div className="mx-auto flex max-w-7xl items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-orange-400 animate-pulse" />
+            <span className="font-bold tracking-wide">
+              JSS Mahavidyapeetha • JSS Academy of Technical Education, Bengaluru
+            </span>
+          </div>
+          <span className="hidden sm:inline text-orange-200/90 font-medium">
+            Affiliated to VTU Belagavi • Approved by AICTE, New Delhi
+          </span>
+        </div>
+      </div>
+
+      <nav className="mx-auto flex h-16 sm:h-20 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Brand Logo */}
         <a
           href="#home"
           onClick={closeMenu}
           className="group flex items-center gap-3 transition"
         >
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 via-blue-500 to-indigo-600 text-white shadow-md shadow-blue-500/20 transition-transform duration-300 group-hover:scale-105">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-tr from-orange-600 via-rose-600 to-indigo-700 text-white shadow-md shadow-orange-600/20 transition-transform duration-300 group-hover:scale-105">
             <Building2 className="h-6 w-6" />
           </div>
 
           <div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-lg font-extrabold tracking-tight text-slate-900">
+            <div className="flex items-center gap-2">
+              <span className="text-lg font-black tracking-tight text-slate-900">
                 CampusFlow
               </span>
-              
+              <span className="rounded-md bg-orange-100/80 px-1.5 py-0.2 text-[10px] font-extrabold text-orange-900 border border-orange-300/70">
+                JSSATEB
+              </span>
             </div>
-            <p className="text-[11px] font-medium text-slate-500">
-              College placement management
+            <p className="text-[11px] font-semibold text-slate-500">
+              College Placement Management
             </p>
           </div>
         </a>

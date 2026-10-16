@@ -4,8 +4,8 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { StudentProfile } from "../models/studentProfile.model.js";
 import { User } from "../models/user.models.js";
 import { PlacementSession } from "../models/placementSession.model.js";
-import { v2 as cloudinary } from "cloudinary";
-import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import { Notification } from "../models/notification.model.js";
+import { uploadOnCloudinary, deleteFromCloudinary } from "../utils/cloudinary.js";
 import { resolveStudentProgram } from "../constants/programCatalog.js";
 
 // @desc    Create student profile
@@ -139,7 +139,10 @@ const createStudentProfile = asyncHandler(async (req, res) => {
 
     let uploadedResume = null;
     if (req.file) {
-        uploadedResume = await uploadOnCloudinary(req.file.path);
+        uploadedResume = await uploadOnCloudinary(req.file.path, {
+            folder: "campusflow/resumes",
+            resource_type: "image"
+        });
         if (!uploadedResume) {
             throw new ApiError(500, "Resume upload failed");
         }
@@ -637,10 +640,13 @@ const updateStudentResume = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Resume file is missing");
     }
 
-    const resume = await uploadOnCloudinary(resumeLocalPath);
+    const resume = await uploadOnCloudinary(resumeLocalPath, {
+        folder: "campusflow/resumes",
+        resource_type: "image"
+    });
 
-    if (!resume || !resume.url) {
-        throw new ApiError(400, "Error while uploading new resume");
+    if (!resume || (!resume.secure_url && !resume.url)) {
+        throw new ApiError(400, "Error while uploading new resume to Cloudinary");
     }
 
     let studentProfile = await StudentProfile.findOne({
@@ -651,15 +657,13 @@ const updateStudentResume = asyncHandler(async (req, res) => {
         throw new ApiError(404, "Student profile not found. Complete an approved academic profile before uploading a resume.");
     }
 
-    // Delete old resume from Cloudinary if existed
+    // Safely delete old resume from Cloudinary if existed
     if (studentProfile.resume?.publicId) {
-        await cloudinary.uploader.destroy(studentProfile.resume.publicId, {
-            resource_type: "image"
-        });
+        await deleteFromCloudinary(studentProfile.resume.publicId, "image");
     }
 
     studentProfile.resume = {
-        url: resume.url,
+        url: resume.secure_url || resume.url,
         publicId: resume.public_id
     };
 
@@ -667,6 +671,34 @@ const updateStudentResume = asyncHandler(async (req, res) => {
 
     return res.status(200).json(
         new ApiResponse(200, studentProfile, "Resume updated successfully")
+    );
+});
+
+// @desc    Delete student resume
+// @route   DELETE /api/v1/studentprofile/delete-resume
+// @access  Student
+const deleteStudentResume = asyncHandler(async (req, res) => {
+    let studentProfile = await StudentProfile.findOne({
+        user: req.user?._id
+    });
+
+    if (!studentProfile) {
+        throw new ApiError(404, "Student profile not found");
+    }
+
+    if (studentProfile.resume?.publicId) {
+        await deleteFromCloudinary(studentProfile.resume.publicId, "image");
+    }
+
+    studentProfile.resume = {
+        url: "",
+        publicId: ""
+    };
+
+    await studentProfile.save();
+
+    return res.status(200).json(
+        new ApiResponse(200, studentProfile, "Resume removed successfully")
     );
 });
 
@@ -814,15 +846,277 @@ const getStudentProfileById = asyncHandler(async (req, res) => {
     );
 });
 
+// @desc    Lock student profile after student verifies details
+// @route   POST /api/v1/studentprofile/lock-profile
+// @access  Student / Admin
+const lockStudentProfile = asyncHandler(async (req, res) => {
+    const targetUserId = req.user.role === "admin" && req.body.userId ? req.body.userId : req.user._id;
+    const profile = await StudentProfile.findOne({ user: targetUserId });
+
+    if (!profile) {
+        throw new ApiError(404, "Student profile not found");
+    }
+
+    profile.isProfileLocked = true;
+    profile.profileLockedAt = new Date();
+    await profile.save();
+
+    return res.status(200).json(
+        new ApiResponse(200, profile, "Profile successfully confirmed and locked")
+    );
+});
+
+// @desc    Unlock student profile
+// @route   POST /api/v1/studentprofile/:studentId/unlock-profile
+// @access  Admin
+const unlockStudentProfile = asyncHandler(async (req, res) => {
+    const { studentId } = req.params;
+    const profile = await StudentProfile.findById(studentId);
+
+    if (!profile) {
+        throw new ApiError(404, "Student profile not found");
+    }
+
+    profile.isProfileLocked = false;
+    await profile.save();
+
+    return res.status(200).json(
+        new ApiResponse(200, profile, "Student profile has been unlocked for editing")
+    );
+});
+
+// @desc    Submit profile modification request
+// @route   POST /api/v1/studentprofile/request-modification
+// @access  Student
+const submitModificationRequest = asyncHandler(async (req, res) => {
+    const { changes, reason } = req.body;
+
+    if (!Array.isArray(changes) || changes.length === 0) {
+        throw new ApiError(400, "At least one modification field change is required");
+    }
+
+    const profile = await StudentProfile.findOne({ user: req.user._id }).populate("user", "fullName email");
+    if (!profile) {
+        throw new ApiError(404, "Student profile not found");
+    }
+
+    // Check if there is already an active pending request
+    const existingPending = profile.modificationRequests?.find((r) => r.status === "PENDING");
+    if (existingPending) {
+        throw new ApiError(400, "You already have a pending modification request awaiting TPO review");
+    }
+
+    const newRequest = {
+        requestedAt: new Date(),
+        status: "PENDING",
+        reason: reason?.trim() || "Profile detail update",
+        changes: changes.map((c) => ({
+            field: c.field,
+            fieldLabel: c.fieldLabel || c.field,
+            beforeValue: c.beforeValue !== undefined ? c.beforeValue : null,
+            afterValue: c.afterValue !== undefined ? c.afterValue : null
+        }))
+    };
+
+    if (!profile.modificationRequests) {
+        profile.modificationRequests = [];
+    }
+    profile.modificationRequests.unshift(newRequest);
+    await profile.save();
+
+    // Create In-App Notification for all Admin/TPO users
+    try {
+        const admins = await User.find({ role: "admin" }).select("_id");
+        const changeNames = changes.map((c) => c.fieldLabel || c.field).join(", ");
+        const studentName = profile.user?.fullName || profile.enrollmentNumber || "Student";
+        const notifications = admins.map((admin) => ({
+            user: admin._id,
+            title: "Profile Modification Request",
+            message: `${studentName} requested permission to modify: ${changeNames}. Reason: ${reason || "Not specified"}.`,
+            type: "alert",
+            isRead: false
+        }));
+        if (notifications.length > 0) {
+            await Notification.insertMany(notifications);
+        }
+    } catch (notifErr) {
+        console.warn("Could not dispatch admin notifications for profile request:", notifErr.message);
+    }
+
+    return res.status(200).json(
+        new ApiResponse(200, profile, "Modification request submitted to TPO successfully")
+    );
+});
+
+// @desc    Get all pending modification requests across all students
+// @route   GET /api/v1/studentprofile/modification-requests
+// @access  Admin
+const getModificationRequests = asyncHandler(async (req, res) => {
+    const studentsWithRequests = await StudentProfile.find({
+        "modificationRequests.0": { $exists: true }
+    })
+        .populate("user", "fullName email phone")
+        .select("enrollmentNumber usn branch department currentSemester graduationYear modificationRequests isProfileLocked");
+
+    const allRequests = [];
+    studentsWithRequests.forEach((student) => {
+        (student.modificationRequests || []).forEach((reqItem) => {
+            allRequests.push({
+                requestId: reqItem._id,
+                studentId: student._id,
+                studentName: student.user?.fullName || student.enrollmentNumber,
+                studentEmail: student.user?.email || "",
+                usn: student.enrollmentNumber || student.usn || "",
+                branch: student.branch || student.department || "",
+                requestedAt: reqItem.requestedAt,
+                status: reqItem.status,
+                reason: reqItem.reason,
+                changes: reqItem.changes,
+                reviewedAt: reqItem.reviewedAt,
+                reviewedBy: reqItem.reviewedBy,
+                reviewRemarks: reqItem.reviewRemarks
+            });
+        });
+    });
+
+    // Sort newest requested first
+    allRequests.sort((a, b) => new Date(b.requestedAt) - new Date(a.requestedAt));
+
+    return res.status(200).json(
+        new ApiResponse(200, allRequests, "Modification requests retrieved successfully")
+    );
+});
+
+// @desc    Review and approve/reject profile modification request
+// @route   POST /api/v1/studentprofile/modification-requests/:requestId/review
+// @access  Admin
+const reviewModificationRequest = asyncHandler(async (req, res) => {
+    const { requestId } = req.params;
+    const { action, reviewRemarks = "" } = req.body;
+
+    if (!["APPROVE", "REJECT"].includes(action)) {
+        throw new ApiError(400, "Action must be either APPROVE or REJECT");
+    }
+
+    // Find student profile containing this requestId
+    const profile = await StudentProfile.findOne({
+        "modificationRequests._id": requestId
+    }).populate("user", "fullName email");
+
+    if (!profile) {
+        throw new ApiError(404, "Modification request not found");
+    }
+
+    const requestItem = profile.modificationRequests.id(requestId);
+    if (!requestItem) {
+        throw new ApiError(404, "Modification request item not found");
+    }
+
+    if (requestItem.status !== "PENDING") {
+        throw new ApiError(400, `Request has already been ${requestItem.status.toLowerCase()}`);
+    }
+
+    requestItem.status = action === "APPROVE" ? "APPROVED" : "REJECTED";
+    requestItem.reviewedBy = req.user._id;
+    requestItem.reviewedAt = new Date();
+    requestItem.reviewRemarks = reviewRemarks.trim();
+
+    // If APPROVED, automatically apply the requested changes to the student's profile!
+    if (action === "APPROVE") {
+        for (const change of requestItem.changes) {
+            const field = change.field;
+            const afterVal = change.afterValue;
+
+            if (field === "backlogs" || field === "activeBacklogs") {
+                profile.backlogs = Number(afterVal) || 0;
+                profile.activeBacklogs = Number(afterVal) || 0;
+            } else if (field === "clearedBacklogsCount") {
+                profile.clearedBacklogsCount = Number(afterVal) || 0;
+            } else if (field === "cgpa") {
+                profile.cgpa = Number(afterVal);
+            } else if (field === "tenthPercentage") {
+                profile.tenthPercentage = Number(afterVal);
+                if (profile.tenthDetails) profile.tenthDetails.percentage = Number(afterVal);
+            } else if (field === "twelfthPercentage") {
+                profile.twelfthPercentage = Number(afterVal);
+                if (profile.twelfthOrDiplomaDetails) profile.twelfthOrDiplomaDetails.percentage = Number(afterVal);
+            } else if (field === "alternatePhone" || field === "phone") {
+                profile.alternatePhone = String(afterVal);
+            } else if (field === "personalEmail") {
+                profile.personalEmail = String(afterVal);
+            } else if (field === "semester" || field === "currentSemester") {
+                profile.semester = Number(afterVal);
+                profile.currentSemester = Number(afterVal);
+            } else if (field === "admissionYear") {
+                profile.admissionYear = Number(afterVal);
+            } else if (field === "graduationYear") {
+                profile.graduationYear = Number(afterVal);
+            } else if (field === "branch" || field === "department") {
+                profile.branch = String(afterVal);
+                profile.department = String(afterVal);
+            } else if (field === "skills") {
+                profile.skills = Array.isArray(afterVal) ? afterVal : String(afterVal).split(",").map(s => s.trim()).filter(Boolean);
+            } else if (field === "about") {
+                profile.about = String(afterVal);
+            } else if (field === "fatherName") {
+                if (!profile.family) profile.family = {};
+                profile.family.fatherName = String(afterVal);
+            } else if (field === "motherName") {
+                if (!profile.family) profile.family = {};
+                profile.family.motherName = String(afterVal);
+            } else if (field === "parentPhone") {
+                if (!profile.family) profile.family = {};
+                profile.family.parentPhone = String(afterVal);
+            } else if (field in profile) {
+                profile[field] = afterVal;
+            }
+
+            // Also synchronize full name / email on user if requested
+            if (field === "fullName" || field === "name") {
+                await User.findByIdAndUpdate(profile.user._id, { $set: { fullName: String(afterVal) } });
+            }
+        }
+    }
+
+    await profile.save();
+
+    // Dispatch in-app notification to the student
+    try {
+        const changeNames = requestItem.changes.map((c) => c.fieldLabel || c.field).join(", ");
+        await Notification.create({
+            user: profile.user._id,
+            title: action === "APPROVE" ? "Profile Modification Approved" : "Profile Modification Request Rejected",
+            message:
+                action === "APPROVE"
+                    ? `Your requested update for [${changeNames}] was approved and applied to your profile records.`
+                    : `Your requested update for [${changeNames}] was not approved. Remarks: ${reviewRemarks || "Contact TPO placement cell."}`,
+            type: action === "APPROVE" ? "offer" : "alert",
+            isRead: false
+        });
+    } catch (e) {
+        console.warn("Failed to notify student of review outcome:", e.message);
+    }
+
+    return res.status(200).json(
+        new ApiResponse(200, profile, `Modification request successfully ${action.toLowerCase()}d`)
+    );
+});
+
 export {
     createStudentProfile,
     getCurrentStudentProfile,
     updateStudentProfile,
     updateStudentResume,
+    deleteStudentResume,
     getAllStudentProfiles,
     getStudentProfileById,
     addSemesterResult,
     addBacklogRecord,
     verifyStudentProfile,
-    safeMigrateExistingProfiles
+    safeMigrateExistingProfiles,
+    lockStudentProfile,
+    unlockStudentProfile,
+    submitModificationRequest,
+    getModificationRequests,
+    reviewModificationRequest
 };

@@ -226,11 +226,50 @@ const placementDriveSchema = new mongoose.Schema(
                 },
             },
         ],
+
+        // Automated Placement Drive - Selection Rounds & Lifecycle
+        selectionRounds: [
+            {
+                roundNumber: { type: Number, required: true },
+                name: { type: String, required: true, trim: true },
+                description: { type: String, trim: true, default: "" },
+                status: {
+                    type: String,
+                    enum: ["pending", "in_progress", "completed"],
+                    default: "pending",
+                },
+                conductedAt: { type: Date, default: null },
+                advancedCount: { type: Number, default: 0 },
+                rejectedCount: { type: Number, default: 0 },
+                batchId: { type: String, default: null },
+            },
+        ],
+        currentRoundNumber: {
+            type: Number,
+            default: 1,
+        },
+        isPlacementCompleted: {
+            type: Boolean,
+            default: false,
+        },
+        completedAt: {
+            type: Date,
+            default: null,
+        },
     },
     {
         timestamps: true,
     }
 );
+
+// Default sequential selection rounds catalogue
+export const DEFAULT_SELECTION_ROUNDS = [
+    { roundNumber: 1, name: "Resume Screening", description: "Initial profile & academic eligibility screening", status: "in_progress" },
+    { roundNumber: 2, name: "Online Assessment / Aptitude", description: "Cognitive, aptitude & coding assessment", status: "pending" },
+    { roundNumber: 3, name: "Technical Interview", description: "In-depth technical problem solving & domain interview", status: "pending" },
+    { roundNumber: 4, name: "HR Interview", description: "Behavioral, cultural fit & leadership discussion", status: "pending" },
+    { roundNumber: 5, name: "Final Selection", description: "Final placement offers & job confirmation", status: "pending" }
+];
 
 // Controlled default catalogue of student information requirements
 export const DEFAULT_STUDENT_REQUIREMENTS = [

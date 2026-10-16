@@ -150,6 +150,11 @@ export default function StudentDetailModal({ student, isOpen, onClose, onStudent
                 >
                   {currentVerification}
                 </span>
+                {student.isProfileLocked && (
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-orange-500/20 text-orange-300 border border-orange-400/30">
+                    🔒 Locked Profile
+                  </span>
+                )}
               </div>
 
               <div className="flex flex-wrap items-center gap-3 mt-1.5 text-xs text-white/70">
@@ -164,6 +169,19 @@ export default function StudentDetailModal({ student, isOpen, onClose, onStudent
             </div>
           </div>
         </div>
+
+        {/* Pending Modification Notice Banner if any */}
+        {student.modificationRequests?.some((r) => r.status === "PENDING") && (
+          <div className="bg-amber-50 border-b border-amber-200 px-6 py-2.5 flex items-center justify-between gap-3 shrink-0">
+            <div className="flex items-center gap-2.5 text-xs text-amber-950">
+              <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+              <span className="font-extrabold">Student has submitted a Profile Modification Request awaiting TPO approval.</span>
+            </div>
+            <span className="px-2 py-0.5 rounded-md bg-amber-200 text-amber-900 text-[10px] font-black uppercase">
+              Pending Diff Review
+            </span>
+          </div>
+        )}
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">

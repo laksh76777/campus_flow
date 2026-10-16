@@ -436,7 +436,55 @@ const studentProfileSchema = new mongoose.Schema(
             type: String,
             trim: true,
             default: ""
-        }
+        },
+
+        // Profile Locking & Modification Permissions Tracking
+        isProfileLocked: {
+            type: Boolean,
+            default: false
+        },
+        profileLockedAt: {
+            type: Date,
+            default: null
+        },
+        modificationRequests: [
+            {
+                requestedAt: {
+                    type: Date,
+                    default: Date.now
+                },
+                status: {
+                    type: String,
+                    enum: ["PENDING", "APPROVED", "REJECTED"],
+                    default: "PENDING"
+                },
+                reason: {
+                    type: String,
+                    trim: true,
+                    default: ""
+                },
+                changes: [
+                    {
+                        field: { type: String, required: true },
+                        fieldLabel: { type: String, required: true },
+                        beforeValue: { type: mongoose.Schema.Types.Mixed },
+                        afterValue: { type: mongoose.Schema.Types.Mixed }
+                    }
+                ],
+                reviewedBy: {
+                    type: mongoose.Schema.Types.ObjectId,
+                    ref: "User"
+                },
+                reviewedAt: {
+                    type: Date
+                },
+                reviewRemarks: {
+                    type: String,
+                    trim: true,
+                    default: ""
+                }
+            }
+        ]
     },
     {
         timestamps: true

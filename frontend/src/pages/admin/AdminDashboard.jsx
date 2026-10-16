@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
-import { RefreshCw, Calendar, Filter } from "lucide-react";
+import { RefreshCw, Calendar } from "lucide-react";
 
 import AdminSidebar from "../../components/admin/AdminSidebar";
 import AdminNavbar from "../../components/admin/AdminNavbar";
@@ -14,6 +14,7 @@ import ManageStudents from "../../components/admin/ManageStudents";
 import ManageSessions from "../../components/admin/ManageSessions";
 import ExcelMigrationHub from "../../components/admin/ExcelMigrationHub";
 import ManageAnnouncements from "../../components/admin/ManageAnnouncements";
+import AutomatedPlacementDrives from "../../components/admin/AutomatedPlacementDrives";
 
 import { useAuth } from "../../context/authContextDef";
 import {
@@ -23,6 +24,7 @@ import {
   createPlacementDrive,
   deactivatePlacementDrive,
   reactivatePlacementDrive,
+  deletePlacementDrive,
   getAllApplications,
   updateApplicationStatus,
   getAllStudentProfiles,
@@ -34,6 +36,7 @@ const ADMIN_TABS = [
   "analytics",
   "students",
   "drives",
+  "automated_drives",
   "companies",
   "applications",
   "sessions",
@@ -287,6 +290,26 @@ export default function AdminDashboard({ initialTab = "overview" }) {
     }
   };
 
+  const handleDeletePlacementDrive = async (driveId, compName = "Corporate Recruiter", jobTitle = "Drive") => {
+    const confirm = window.confirm(
+      `Are you sure you want to permanently DELETE the placement drive "${jobTitle}" (${compName})?\n\nAll candidate applications, round progressions, and associated records for this drive will be deleted.`
+    );
+    if (!confirm) return;
+
+    try {
+      await deletePlacementDrive(driveId);
+      toast.success(`Placement drive "${jobTitle}" deleted successfully`);
+      setDrives((prev) => prev.filter((d) => d._id !== driveId));
+      setApplications((prev) =>
+        prev.filter((a) => (a.placementDrive?._id || a.placementDrive) !== driveId)
+      );
+      loadDashboardData(true);
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || "Failed to delete placement drive";
+      toast.error(msg);
+    }
+  };
+
   // Handlers for Application
   const handleUpdateApplicationStatus = async (
     appId,
@@ -327,7 +350,7 @@ export default function AdminDashboard({ initialTab = "overview" }) {
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-50 font-sans text-slate-800 antialiased selection:bg-indigo-500 selection:text-white">
+    <div className="flex min-h-screen bg-slate-50 font-sans text-slate-800 antialiased selection:bg-orange-500 selection:text-white">
       {/* Sidebar Navigation */}
       <AdminSidebar
         isOpen={isSidebarOpen}
@@ -346,10 +369,13 @@ export default function AdminDashboard({ initialTab = "overview" }) {
           activeTab={activeTab}
           adminUser={user}
           onLogout={handleLogout}
+          students={students}
+          applications={applications}
+          onNavigateTab={handleTabChange}
         />
 
-        {/* Page Body */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6">
+          {/* Page Body */}
+          <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6">
           {/* Global Cohort Scope & Sync Banner */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-2xs">
             {/* Session Filter Dropdown */}
@@ -443,9 +469,23 @@ export default function AdminDashboard({ initialTab = "overview" }) {
               companies={companies}
               onCreateDrive={handleCreateDrive}
               onToggleDriveStatus={handleToggleDriveStatus}
+              onDeleteDrive={handleDeletePlacementDrive}
               onViewApplicants={handleViewApplicants}
               isCreateModalOpen={isCreateDriveOpen}
               setIsCreateModalOpen={setIsCreateDriveOpen}
+            />
+          )}
+
+          {activeTab === "automated_drives" && (
+            <AutomatedPlacementDrives
+              drives={scopedDrives}
+              applications={scopedApplications}
+              companies={companies}
+              sessions={sessions}
+              onRefresh={() => loadDashboardData(true)}
+              onOpenDriveDetails={handleViewApplicants}
+              onUpdateStatus={handleUpdateApplicationStatus}
+              onDeleteDrive={handleDeletePlacementDrive}
             />
           )}
 

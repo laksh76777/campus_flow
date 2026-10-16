@@ -2,10 +2,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { Company } from "../models/company.model.js";
-import {
-    cloudinary,
-    uploadOnCloudinary
-} from "../utils/cloudinary.js";
+import { uploadOnCloudinary, deleteFromCloudinary } from "../utils/cloudinary.js";
 
 const createCompany = asyncHandler(async (req, res) => {
     const {
@@ -43,7 +40,7 @@ const createCompany = asyncHandler(async (req, res) => {
             );
         }
         companyLogo = {
-            url: uploadedLogo.url,
+            url: uploadedLogo.secure_url || uploadedLogo.url,
             publicId: uploadedLogo.public_id
         };
     }
@@ -201,15 +198,10 @@ const updateCompanyLogo = asyncHandler(async (req, res) => {
         );
     }
     if (company.companyLogo?.publicId) {
-        await cloudinary.uploader.destroy(
-            company.companyLogo.publicId,
-            {
-                resource_type: "image"
-            }
-        );
+        await deleteFromCloudinary(company.companyLogo.publicId, "image");
     }
     company.companyLogo = {
-        url: uploadedLogo.url,
+        url: uploadedLogo.secure_url || uploadedLogo.url,
         publicId: uploadedLogo.public_id
     };
     await company.save();

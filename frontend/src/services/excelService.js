@@ -2,14 +2,22 @@ import api from "./api";
 
 // Helper to trigger browser download of binary Blob
 const triggerBlobDownload = (blobData, filename) => {
-  const url = window.URL.createObjectURL(new Blob([blobData]));
+  const blob =
+    blobData instanceof Blob
+      ? blobData
+      : new Blob([blobData], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        });
+  const url = window.URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
   link.setAttribute("download", filename);
   document.body.appendChild(link);
   link.click();
-  link.parentNode.removeChild(link);
-  window.URL.revokeObjectURL(url);
+  setTimeout(() => {
+    link.parentNode?.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  }, 200);
 };
 
 export const excelService = {

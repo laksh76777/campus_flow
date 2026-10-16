@@ -3,6 +3,7 @@ import {
   BarChart3,
   Users,
   Briefcase,
+  Workflow,
   Building2,
   FileCheck2,
   LogOut,
@@ -48,6 +49,11 @@ export default function AdminSidebar({
       icon: Briefcase,
     },
     {
+      id: "automated_drives",
+      label: "Automated Placement Drive",
+      icon: Workflow,
+    },
+    {
       id: "companies",
       label: "Companies Directory",
       icon: Building2,
@@ -84,22 +90,28 @@ export default function AdminSidebar({
         <div className="flex h-18 items-center justify-between border-b border-slate-800 px-5">
           <Link
             to="/"
-            aria-label="CampusFlow home"
+            aria-label="JSSATEB Placement Portal home"
             className="flex items-center gap-3 group"
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/20 group-hover:scale-105 transition-transform">
-              <ShieldCheck className="h-5 w-5" />
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white p-1 border border-amber-400/30 shadow-md shadow-orange-500/10 group-hover:scale-105 transition-transform shrink-0">
+              <img
+                src="/images/jssateb/college-logo.png"
+                alt="JSSATEB Logo"
+                className="h-full w-full object-contain"
+              />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-1.5">
                 <span className="font-extrabold tracking-tight text-white text-base">
-                  CampusFlow
+                  JSSATEB
                 </span>
-                <span className="rounded-md bg-indigo-500/20 px-1.5 py-0.5 text-[10px] font-bold text-indigo-300 border border-indigo-500/30">
+                <span className="rounded-md bg-orange-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-300 border border-orange-500/30">
                   TPO
                 </span>
               </div>
-              <p className="text-[11px] font-medium text-slate-400">Placement Management</p>
+              <p className="text-[11px] font-medium text-amber-200/80 truncate">
+                Placement Management
+              </p>
             </div>
           </Link>
 
@@ -117,14 +129,14 @@ export default function AdminSidebar({
         <div className="p-4 border-b border-slate-800/80">
           <div className="flex items-center gap-3 rounded-xl bg-slate-800/60 p-3 border border-slate-800">
             <div className="relative shrink-0">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 text-sm font-bold text-white shadow-xs">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-red-800 via-orange-700 to-amber-600 text-sm font-bold text-white shadow-xs">
                 {displayName.charAt(0).toUpperCase()}
               </div>
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-bold text-white">{displayName}</p>
-              <p className="truncate text-[11px] text-slate-400">Placement administrator</p>
-              <p className="truncate text-[10px] text-indigo-300 font-mono">{displayEmail}</p>
+              <p className="truncate text-[11px] text-amber-300 font-medium">JSS Placement Officer</p>
+              <p className="truncate text-[10px] text-slate-400 font-mono">{displayEmail}</p>
             </div>
           </div>
         </div>

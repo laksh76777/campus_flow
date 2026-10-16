@@ -1,7 +1,7 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { PlacementDrive, DEFAULT_STUDENT_REQUIREMENTS } from "../models/placementDrive.model.js";
+import { PlacementDrive, DEFAULT_STUDENT_REQUIREMENTS, DEFAULT_SELECTION_ROUNDS } from "../models/placementDrive.model.js";
 import { Company } from "../models/company.model.js";
 import { StudentProfile } from "../models/studentProfile.model.js";
 import { Application } from "../models/application.model.js";
@@ -13,23 +13,43 @@ import { syncDriveReminders } from "../services/reminderScheduler.service.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 
 const normalizeEligiblePrograms = (programCodes, branches) => {
+    let rawCodes = programCodes;
+    if (typeof rawCodes === "string") {
+        try {
+            const parsed = JSON.parse(rawCodes);
+            if (Array.isArray(parsed)) rawCodes = parsed;
+        } catch {
+            rawCodes = rawCodes.split(",").map((c) => c.trim()).filter(Boolean);
+        }
+    }
+
+    let rawBranches = branches;
+    if (typeof rawBranches === "string") {
+        try {
+            const parsed = JSON.parse(rawBranches);
+            if (Array.isArray(parsed)) rawBranches = parsed;
+        } catch {
+            rawBranches = rawBranches.split(",").map((b) => b.trim()).filter(Boolean);
+        }
+    }
+
     let programs;
-    if (programCodes !== undefined) {
-        if (!Array.isArray(programCodes) || programCodes.length === 0) {
+    if (rawCodes !== undefined) {
+        if (!Array.isArray(rawCodes) || rawCodes.length === 0) {
             throw new ApiError(400, "Select at least one approved academic program");
         }
-        programs = programCodes.map((code) => getCatalogProgram(code));
+        programs = rawCodes.map((code) => getCatalogProgram(code));
         if (programs.some((program) => !program)) {
             throw new ApiError(400, "Drive targeting contains an unknown academic program code");
         }
     } else {
-        if (!Array.isArray(branches) || branches.length === 0) {
+        if (!Array.isArray(rawBranches) || rawBranches.length === 0) {
             throw new ApiError(400, "Select at least one approved academic program");
         }
-        if (branches.some((branch) => ["all", "all branches"].includes(String(branch).trim().toLowerCase()))) {
+        if (rawBranches.some((branch) => ["all", "all branches"].includes(String(branch).trim().toLowerCase()))) {
             programs = PROGRAM_CATALOG;
         } else {
-            programs = branches.map((branch) => resolveProgram(branch));
+            programs = rawBranches.map((branch) => resolveProgram(branch));
             if (programs.some((program) => !program)) {
                 throw new ApiError(400, "Drive targeting contains an unknown or unsupported legacy program value");
             }
@@ -46,7 +66,10 @@ const processJdPdfUpload = async (req) => {
     let jdAttachment = { url: "", fileName: "" };
     if (req.file) {
         try {
-            const uploadRes = await uploadOnCloudinary(req.file.path, { resource_type: "raw" });
+            const uploadRes = await uploadOnCloudinary(req.file.path, {
+                folder: "campusflow/job_descriptions",
+                resource_type: "image"
+            });
             if (uploadRes?.secure_url) {
                 jdAttachment = {
                     url: uploadRes.secure_url,
@@ -186,20 +209,49 @@ const createPlacementDrive = asyncHandler(async (req, res) => {
         applicationLink: applicationLink || "",
         createdBy: req.user._id,
         requirementsVersion: 1,
-        studentRequirements: Array.isArray(req.body.studentRequirements) && req.body.studentRequirements.length > 0
-            ? req.body.studentRequirements
-            : DEFAULT_STUDENT_REQUIREMENTS,
-        reminderSettings: {
-            remindersEnabled: req.body.reminderSettings?.remindersEnabled !== undefined
-                ? Boolean(req.body.reminderSettings.remindersEnabled)
-                : true,
-            reminderOffsetsHours: Array.isArray(req.body.reminderSettings?.reminderOffsetsHours) && req.body.reminderSettings.reminderOffsetsHours.length > 0
-                ? req.body.reminderSettings.reminderOffsetsHours.map(Number).filter((n) => !isNaN(n) && n > 0)
-                : [6],
-            channels: Array.isArray(req.body.reminderSettings?.channels) && req.body.reminderSettings.channels.length > 0
-                ? req.body.reminderSettings.channels
-                : ["in_app", "email"]
-        }
+        studentRequirements: (() => {
+            let reqs = req.body.studentRequirements;
+            if (typeof reqs === "string") {
+                try { reqs = JSON.parse(reqs); } catch { reqs = null; }
+            }
+            return Array.isArray(reqs) && reqs.length > 0 ? reqs : DEFAULT_STUDENT_REQUIREMENTS;
+        })(),
+        reminderSettings: (() => {
+            let settings = req.body.reminderSettings;
+            if (typeof settings === "string") {
+                try { settings = JSON.parse(settings); } catch { settings = {}; }
+            }
+            return {
+                remindersEnabled: settings?.remindersEnabled !== undefined
+                    ? Boolean(settings.remindersEnabled)
+                    : true,
+                reminderOffsetsHours: Array.isArray(settings?.reminderOffsetsHours) && settings.reminderOffsetsHours.length > 0
+                    ? settings.reminderOffsetsHours.map(Number).filter((n) => !isNaN(n) && n > 0)
+                    : [6],
+                channels: Array.isArray(settings?.channels) && settings.channels.length > 0
+                    ? settings.channels
+                    : ["in_app", "email"]
+            };
+        })(),
+        selectionRounds: (() => {
+            let rounds = req.body.selectionRounds;
+            if (typeof rounds === "string") {
+                try { rounds = JSON.parse(rounds); } catch { rounds = null; }
+            }
+            if (Array.isArray(rounds) && rounds.length > 0) {
+                return rounds.map((r, idx) => ({
+                    roundNumber: Number(r.roundNumber || idx + 1),
+                    name: String(r.name || `Round ${idx + 1}`).trim(),
+                    description: r.description ? String(r.description).trim() : "",
+                    status: idx === 0 ? "in_progress" : "pending",
+                }));
+            }
+            return DEFAULT_SELECTION_ROUNDS.map((r, idx) => ({
+                ...r,
+                status: idx === 0 ? "in_progress" : "pending"
+            }));
+        })(),
+        currentRoundNumber: 1
     });
 
     // Schedule deadline reminders persistently
@@ -554,6 +606,67 @@ const reactivatePlacementDrive = asyncHandler(async (req, res) => {
     );
 });
 
+// @desc    Permanently delete a placement drive and clean associated applications
+// @route   DELETE /api/v1/placementdrive/:driveId
+// @access  Admin
+const deletePlacementDrive = asyncHandler(async (req, res) => {
+    const { driveId } = req.params;
+    if (!driveId) {
+        throw new ApiError(400, "Placement drive ID is required");
+    }
+
+    const placementDrive = await PlacementDrive.findById(driveId);
+    if (!placementDrive) {
+        throw new ApiError(404, "Placement drive not found");
+    }
+
+    // Find all applications associated with this drive
+    const applications = await Application.find({ placementDrive: driveId });
+    const appIds = applications.map((a) => a._id);
+
+    // If any student was marked as placed through this drive's accepted offer, revert their profile
+    const studentIds = applications.map((a) => a.student).filter(Boolean);
+    if (studentIds.length > 0) {
+        const company = await Company.findById(placementDrive.company);
+        const compName = company?.companyName || "";
+
+        await StudentProfile.updateMany(
+            {
+                _id: { $in: studentIds },
+                $or: [
+                    { placedCompany: compName },
+                    { placedJobTitle: placementDrive.jobTitle }
+                ]
+            },
+            {
+                $set: {
+                    isPlaced: false,
+                    placedCompany: "",
+                    placedPackage: null,
+                    placedAt: null,
+                    placedJobTitle: ""
+                }
+            }
+        );
+    }
+
+    // Delete all associated applications
+    if (appIds.length > 0) {
+        await Application.deleteMany({ _id: { $in: appIds } });
+    }
+
+    // Delete the placement drive
+    await PlacementDrive.findByIdAndDelete(driveId);
+
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            { driveId, deletedApplicationsCount: appIds.length },
+            "Placement drive and all related applications deleted successfully"
+        )
+    );
+});
+
 const getEligibleStudents = asyncHandler(async (req, res) => {
     const { placementDriveId } = req.params;
     const placementDrive = await PlacementDrive.findById(
@@ -764,6 +877,7 @@ export {
     updatePlacementDrive,
     deactivatePlacementDrive,
     reactivatePlacementDrive,
+    deletePlacementDrive,
     getEligibleStudents,
     getMyEligibleDrives,
     checkDriveEligibility,

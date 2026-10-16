@@ -40,6 +40,7 @@ import {
   getMyApplications,
   applyForDrive,
   withdrawApplication,
+  respondToOffer,
 } from "../../services/studentService";
 import {
   getMyNotifications,
@@ -476,15 +477,21 @@ export default function StudentDashboard() {
   // Secured corporate placement offer details (if any)
   const offerDetails = useMemo(() => {
     if (dashboardStats?.offerDetails) return dashboardStats.offerDetails;
-    const selectedApp = applications.find((app) => app.status === "selected");
+    // Look for application with offer or selection
+    const selectedApp = applications.find((app) =>
+      ["offer_accepted", "selected", "offer_received"].includes(app.status)
+    );
     if (!selectedApp) return null;
     const drive = selectedApp.placementDrive || {};
-    const company = typeof drive.company === "object" ? drive.company?.companyName : drive.companyName || "Corporate Partner";
+    const company =
+      typeof drive.company === "object" ? drive.company?.companyName : drive.companyName || "Corporate Partner";
     return {
+      applicationId: selectedApp._id,
+      status: selectedApp.status,
       companyName: company,
       jobTitle: drive.jobTitle || "Software Engineer",
       package: selectedApp.offeredPackage || drive.package || 18,
-      selectedAt: selectedApp.statusUpdatedAt || selectedApp.updatedAt
+      selectedAt: selectedApp.statusUpdatedAt || selectedApp.updatedAt,
     };
   }, [dashboardStats, applications]);
 
@@ -519,6 +526,29 @@ export default function StudentDashboard() {
       loadDashboardData(true);
     } catch (err) {
       const msg = err.response?.data?.message || "Failed to withdraw application";
+      toast.error(msg);
+    }
+  };
+
+  // Student Respond to Offer (Accept / Decline)
+  const handleRespondOffer = async (applicationId, decision, companyName) => {
+    const isAccept = decision === "accept";
+    const confirmMessage = isAccept
+      ? `Are you sure you want to ACCEPT the placement offer from ${companyName}? This will confirm your selection and mark your profile as officially placed.`
+      : `Are you sure you want to DECLINE / REJECT the offer from ${companyName}? You will not be marked as placed and will remain eligible for other recruitment opportunities.`;
+
+    if (!window.confirm(confirmMessage)) return;
+
+    try {
+      await respondToOffer(applicationId, decision);
+      toast.success(
+        isAccept
+          ? `🎉 Offer accepted! Congratulations on being placed at ${companyName}!`
+          : `Offer declined for ${companyName}. You remain eligible for other drives.`
+      );
+      loadDashboardData(true);
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || `Failed to ${decision} offer`;
       toast.error(msg);
     }
   };
@@ -625,29 +655,70 @@ export default function StudentDashboard() {
               {/* Placed Student Offer Celebration Banner */}
               {offerDetails && (
                 <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-700 p-6 text-white shadow-xl animate-in fade-in-50">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
                     <div className="flex items-center gap-4">
                       <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-md shadow-inner text-3xl">
-                        🎉
+                        {offerDetails.status === "offer_accepted" ? "🎓" : "🎉"}
                       </div>
                       <div>
                         <span className="rounded-full bg-emerald-400/20 px-3 py-0.5 text-xs font-bold text-emerald-200 border border-emerald-300/30">
-                          Official Placement Offer Extended
+                          {offerDetails.status === "offer_accepted"
+                            ? "Official Placement Confirmed & Accepted"
+                            : "Official Placement Offer Extended — Action Required"}
                         </span>
                         <h3 className="text-xl sm:text-2xl font-black tracking-tight mt-1">
                           Congratulations, {studentName}!
                         </h3>
                         <p className="text-xs sm:text-sm text-emerald-100 mt-0.5">
-                          Selected as <strong>{offerDetails.jobTitle}</strong> at <strong>{offerDetails.companyName}</strong> with a confirmed offer package of <strong>₹{offerDetails.package} LPA</strong>.
+                          {offerDetails.status === "offer_accepted" ? "Officially placed as " : "Selected as "}
+                          <strong>{offerDetails.jobTitle}</strong> at <strong>{offerDetails.companyName}</strong> with a confirmed offer package of <strong>₹{offerDetails.package} LPA</strong>.
                         </p>
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleTabChange("applications")}
-                      className="shrink-0 rounded-2xl bg-white px-5 py-2.5 text-xs sm:text-sm font-bold text-emerald-800 shadow-md hover:bg-emerald-50 transition active:scale-95"
-                    >
-                      View Offer Details
-                    </button>
+
+                    <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                      {offerDetails.status !== "offer_accepted" ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleRespondOffer(offerDetails.applicationId, "accept", offerDetails.companyName)
+                            }
+                            className="rounded-2xl bg-white px-4 py-2.5 text-xs sm:text-sm font-bold text-emerald-800 shadow-md hover:bg-emerald-50 transition active:scale-95 inline-flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                            <span>Accept Offer</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleRespondOffer(offerDetails.applicationId, "decline", offerDetails.companyName)
+                            }
+                            className="rounded-2xl bg-rose-500/80 hover:bg-rose-600 text-white border border-rose-400/40 px-3.5 py-2.5 text-xs sm:text-sm font-semibold transition active:scale-95 inline-flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <X className="h-4 w-4" />
+                            <span>Decline Offer</span>
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleRespondOffer(offerDetails.applicationId, "decline", offerDetails.companyName)
+                          }
+                          className="rounded-2xl bg-white/20 hover:bg-white/30 text-white border border-white/30 px-3.5 py-2.5 text-xs sm:text-sm font-semibold transition active:scale-95 cursor-pointer"
+                          title="Decline offer if you chose another opportunity"
+                        >
+                          Decline Offer
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleTabChange("applications")}
+                        className="rounded-2xl bg-emerald-950/40 hover:bg-emerald-950/60 text-white px-4 py-2.5 text-xs sm:text-sm font-bold border border-white/20 transition active:scale-95 cursor-pointer"
+                      >
+                        All Applications
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -826,6 +897,7 @@ export default function StudentDashboard() {
                   <RecentApplications
                     applications={activeApplicationsList}
                     onWithdraw={handleWithdraw}
+                    onRespondOffer={handleRespondOffer}
                     title="Recent Application Pipeline"
                     description="Your latest submissions and status updates"
                     showSearch={false}
@@ -866,6 +938,7 @@ export default function StudentDashboard() {
               <RecentApplications
                 applications={activeApplicationsList}
                 onWithdraw={handleWithdraw}
+                onRespondOffer={handleRespondOffer}
                 title="My Applications History"
                 description="Real-time recruitment status updates from visiting companies"
                 showSearch={true}

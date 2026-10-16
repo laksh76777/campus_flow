@@ -8,7 +8,6 @@ import {
   Sparkles,
   Search,
   Calendar,
-  MapPin,
   Award,
   MessageSquare,
 } from "lucide-react";
@@ -16,6 +15,7 @@ import {
 export default function RecentApplications({
   applications = [],
   onWithdraw,
+  onRespondOffer,
   title = "My Applications",
   description = "Real-time tracker of companies you have applied to",
   showSearch = true,
@@ -172,7 +172,10 @@ export default function RecentApplications({
               <option value="all">All Statuses</option>
               <option value="applied">Under Review</option>
               <option value="shortlisted">Shortlisted</option>
-              <option value="selected">Selected</option>
+              <option value="interview">Interview Scheduled</option>
+              <option value="selected">Offer Extended</option>
+              <option value="offer_accepted">Offer Accepted (Placed)</option>
+              <option value="offer_declined">Offer Declined</option>
               <option value="rejected">Not Selected</option>
               <option value="withdrawn">Withdrawn</option>
             </select>
@@ -215,6 +218,7 @@ export default function RecentApplications({
                   const statusInfo = getStatusBadge(app.status);
                   const StatusIcon = statusInfo.icon;
                   const canWithdraw = app.status === "applied" || app.status === "shortlisted";
+                  const canRespondOffer = app.status === "selected" || app.status === "offer_received";
 
                   return (
                     <tr key={app._id} className="transition hover:bg-slate-50/50">
@@ -263,7 +267,7 @@ export default function RecentApplications({
                             </div>
                           )}
 
-                          {app.status === "selected" && (app.offeredPackage || drive.package) && (
+                          {(app.status === "selected" || app.status === "offer_received" || app.status === "offer_accepted") && (app.offeredPackage || drive.package) && (
                             <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 w-fit">
                               <Award className="h-3 w-3" />
                               <span>Offered CTC: ₹{app.offeredPackage || drive.package} LPA</span>
@@ -282,10 +286,49 @@ export default function RecentApplications({
                         </div>
                       </td>
                       <td className="px-4 py-3.5 text-right">
-                        {canWithdraw ? (
+                        {canRespondOffer ? (
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => onRespondOffer && onRespondOffer(app._id, "accept", companyName, app.offeredPackage || drive.package)}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition active:scale-95 cursor-pointer"
+                              title="Accept Corporate Placement Offer"
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              <span>Accept Offer</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onRespondOffer && onRespondOffer(app._id, "decline", companyName, app.offeredPackage || drive.package)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 font-bold text-xs shadow-xs transition active:scale-95 cursor-pointer"
+                              title="Decline / Reject Placement Offer"
+                            >
+                              <XCircle className="h-3.5 w-3.5" />
+                              <span>Reject</span>
+                            </button>
+                          </div>
+                        ) : app.status === "offer_accepted" ? (
+                          <div className="flex items-center justify-end gap-2">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold">
+                              <CheckCircle2 className="h-3.5 w-3.5" /> Placed & Accepted
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => onRespondOffer && onRespondOffer(app._id, "decline", companyName, app.offeredPackage || drive.package)}
+                              className="text-[11px] font-semibold text-slate-400 hover:text-rose-600 hover:underline transition cursor-pointer"
+                              title="Decline previously accepted offer"
+                            >
+                              Decline
+                            </button>
+                          </div>
+                        ) : app.status === "offer_declined" ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-100 text-slate-600 border border-slate-200 text-xs font-semibold">
+                            <XCircle className="h-3.5 w-3.5" /> Offer Declined
+                          </span>
+                        ) : canWithdraw ? (
                           <button
                             onClick={() => onWithdraw && onWithdraw(app._id, companyName)}
-                            className="text-xs font-bold text-rose-600 hover:text-rose-800 hover:underline transition"
+                            className="text-xs font-bold text-rose-600 hover:text-rose-800 hover:underline transition cursor-pointer"
                           >
                             Withdraw
                           </button>
@@ -310,82 +353,119 @@ export default function RecentApplications({
               const StatusIcon = statusInfo.icon;
               const canWithdraw = app.status === "applied" || app.status === "shortlisted";
 
-              return (
-                <div key={app._id} className="p-4 space-y-2.5">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2.5">
-                      <div
-                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-tr ${getCompanyColor(
-                          companyName
-                        )} text-xs font-bold text-white`}
-                      >
-                        {companyName.charAt(0).toUpperCase()}
+                  const canRespondOfferMobile = app.status === "selected" || app.status === "offer_received";
+
+                  return (
+                    <div key={app._id} className="p-4 space-y-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-tr ${getCompanyColor(
+                              companyName
+                            )} text-xs font-bold text-white`}
+                          >
+                            {companyName.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-slate-900 text-xs">{companyName}</h4>
+                            <p className="text-[11px] text-slate-500 font-medium">
+                              {drive.jobTitle || "Job Position"}
+                            </p>
+                          </div>
+                        </div>
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusInfo.color}`}
+                        >
+                          <StatusIcon className="h-3 w-3" />
+                          {statusInfo.label}
+                        </span>
                       </div>
-                      <div>
-                        <h4 className="font-bold text-slate-900 text-xs">{companyName}</h4>
-                        <p className="text-[11px] text-slate-500 font-medium">
-                          {drive.jobTitle || "Job Position"}
-                        </p>
+
+                      {app.status === "interview" && app.interviewDate && (
+                        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-purple-700 bg-purple-50 p-2 rounded-xl border border-purple-200">
+                          <Calendar className="h-3.5 w-3.5 shrink-0" />
+                          <span>
+                            {app.interviewRound || "Interview"}:{" "}
+                            {new Date(app.interviewDate).toLocaleDateString("en-IN", {
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}{" "}
+                            {app.interviewLocation ? `@ ${app.interviewLocation}` : ""}
+                          </span>
+                        </div>
+                      )}
+
+                      {(app.status === "selected" || app.status === "offer_received" || app.status === "offer_accepted") && (app.offeredPackage || drive.package) && (
+                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 p-2 rounded-xl border border-emerald-200">
+                          <Award className="h-3.5 w-3.5 shrink-0" />
+                          <span>🎉 Offer Package: ₹{app.offeredPackage || drive.package} LPA</span>
+                        </div>
+                      )}
+
+                      {app.remarks && (
+                        <div className="flex items-start gap-1.5 text-[11px] font-medium text-amber-900 bg-amber-50/90 p-2.5 rounded-xl border border-amber-200">
+                          <MessageSquare className="h-3.5 w-3.5 shrink-0 text-amber-600 mt-0.5" />
+                          <span>
+                            <strong className="text-amber-800">Admin Message: </strong>
+                            {app.remarks}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+                        <span>Package: <strong className="text-slate-800">₹{drive.package || "N/A"} LPA</strong></span>
+                        <span>Applied: {formatDate(app.appliedAt || app.createdAt)}</span>
                       </div>
-                    </div>
-                    <span
-                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusInfo.color}`}
-                    >
-                      <StatusIcon className="h-3 w-3" />
-                      {statusInfo.label}
-                    </span>
-                  </div>
 
-                  {app.status === "interview" && app.interviewDate && (
-                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-purple-700 bg-purple-50 p-2 rounded-xl border border-purple-200">
-                      <Calendar className="h-3.5 w-3.5 shrink-0" />
-                      <span>
-                        {app.interviewRound || "Interview"}:{" "}
-                        {new Date(app.interviewDate).toLocaleDateString("en-IN", {
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}{" "}
-                        {app.interviewLocation ? `@ ${app.interviewLocation}` : ""}
-                      </span>
+                      {canRespondOfferMobile ? (
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-bold text-emerald-700">Placement Offer:</span>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => onRespondOffer && onRespondOffer(app._id, "accept", companyName, app.offeredPackage || drive.package)}
+                              className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs"
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              <span>Accept</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onRespondOffer && onRespondOffer(app._id, "decline", companyName, app.offeredPackage || drive.package)}
+                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 font-bold text-xs shadow-xs"
+                            >
+                              <XCircle className="h-3.5 w-3.5" />
+                              <span>Reject</span>
+                            </button>
+                          </div>
+                        </div>
+                      ) : app.status === "offer_accepted" ? (
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                          <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700">
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Placed & Offer Accepted
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => onRespondOffer && onRespondOffer(app._id, "decline", companyName, app.offeredPackage || drive.package)}
+                            className="text-[11px] font-semibold text-slate-400 hover:text-rose-600 hover:underline"
+                          >
+                            Decline
+                          </button>
+                        </div>
+                      ) : canWithdraw ? (
+                        <div className="pt-2 border-t border-slate-100 flex justify-end">
+                          <button
+                            onClick={() => onWithdraw && onWithdraw(app._id, companyName)}
+                            className="text-[11px] font-bold text-rose-600 hover:underline"
+                          >
+                            Withdraw Application
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
-                  )}
-
-                  {app.status === "selected" && (app.offeredPackage || drive.package) && (
-                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 p-2 rounded-xl border border-emerald-200">
-                      <Award className="h-3.5 w-3.5 shrink-0" />
-                      <span>🎉 Offer Extended: ₹{app.offeredPackage || drive.package} LPA</span>
-                    </div>
-                  )}
-
-                  {app.remarks && (
-                    <div className="flex items-start gap-1.5 text-[11px] font-medium text-amber-900 bg-amber-50/90 p-2.5 rounded-xl border border-amber-200">
-                      <MessageSquare className="h-3.5 w-3.5 shrink-0 text-amber-600 mt-0.5" />
-                      <span>
-                        <strong className="text-amber-800">Admin Message: </strong>
-                        {app.remarks}
-                      </span>
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
-                    <span>Package: <strong className="text-slate-800">₹{drive.package || "N/A"} LPA</strong></span>
-                    <span>Applied: {formatDate(app.appliedAt || app.createdAt)}</span>
-                  </div>
-
-                  {canWithdraw && (
-                    <div className="pt-2 border-t border-slate-100 flex justify-end">
-                      <button
-                        onClick={() => onWithdraw && onWithdraw(app._id, companyName)}
-                        className="text-[11px] font-bold text-rose-600 hover:underline"
-                      >
-                        Withdraw Application
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
+                  );
             })}
           </div>
         </div>

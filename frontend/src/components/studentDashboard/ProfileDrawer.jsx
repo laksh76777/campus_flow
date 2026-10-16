@@ -22,17 +22,26 @@ import {
   Info,
   Building,
   HelpCircle,
-  FileCheck
+  Camera,
+  Lock,
+  Unlock,
+  FileEdit
 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
   updateStudentProfile,
   updateStudentResume,
+  deleteStudentResume,
+  updateUserAvatar,
+  deleteUserAvatar,
   addSemesterResult,
-  addBacklogRecord
+  addBacklogRecord,
+  lockProfile
 } from "../../services/studentService";
 import { getPublicDepartments } from "../../services/authService";
 import { getResumeViewUrl } from "../../utils/resumeHelper";
+import ProfileLockConfirmationModal from "./ProfileLockConfirmationModal";
+import ProfileModificationModal from "./ProfileModificationModal";
 
 const LEGACY_PROGRAM_CODES = {
   "computer science and engineering": "CSE",
@@ -76,7 +85,11 @@ export default function ProfileDrawer({
   const [saving, setSaving] = useState(false);
   const [resumeFile, setResumeFile] = useState(null);
   const [uploadingResume, setUploadingResume] = useState(false);
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [programs, setPrograms] = useState([]);
+  const [isLockModalOpen, setIsLockModalOpen] = useState(false);
+  const [isModModalOpen, setIsModModalOpen] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -452,6 +465,23 @@ export default function ProfileDrawer({
     }
   };
 
+  const handleConfirmLock = async () => {
+    setSaving(true);
+    try {
+      const res = await lockProfile(studentProfile?.user?._id || user?._id);
+      toast.success("Profile verified & permanently locked for placement drives!");
+      setIsLockModalOpen(false);
+      setIsEditing(false);
+      if (onProfileUpdated && res?.data) {
+        onProfileUpdated(res.data);
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to lock profile");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleUploadResume = async (e) => {
     e.preventDefault();
     if (!resumeFile) {
@@ -475,6 +505,61 @@ export default function ProfileDrawer({
       toast.error(msg);
     } finally {
       setUploadingResume(false);
+    }
+  };
+
+  const handleDeleteResume = async () => {
+    if (!window.confirm("Are you sure you want to remove your current resume?")) return;
+    try {
+      setUploadingResume(true);
+      const res = await deleteStudentResume();
+      toast.success("Resume removed successfully!");
+      if (onProfileUpdated && res?.data) {
+        onProfileUpdated(res.data);
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to remove resume");
+    } finally {
+      setUploadingResume(false);
+    }
+  };
+
+  const handleUploadAvatar = async (e) => {
+    e.preventDefault();
+    if (!avatarFile) {
+      toast.error("Please select a photo first");
+      return;
+    }
+    setUploadingAvatar(true);
+    const data = new FormData();
+    data.append("avatar", avatarFile);
+    try {
+      await updateUserAvatar(data);
+      toast.success("Profile photo updated successfully!");
+      setAvatarFile(null);
+      if (onProfileUpdated) {
+        onProfileUpdated();
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to upload profile photo");
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  const handleDeleteAvatar = async () => {
+    if (!window.confirm("Are you sure you want to remove your profile photo?")) return;
+    try {
+      setUploadingAvatar(true);
+      await deleteUserAvatar();
+      toast.success("Profile photo removed successfully!");
+      if (onProfileUpdated) {
+        onProfileUpdated();
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to remove profile photo");
+    } finally {
+      setUploadingAvatar(false);
     }
   };
 
@@ -683,15 +768,75 @@ export default function ProfileDrawer({
               </div>
 
               {!isEditing && (
-                <button
-                  onClick={() => setIsEditing(true)}
-                  className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100 transition active:scale-95 shrink-0"
-                >
-                  Edit Profile
-                </button>
+                studentProfile?.isProfileLocked ? (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="inline-flex items-center gap-1 rounded-xl border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-900">
+                      <Lock className="h-3.5 w-3.5 text-amber-700" />
+                      <span>Locked</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsModModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-red-900 to-orange-700 px-3 py-1.5 text-xs font-black text-white hover:from-red-950 transition active:scale-95 shadow-2xs"
+                    >
+                      <FileEdit className="h-3.5 w-3.5" />
+                      <span>Request Edit</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditing(true)}
+                      className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100 transition active:scale-95"
+                    >
+                      Edit Profile
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsLockModalOpen(true)}
+                      className="inline-flex items-center gap-1 rounded-xl bg-gradient-to-r from-red-900 to-orange-700 text-white px-3 py-1.5 text-xs font-black hover:from-red-950 transition active:scale-95 shadow-2xs"
+                    >
+                      <Lock className="h-3 w-3" />
+                      <span>Lock & Verify</span>
+                    </button>
+                  </div>
+                )
               )}
             </div>
           </div>
+
+          {/* Locked Status Banner if locked */}
+          {studentProfile?.isProfileLocked && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50/90 p-4 shadow-2xs">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-800 border border-amber-300 shrink-0">
+                  <Lock className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-xs font-black text-amber-950 uppercase tracking-wider">
+                      Profile Dossier Locked & Uneditable
+                    </h4>
+                    <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-amber-200 text-amber-950">
+                      Official Record
+                    </span>
+                  </div>
+                  <p className="text-xs text-amber-800 font-medium mt-0.5">
+                    Academic marks, backlogs, USN, and parent details are locked. Request TPO permission to modify any records.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsModModalOpen(true)}
+                className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-red-900 to-orange-700 px-4 py-2 text-xs font-black text-white hover:from-red-950 hover:to-orange-800 transition shadow-xs active:scale-95 shrink-0"
+              >
+                <FileEdit className="h-3.5 w-3.5" />
+                <span>Request TPO Modification</span>
+              </button>
+            </div>
+          )}
 
           {/* EDIT MODE: FULL TABBED FORM */}
           {isEditing ? (
@@ -1204,6 +1349,15 @@ export default function ProfileDrawer({
                 >
                   {saving ? "Saving Changes..." : "Save Academic Profile"}
                 </button>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => setIsLockModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-red-900 to-orange-700 px-5 py-2 text-xs font-black text-white hover:from-red-950 hover:to-orange-800 transition disabled:opacity-50 shadow-md shadow-red-950/20 active:scale-95"
+                >
+                  <Lock className="h-3.5 w-3.5" />
+                  <span>Verify & Lock Profile</span>
+                </button>
               </div>
             </form>
           ) : (
@@ -1483,23 +1637,65 @@ export default function ProfileDrawer({
               {/* TAB 7: RESUME & DOCUMENTS */}
               {activeSection === "resume" && (
                 <div className="space-y-4">
-                  <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+                  {/* Master Placement Resume Card */}
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4 shadow-xs">
                     <div className="flex items-center justify-between">
-                      <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">Master Placement Resume</h4>
-                      {rawResumeUrl && (
-                        <a
-                          href={resumeViewUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-800"
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                          <span>View Current Document</span>
-                        </a>
-                      )}
+                      <div className="flex items-center gap-2">
+                        <div className="p-2 rounded-xl bg-blue-50 text-blue-600 border border-blue-100">
+                          <FileText className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">Master Placement Resume</h4>
+                          <p className="text-[11px] text-slate-500">Stored securely on Cloudinary CDN for instant company viewing</p>
+                        </div>
+                      </div>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                          rawResumeUrl
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            : "bg-amber-50 text-amber-700 border-amber-200"
+                        }`}
+                      >
+                        {rawResumeUrl ? "Attached" : "Missing"}
+                      </span>
                     </div>
 
-                    <form onSubmit={handleUploadResume} className="flex items-center gap-3">
+                    {rawResumeUrl ? (
+                      <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                          <span className="text-xs font-medium text-slate-700 truncate">
+                            Active Resume Document (PDF / DOC)
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={resumeViewUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-bold transition"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            <span>View Resume</span>
+                          </a>
+                          <button
+                            type="button"
+                            onClick={handleDeleteResume}
+                            disabled={uploadingResume}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-rose-600 hover:bg-rose-50 border border-rose-200 text-xs font-bold transition disabled:opacity-50 cursor-pointer"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            <span>Remove</span>
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-3 rounded-xl bg-amber-50/60 border border-amber-200 text-xs text-amber-800">
+                        No resume uploaded yet. Upload a PDF or Word document so companies can review your profile during drives.
+                      </div>
+                    )}
+
+                    <form onSubmit={handleUploadResume} className="flex flex-wrap items-center gap-3 pt-2">
                       <input
                         type="file"
                         accept=".pdf,.doc,.docx"
@@ -1509,9 +1705,84 @@ export default function ProfileDrawer({
                       <button
                         type="submit"
                         disabled={uploadingResume || !resumeFile}
-                        className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 transition disabled:opacity-50"
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 transition disabled:opacity-50 cursor-pointer shadow-xs"
                       >
-                        {uploadingResume ? "Uploading..." : "Upload New Resume"}
+                        <Upload className="h-3.5 w-3.5" />
+                        <span>{uploadingResume ? "Uploading to CDN..." : rawResumeUrl ? "Replace Resume" : "Upload Resume"}</span>
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* Profile Photograph / Avatar Card */}
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4 shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="p-2 rounded-xl bg-purple-50 text-purple-600 border border-purple-100">
+                          <Camera className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">Profile Photograph (Avatar)</h4>
+                          <p className="text-[11px] text-slate-500">Professional portrait photo managed on Cloudinary CDN</p>
+                        </div>
+                      </div>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                          user?.avatar?.url
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            : "bg-slate-50 text-slate-600 border-slate-200"
+                        }`}
+                      >
+                        {user?.avatar?.url ? "Photo Set" : "Default Avatar"}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-4 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                      <div className="h-14 w-14 rounded-2xl overflow-hidden border-2 border-white shadow-xs shrink-0 bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-xl">
+                        {user?.avatar?.url ? (
+                          <img
+                            src={user.avatar.url}
+                            alt={user?.fullName || "Candidate"}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <span>{(user?.fullName || "S").charAt(0).toUpperCase()}</span>
+                        )}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-bold text-slate-800">{user?.fullName || "Student Profile"}</p>
+                        <p className="text-[11px] text-slate-500 truncate">
+                          {user?.avatar?.url ? "Hosted on Cloudinary Image Cloud" : "No custom photograph uploaded"}
+                        </p>
+                      </div>
+
+                      {user?.avatar?.url && (
+                        <button
+                          type="button"
+                          onClick={handleDeleteAvatar}
+                          disabled={uploadingAvatar}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-rose-600 hover:bg-rose-50 border border-rose-200 text-xs font-bold transition disabled:opacity-50 cursor-pointer"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          <span>Remove</span>
+                        </button>
+                      )}
+                    </div>
+
+                    <form onSubmit={handleUploadAvatar} className="flex flex-wrap items-center gap-3 pt-2">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => setAvatarFile(e.target.files[0])}
+                        className="text-xs text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"
+                      />
+                      <button
+                        type="submit"
+                        disabled={uploadingAvatar || !avatarFile}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-purple-600 px-4 py-2 text-xs font-bold text-white hover:bg-purple-700 transition disabled:opacity-50 cursor-pointer shadow-xs"
+                      >
+                        <Upload className="h-3.5 w-3.5" />
+                        <span>{uploadingAvatar ? "Uploading Photo..." : user?.avatar?.url ? "Update Photo" : "Upload Photo"}</span>
                       </button>
                     </form>
                   </div>
@@ -1704,6 +1975,29 @@ export default function ProfileDrawer({
           </div>
         </div>
       )}
+      {/* Institutional Profile Lock Confirmation Modal */}
+      <ProfileLockConfirmationModal
+        isOpen={isLockModalOpen}
+        onClose={() => setIsLockModalOpen(false)}
+        onConfirmLock={handleConfirmLock}
+        formData={formData}
+        studentProfile={studentProfile}
+        user={user}
+        saving={saving}
+      />
+
+      {/* Student TPO Modification Permission Modal */}
+      <ProfileModificationModal
+        isOpen={isModModalOpen}
+        onClose={() => setIsModModalOpen(false)}
+        studentProfile={studentProfile}
+        user={user}
+        onRequestSubmitted={(updatedProfile) => {
+          if (onProfileUpdated && updatedProfile) {
+            onProfileUpdated(updatedProfile);
+          }
+        }}
+      />
     </div>
   );
 }
