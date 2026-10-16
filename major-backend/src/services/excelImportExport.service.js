@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import mongoose from "mongoose";
 import { User } from "../models/user.models.js";
 import { StudentProfile } from "../models/studentProfile.model.js";
 import { PlacementSession } from "../models/placementSession.model.js";
@@ -79,6 +80,19 @@ export const generateImportTemplate = async (importType) => {
     workbook.creator = "CampusFlow Placement Management";
     workbook.created = new Date();
 
+    // Query existing students if connected to MongoDB so template reflects stored students
+    let existingStudents = [];
+    if (mongoose.connection && mongoose.connection.readyState === 1) {
+        try {
+            existingStudents = await StudentProfile.find()
+                .populate("user", "fullName email phone")
+                .populate("placementSession", "sessionYear name")
+                .lean();
+        } catch {
+            existingStudents = [];
+        }
+    }
+
     if (importType === "student_records") {
         const sheet = workbook.addWorksheet("Student Records");
         sheet.columns = [
@@ -95,6 +109,26 @@ export const generateImportTemplate = async (importType) => {
             { header: "Gender", key: "gender", width: 14 }
         ];
         styleHeaderRow(sheet.getRow(1), "1E3A8A");
+
+        // Prepopulate stored students if available in DB
+        if (existingStudents.length > 0) {
+            existingStudents.forEach((s) => {
+                const row = sheet.addRow({
+                    usn: s.enrollmentNumber || s.usn || "",
+                    fullName: s.user?.fullName || s.fullName || "",
+                    email: s.user?.email || s.collegeEmail || "",
+                    phone: s.user?.phone || s.alternatePhone || "",
+                    course: s.course || "B.E.",
+                    department: s.department || s.branch || "",
+                    programCode: s.programCode || "",
+                    admissionYear: s.admissionYear || (s.graduationYear ? s.graduationYear - 4 : 2022),
+                    graduationYear: s.graduationYear || s.placementSession?.sessionYear || 2026,
+                    semester: s.semester || s.currentSemester || "",
+                    gender: s.gender || ""
+                });
+                styleDataRow(row, false);
+            });
+        }
 
         // Add Instructions Sheet
         const infoSheet = workbook.addWorksheet("Instructions & Guide");
@@ -150,6 +184,38 @@ export const generateImportTemplate = async (importType) => {
         ];
         styleHeaderRow(sheet.getRow(1), "047857");
 
+        // Prepopulate stored students if available in DB
+        if (existingStudents.length > 0) {
+            existingStudents.forEach((s) => {
+                const row = sheet.addRow({
+                    usn: s.enrollmentNumber || s.usn || "",
+                    cgpa: s.verifiedCGPA ?? s.cgpa ?? "",
+                    sem1: s.semesterWiseSGPA?.sem1 ?? (s.semesterWiseSGPA?.get ? s.semesterWiseSGPA.get("sem1") : ""),
+                    sem2: s.semesterWiseSGPA?.sem2 ?? (s.semesterWiseSGPA?.get ? s.semesterWiseSGPA.get("sem2") : ""),
+                    sem3: s.semesterWiseSGPA?.sem3 ?? (s.semesterWiseSGPA?.get ? s.semesterWiseSGPA.get("sem3") : ""),
+                    sem4: s.semesterWiseSGPA?.sem4 ?? (s.semesterWiseSGPA?.get ? s.semesterWiseSGPA.get("sem4") : ""),
+                    sem5: s.semesterWiseSGPA?.sem5 ?? (s.semesterWiseSGPA?.get ? s.semesterWiseSGPA.get("sem5") : ""),
+                    sem6: s.semesterWiseSGPA?.sem6 ?? (s.semesterWiseSGPA?.get ? s.semesterWiseSGPA.get("sem6") : ""),
+                    sem7: s.semesterWiseSGPA?.sem7 ?? (s.semesterWiseSGPA?.get ? s.semesterWiseSGPA.get("sem7") : ""),
+                    sem8: s.semesterWiseSGPA?.sem8 ?? (s.semesterWiseSGPA?.get ? s.semesterWiseSGPA.get("sem8") : ""),
+                    activeBacklogs: s.activeBacklogs ?? s.backlogs ?? 0,
+                    clearedBacklogs: s.clearedBacklogs ?? 0,
+                    tenthBoard: s.tenthDetails?.board || "",
+                    tenthSchool: s.tenthDetails?.schoolName || "",
+                    tenthYear: s.tenthDetails?.passingYear || "",
+                    tenthPct: s.tenthDetails?.percentage ?? s.tenthPercentage ?? "",
+                    twelfthType: s.twelfthOrDiplomaDetails?.qualificationType || "12th",
+                    twelfthInst: s.twelfthOrDiplomaDetails?.institutionName || "",
+                    twelfthYear: s.twelfthOrDiplomaDetails?.passingYear || "",
+                    twelfthPct: s.twelfthOrDiplomaDetails?.percentage ?? s.twelfthPercentage ?? "",
+                    hasGap: s.educationGap?.hasGap ? "YES" : "NO",
+                    gapReason: s.educationGap?.gapReason || "",
+                    gapDuration: s.educationGap?.gapDurationMonths || ""
+                });
+                styleDataRow(row, false);
+            });
+        }
+
         const infoSheet = workbook.addWorksheet("Instructions & Guide");
         infoSheet.columns = [
             { header: "Field Name", key: "field", width: 22 },
@@ -189,6 +255,25 @@ export const generateImportTemplate = async (importType) => {
             { header: "Remarks", key: "remarks", width: 24 }
         ];
         styleHeaderRow(sheet.getRow(1), "6B21A8");
+
+        // Prepopulate stored students if available in DB
+        if (existingStudents.length > 0) {
+            existingStudents.forEach((s) => {
+                const row = sheet.addRow({
+                    usn: s.enrollmentNumber || s.usn || "",
+                    sessionYear: s.placementSession?.sessionYear || s.graduationYear || 2026,
+                    companyName: s.placedCompany || "",
+                    jobTitle: s.placedJobTitle || "",
+                    jobType: "full-time",
+                    package: s.placedPackage || "",
+                    status: s.isPlaced ? "offer_accepted" : "applied",
+                    offerDate: s.placedAt ? new Date(s.placedAt).toISOString().slice(0, 10) : "",
+                    round: "",
+                    remarks: s.isPlaced ? "Placed via campus drive" : ""
+                });
+                styleDataRow(row, false);
+            });
+        }
 
         const infoSheet = workbook.addWorksheet("Instructions & Guide");
         infoSheet.columns = [

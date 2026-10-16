@@ -90,18 +90,18 @@ export default function AdminOverview({
   return (
     <div className="space-y-6">
       {/* Top Banner with Quick Actions */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 sm:p-8 text-white shadow-xl border border-slate-800">
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-950 via-red-950/70 to-slate-900 p-6 sm:p-8 text-white shadow-xl border border-amber-900/30">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-indigo-500/20 px-3 py-1 text-xs font-semibold text-indigo-300 border border-indigo-500/30">
-              <Sparkles className="h-3.5 w-3.5" />
-              TPO Administrative Command
+            <div className="inline-flex items-center gap-2 rounded-full bg-amber-500/20 px-3 py-1 text-xs font-bold text-amber-300 border border-amber-500/30">
+              <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+              JSSATEB • TPO Administrative Command
             </div>
             <h2 className="mt-3 text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Placement Overview
+              Placement Overview & Recruitment Hub
             </h2>
             <p className="mt-1.5 text-xs sm:text-sm text-slate-300 max-w-xl">
-              Track recruitment metrics, publish new corporate drives, evaluate applicant qualifications, and approve final student job offers.
+              JSS Academy of Technical Education, Bengaluru — Track recruitment metrics, publish corporate drives, evaluate applicant qualifications, and approve student job offers.
             </p>
           </div>
 

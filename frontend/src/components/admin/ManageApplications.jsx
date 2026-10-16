@@ -18,6 +18,8 @@ import {
   Download,
   MessageSquare,
   Eye,
+  Layers,
+  FolderDown,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { getResumeViewUrl } from "../../utils/resumeHelper";
@@ -41,6 +43,8 @@ export default function ManageApplications({
   const [offeredPackage, setOfferedPackage] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [selectedStudentForDetail, setSelectedStudentForDetail] = useState(null);
+  const [viewMode, setViewMode] = useState("company"); // "company" | "list"
+  const [isCompanyExportModalOpen, setIsCompanyExportModalOpen] = useState(false);
 
   // Applications filtered only by Drive (used for calculating tab counts and exporting)
   const driveApplications = useMemo(() => {
@@ -66,6 +70,8 @@ export default function ManageApplications({
     driveApplications.forEach((app) => {
       if (counts[app.status] !== undefined) {
         counts[app.status]++;
+      } else if (app.status === "offer_received" || app.status === "offer_accepted") {
+        counts.selected++;
       }
     });
     return counts;
@@ -75,8 +81,14 @@ export default function ManageApplications({
   const filteredApplications = useMemo(() => {
     return driveApplications.filter((app) => {
       // Filter by Status
-      if (statusFilter !== "all" && app.status !== statusFilter) {
-        return false;
+      if (statusFilter !== "all") {
+        if (statusFilter === "selected") {
+          if (!["selected", "offer_received", "offer_accepted"].includes(app.status)) {
+            return false;
+          }
+        } else if (app.status !== statusFilter) {
+          return false;
+        }
       }
 
       // Search query
@@ -97,24 +109,68 @@ export default function ManageApplications({
     });
   }, [driveApplications, statusFilter, searchTerm]);
 
-  // Excel / CSV Export handler for Shortlisted and other statuses
-  const handleExportExcel = (targetStatus = "shortlisted") => {
-    let targetApps = driveApplications;
+  // Group applications by Company & Placement Drive
+  const applicationsByCompany = useMemo(() => {
+    const map = {};
+    filteredApplications.forEach((app) => {
+      const drive = app.placementDrive || {};
+      const driveId = drive._id || "general";
+      const compName =
+        (typeof drive.company === "object" ? drive.company?.companyName : drive.companyName) ||
+        "Corporate Recruiter";
+      const key = `${compName}_${driveId}`;
+      if (!map[key]) {
+        map[key] = {
+          driveId,
+          companyName: compName,
+          jobTitle: drive.jobTitle || "Role",
+          package: drive.package,
+          location: drive.location,
+          drive,
+          applications: [],
+          counts: {
+            all: 0,
+            applied: 0,
+            shortlisted: 0,
+            interview: 0,
+            selected: 0,
+            rejected: 0,
+          },
+        };
+      }
+      map[key].applications.push(app);
+      map[key].counts.all++;
+      const s = app.status;
+      if (s in map[key].counts) {
+        map[key].counts[s]++;
+      } else if (s === "offer_received" || s === "offer_accepted") {
+        map[key].counts.selected++;
+      }
+    });
+    return Object.values(map).sort((a, b) => a.companyName.localeCompare(b.companyName));
+  }, [filteredApplications]);
+
+  // Reusable CSV/Excel Exporter for any list of candidate applications
+  const exportApplicationsToCsv = (appsToExport, label, targetStatus = "all") => {
+    let targetApps = appsToExport;
     if (targetStatus !== "all") {
-      targetApps = targetApps.filter((a) => a.status === targetStatus);
+      targetApps = targetApps.filter((a) => {
+        if (targetStatus === "selected") {
+          return ["selected", "offer_received", "offer_accepted"].includes(a.status);
+        }
+        return a.status === targetStatus;
+      });
     }
 
     if (targetApps.length === 0) {
-      toast.error(
-        `No ${targetStatus === "all" ? "" : targetStatus} candidates found for the selected drive.`
-      );
-      return;
+      toast.error(`No ${targetStatus === "all" ? "" : targetStatus} candidates found for ${label}.`);
+      return false;
     }
 
     const headers = [
       "S.No",
       "Student Name",
-      "Enrollment ID",
+      "Enrollment ID / USN",
       "Email Address",
       "Phone Number",
       "Branch",
@@ -125,7 +181,7 @@ export default function ManageApplications({
       "10th Score (%)",
       "12th Score (%)",
       "Technical Skills",
-      "Placement Drive (Company)",
+      "Company Name",
       "Job Title",
       "Drive Package (LPA)",
       "Application Status",
@@ -201,11 +257,74 @@ export default function ManageApplications({
       ].join(",");
     });
 
-    // UTF-8 BOM (\uFEFF) ensures Excel opens multilingual and UTF-8 content directly
     const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\r\n");
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
+
+    const cleanLabel = (label || "Company").replace(/[^a-zA-Z0-9_-]/g, "_");
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const filename = `${targetStatus.toUpperCase()}_Candidates_${cleanLabel}_${dateStr}.csv`;
+
+    link.setAttribute("href", url);
+    link.setAttribute("download", filename);
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(() => {
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }, 200);
+
+    toast.success(`Exported ${targetApps.length} candidates (${cleanLabel}) to Excel!`);
+    return true;
+  };
+
+  // Export specific company
+  const handleExportCompanyExcel = (companyGroup, targetStatus = "all") => {
+    exportApplicationsToCsv(
+      companyGroup.applications,
+      `${companyGroup.companyName}_${companyGroup.jobTitle}`,
+      targetStatus
+    );
+  };
+
+  // Export All Companies as Separate Files (One file per company)
+  const handleExportAllCompaniesSeparate = async (targetStatus = "all") => {
+    if (applicationsByCompany.length === 0) {
+      toast.error("No company applications to export.");
+      return;
+    }
+
+    let count = 0;
+    for (const group of applicationsByCompany) {
+      let apps = group.applications;
+      if (targetStatus !== "all") {
+        apps = apps.filter((a) => {
+          if (targetStatus === "selected") return ["selected", "offer_received", "offer_accepted"].includes(a.status);
+          return a.status === targetStatus;
+        });
+      }
+      if (apps.length > 0) {
+        exportApplicationsToCsv(apps, `${group.companyName}_${group.jobTitle}`, targetStatus);
+        count++;
+        // Small delay so browser handles multiple downloads cleanly
+        await new Promise((r) => setTimeout(r, 250));
+      }
+    }
+    if (count > 0) {
+      toast.success(`Downloaded ${count} separate company Excel files!`);
+    } else {
+      toast.error(`No ${targetStatus} candidates found across companies.`);
+    }
+  };
+
+  // Excel / CSV Export handler for Shortlisted and other statuses
+  const handleExportExcel = (targetStatus = "shortlisted") => {
+    if (selectedDriveId === "all") {
+      // When all drives are selected, open the Company Export Hub so user gets clean company-wise exports
+      setIsCompanyExportModalOpen(true);
+      return;
+    }
 
     const selectedDriveObj = drives.find((d) => d._id === selectedDriveId);
     const driveName = selectedDriveObj
@@ -214,20 +333,10 @@ export default function ManageApplications({
           selectedDriveObj.companyName ||
           selectedDriveObj.jobTitle ||
           "Drive"
-        ).replace(/[^a-zA-Z0-9_-]/g, "_")
-      : "All_Drives";
+        )
+      : "Selected_Drive";
 
-    const dateStr = new Date().toISOString().slice(0, 10);
-    const filename = `${targetStatus.toUpperCase()}_Students_${driveName}_${dateStr}.csv`;
-
-    link.setAttribute("href", url);
-    link.setAttribute("download", filename);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-
-    toast.success(`Exported ${targetApps.length} students to Excel sheet!`);
+    exportApplicationsToCsv(driveApplications, driveName, targetStatus);
   };
 
   const handleOpenStatusModal = (app, presetStatus = null) => {
@@ -260,7 +369,7 @@ export default function ManageApplications({
         if (interviewRound) extraDetails.interviewRound = interviewRound;
         if (interviewLocation) extraDetails.interviewLocation = interviewLocation;
       }
-      if (newStatus === "selected") {
+      if (newStatus === "selected" || newStatus === "offer_received") {
         if (offeredPackage) extraDetails.offeredPackage = Number(offeredPackage);
       }
 
@@ -300,6 +409,24 @@ export default function ManageApplications({
           icon: CheckCircle2,
           classes: "bg-emerald-50 text-emerald-700 border-emerald-200",
         };
+      case "offer_received":
+        return {
+          label: "Offer Extended",
+          icon: CheckCircle2,
+          classes: "bg-emerald-50 text-emerald-700 border-emerald-200",
+        };
+      case "offer_accepted":
+        return {
+          label: "Placed (Offer Accepted)",
+          icon: CheckCircle2,
+          classes: "bg-emerald-100 text-emerald-800 border-emerald-300 font-bold",
+        };
+      case "offer_declined":
+        return {
+          label: "Offer Declined by Student",
+          icon: XCircle,
+          classes: "bg-amber-50 text-amber-800 border-amber-300",
+        };
       case "rejected":
         return {
           label: "Rejected",
@@ -330,9 +457,194 @@ export default function ManageApplications({
     { id: "rejected", label: "Rejected", count: countsByStatus.rejected },
   ];
 
+  // Helper to render an individual applicant card
+  const renderApplicantCard = (app) => {
+    const student = app.student || {};
+    const user = student.user || {};
+    const studentName = user.fullName || student.fullName || "Candidate";
+    const studentEmail = user.email || student.email || "student@campus.edu";
+    const enrollmentNo = student.enrollmentNumber || "Not assigned";
+    const branch = student.branch || student.department || "Program not provided";
+    const cgpa = student.cgpa ?? "8.2";
+    const backlogs = student.backlogs ?? student.activeBacklogs ?? 0;
+    const rawResumeUrl = student.resume?.url || student.resumeUrl;
+    const resumeUrl = getResumeViewUrl(rawResumeUrl);
+
+    const drive = app.placementDrive || {};
+    const driveCompName =
+      typeof drive.company === "object" ? drive.company?.companyName : drive.companyName || "Partner";
+    const driveTitle = drive.jobTitle || "Engineering Role";
+    const drivePackage = drive.package ? `₹${drive.package} LPA` : "";
+
+    const statusObj = getStatusBadge(app.status);
+    const StatusIcon = statusObj.icon;
+
+    const appliedDate = app.appliedAt
+      ? new Date(app.appliedAt).toLocaleDateString("en-IN", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        })
+      : "Recent";
+
+    return (
+      <div
+        key={app._id}
+        className="group flex flex-col justify-between gap-3 rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-xs transition hover:border-slate-300 hover:shadow-md"
+      >
+        {/* Main Card Content Row */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          {/* Left: Student Identity & Academic Profile (Clickable for full dossier) */}
+          <div
+            onClick={() => setSelectedStudentForDetail(student)}
+            className="flex items-start sm:items-center gap-3.5 min-w-0 cursor-pointer group/stud"
+            title="Click to view complete student profile dossier"
+          >
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-amber-500 to-orange-500 text-white font-bold text-lg shadow-xs group-hover/stud:scale-105 transition-transform">
+              {studentName.charAt(0).toUpperCase()}
+            </div>
+
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h4 className="text-sm sm:text-base font-bold text-slate-900 truncate group-hover/stud:text-amber-700 transition-colors">
+                  {studentName}
+                </h4>
+                <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-mono font-semibold text-slate-600">
+                  {enrollmentNo}
+                </span>
+                <span className="text-[10px] text-blue-600 font-bold opacity-0 group-hover/stud:opacity-100 transition-opacity flex items-center gap-0.5">
+                  <Eye className="h-3 w-3" />
+                  <span>View Details</span>
+                </span>
+              </div>
+
+              <p className="text-xs text-slate-400 truncate mt-0.5">
+                {studentEmail}
+              </p>
+
+              <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                <span className="font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">
+                  {branch}
+                </span>
+                <span>•</span>
+                <span>CGPA: <strong className="text-slate-900">{cgpa}</strong></span>
+                <span>•</span>
+                <span>Backlogs: <strong className="text-slate-900">{backlogs}</strong></span>
+              </div>
+            </div>
+          </div>
+
+          {/* Middle: Applied Drive Details & Status */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-100">
+            <div className="text-left sm:text-right">
+              <div className="flex items-center sm:justify-end gap-1.5 text-xs font-bold text-slate-800">
+                <Building2 className="h-3.5 w-3.5 text-slate-400" />
+                <span>{driveCompName}</span>
+              </div>
+              <p className="text-xs text-slate-500">{driveTitle} {drivePackage ? `(${drivePackage})` : ""}</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">Applied: {appliedDate}</p>
+            </div>
+
+            {/* Status Badge */}
+            <div className="flex flex-col items-start sm:items-end gap-1.5 shrink-0">
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold border ${statusObj.classes}`}
+              >
+                <StatusIcon className="h-3.5 w-3.5" />
+                <span>{statusObj.label}</span>
+              </span>
+
+              {app.status === "interview" && app.interviewDate && (
+                <div className="flex items-center gap-1 text-[11px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
+                  <Calendar className="h-3 w-3" />
+                  <span>
+                    {app.interviewRound || "Interview"}:{" "}
+                    {new Date(app.interviewDate).toLocaleDateString("en-IN", {
+                      month: "short",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </div>
+              )}
+
+              {app.status === "selected" && (app.offeredPackage || drive.package) && (
+                <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                  <DollarSign className="h-3 w-3" />
+                  <span>Offered: ₹{app.offeredPackage || drive.package} LPA</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right: Actions */}
+          <div className="flex items-center gap-2 border-t md:border-t-0 pt-3 md:pt-0 border-slate-100 shrink-0">
+            {/* View Profile Action */}
+            <button
+              onClick={() => setSelectedStudentForDetail(student)}
+              className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 px-2.5 py-1.5 text-xs font-semibold transition"
+              title="View complete student details"
+            >
+              <Eye className="h-3.5 w-3.5 text-slate-500" />
+              <span className="hidden sm:inline">Profile</span>
+            </button>
+
+            {/* Resume Link */}
+            {resumeUrl ? (
+              <a
+                href={resumeUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition"
+                title="View Student Resume"
+              >
+                <FileText className="h-3.5 w-3.5 text-slate-500" />
+                <span className="hidden sm:inline">Resume</span>
+                <ExternalLink className="h-3 w-3 text-slate-400" />
+              </a>
+            ) : (
+              <button
+                disabled
+                className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-400 opacity-60 cursor-not-allowed"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">No Resume</span>
+              </button>
+            )}
+
+            {/* Quick Action: Change Status Modal */}
+            <button
+              onClick={() => handleOpenStatusModal(app)}
+              className="flex items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-800 transition active:scale-95"
+            >
+              <Edit3 className="h-3.5 w-3.5" />
+              <span>Update Status</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Prominent, Full-Width Message Box from Admin */}
+        {app.remarks && (
+          <div className="w-full mt-2 pt-3 border-t border-slate-100 flex items-start gap-2.5 bg-amber-50/70 rounded-xl p-3 border border-amber-200/80">
+            <MessageSquare className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
+            <div className="min-w-0 flex-1">
+              <span className="text-[11px] font-bold text-amber-900 uppercase tracking-wide">
+                Admin Note & Instructions for Candidate:
+              </span>
+              <p className="text-xs sm:text-sm text-slate-800 font-medium whitespace-pre-wrap leading-relaxed mt-0.5">
+                {app.remarks}
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
-      {/* Header Bar with Quick Export Actions */}
+      {/* Header Bar with Quick Export Actions & View Mode Toggle */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/90 shadow-xs">
         <div>
           <div className="flex items-center gap-2.5">
@@ -344,16 +656,29 @@ export default function ManageApplications({
             </span>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Review student applications, verify resumes, advance candidates, and export shortlisted candidate sheets.
+            Review student applications by company, verify resumes, advance candidates, and export separated company-wise Excel sheets.
           </p>
         </div>
 
         {/* Excel / CSV Export Actions */}
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Company-Wise Export Hub Modal Trigger */}
+          <button
+            onClick={() => setIsCompanyExportModalOpen(true)}
+            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2.5 text-xs font-bold shadow-xs transition active:scale-95"
+            title="Export candidates organized separately company by company"
+          >
+            <FolderDown className="h-4 w-4" />
+            <span>Export by Company</span>
+            <span className="rounded-full bg-indigo-500 text-white px-1.5 py-0.2 text-[10px] font-extrabold border border-indigo-400">
+              {applicationsByCompany.length}
+            </span>
+          </button>
+
           <button
             onClick={() => handleExportExcel("shortlisted")}
             className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 text-xs font-bold shadow-xs transition active:scale-95"
-            title="Download formatted Excel sheet of all shortlisted students"
+            title="Download formatted Excel sheet of shortlisted students"
           >
             <FileSpreadsheet className="h-4 w-4" />
             <span>Export Shortlisted (Excel)</span>
@@ -377,15 +702,15 @@ export default function ManageApplications({
 
       {/* Filter and Control Bar */}
       <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-xs">
-        {/* Placement Drive Selector */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Placement Drive Selector & View Mode Switcher */}
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
           <label className="text-xs font-bold text-slate-600 shrink-0 hidden sm:inline-block">
             Filter by Drive:
           </label>
           <select
             value={selectedDriveId}
             onChange={(e) => onSelectDrive(e.target.value)}
-            className="w-full sm:w-64 rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-semibold text-slate-700 focus:bg-white focus:border-amber-500 focus:outline-none"
+            className="w-full sm:w-60 rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-semibold text-slate-700 focus:bg-white focus:border-amber-500 focus:outline-none"
           >
             <option value="all">All Placement Drives ({applications.length})</option>
             {drives.map((d) => {
@@ -398,6 +723,34 @@ export default function ManageApplications({
               );
             })}
           </select>
+
+          {/* View Mode Switcher */}
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+            <button
+              onClick={() => setViewMode("company")}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg transition ${
+                viewMode === "company"
+                  ? "bg-white text-indigo-700 shadow-xs font-extrabold"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+              title="Organize applicants grouped under each company"
+            >
+              <Building2 className="h-3.5 w-3.5" />
+              <span>Company View</span>
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg transition ${
+                viewMode === "list"
+                  ? "bg-white text-slate-900 shadow-xs font-extrabold"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+              title="View all applicants in a flat list"
+            >
+              <Layers className="h-3.5 w-3.5" />
+              <span>List View</span>
+            </button>
+          </div>
         </div>
 
         {/* Search Field */}
@@ -443,7 +796,7 @@ export default function ManageApplications({
         </div>
       </div>
 
-      {/* Applications List */}
+      {/* Applications Display (Company-Wise Grouped or Flat List) */}
       {filteredApplications.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-12 text-center">
           <FileCheck2 className="mx-auto h-12 w-12 text-slate-300" />
@@ -456,191 +809,101 @@ export default function ManageApplications({
               : "Try choosing a different placement drive or clearing your search filters."}
           </p>
         </div>
-      ) : (
-        <div className="space-y-3.5">
-          {filteredApplications.map((app) => {
-            const student = app.student || {};
-            const user = student.user || {};
-            const studentName = user.fullName || student.fullName || "Candidate";
-            const studentEmail = user.email || student.email || "student@campus.edu";
-            const enrollmentNo = student.enrollmentNumber || "Not assigned";
-            const branch = student.branch || student.department || "Program not provided";
-            const cgpa = student.cgpa ?? "8.2";
-            const backlogs = student.backlogs ?? student.activeBacklogs ?? 0;
-            const rawResumeUrl = student.resume?.url || student.resumeUrl;
-            const resumeUrl = getResumeViewUrl(rawResumeUrl);
-
-            const drive = app.placementDrive || {};
-            const driveCompName =
-              typeof drive.company === "object" ? drive.company?.companyName : drive.companyName || "Partner";
-            const driveTitle = drive.jobTitle || "Engineering Role";
-            const drivePackage = drive.package ? `₹${drive.package} LPA` : "";
-
-            const statusObj = getStatusBadge(app.status);
-            const StatusIcon = statusObj.icon;
-
-            const appliedDate = app.appliedAt
-              ? new Date(app.appliedAt).toLocaleDateString("en-IN", {
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
-                })
-              : "Recent";
-
+      ) : viewMode === "company" ? (
+        /* Company-Wise Organized View */
+        <div className="space-y-6">
+          {applicationsByCompany.map((group) => {
             return (
               <div
-                key={app._id}
-                className="group flex flex-col justify-between gap-3 rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-xs transition hover:border-slate-300 hover:shadow-md"
+                key={group.key}
+                className="rounded-2xl border border-slate-200/90 bg-white shadow-xs overflow-hidden"
               >
-                {/* Main Card Content Row */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  {/* Left: Student Identity & Academic Profile (Clickable for full dossier) */}
-                  <div
-                    onClick={() => setSelectedStudentForDetail(student)}
-                    className="flex items-start sm:items-center gap-3.5 min-w-0 cursor-pointer group/stud"
-                    title="Click to view complete student profile dossier"
-                  >
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-amber-500 to-orange-500 text-white font-bold text-lg shadow-xs group-hover/stud:scale-105 transition-transform">
-                      {studentName.charAt(0).toUpperCase()}
+                {/* Company Group Header with Company Details & Dedicated Company Export */}
+                <div className="bg-gradient-to-r from-slate-50 via-slate-50/80 to-white p-4 sm:p-5 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex items-start sm:items-center gap-3.5">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white font-black text-lg shadow-xs">
+                      {group.companyName.charAt(0).toUpperCase()}
                     </div>
-
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h4 className="text-sm sm:text-base font-bold text-slate-900 truncate group-hover/stud:text-amber-700 transition-colors">
-                          {studentName}
-                        </h4>
-                        <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-mono font-semibold text-slate-600">
-                          {enrollmentNo}
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-base font-extrabold text-slate-900">
+                          {group.companyName}
+                        </h3>
+                        <span className="rounded-md bg-slate-200/70 px-2 py-0.5 text-xs font-semibold text-slate-700">
+                          {group.jobTitle}
                         </span>
-                        <span className="text-[10px] text-blue-600 font-bold opacity-0 group-hover/stud:opacity-100 transition-opacity flex items-center gap-0.5">
-                          <Eye className="h-3 w-3" />
-                          <span>View Details</span>
-                        </span>
-                      </div>
-
-                      <p className="text-xs text-slate-400 truncate mt-0.5">
-                        {studentEmail}
-                      </p>
-
-                      <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                        <span className="font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">
-                          {branch}
-                        </span>
-                        <span>•</span>
-                        <span>CGPA: <strong className="text-slate-900">{cgpa}</strong></span>
-                        <span>•</span>
-                        <span>Backlogs: <strong className="text-slate-900">{backlogs}</strong></span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Middle: Applied Drive Details & Status */}
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-4 border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-100">
-                    <div className="text-left sm:text-right">
-                      <div className="flex items-center sm:justify-end gap-1.5 text-xs font-bold text-slate-800">
-                        <Building2 className="h-3.5 w-3.5 text-slate-400" />
-                        <span>{driveCompName}</span>
-                      </div>
-                      <p className="text-xs text-slate-500">{driveTitle} {drivePackage ? `(${drivePackage})` : ""}</p>
-                      <p className="text-[11px] text-slate-400 mt-0.5">Applied: {appliedDate}</p>
-                    </div>
-
-                    {/* Status Badge */}
-                    <div className="flex flex-col items-start sm:items-end gap-1.5 shrink-0">
-                      <span
-                        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold border ${statusObj.classes}`}
-                      >
-                        <StatusIcon className="h-3.5 w-3.5" />
-                        <span>{statusObj.label}</span>
-                      </span>
-
-                      {app.status === "interview" && app.interviewDate && (
-                        <div className="flex items-center gap-1 text-[11px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
-                          <Calendar className="h-3 w-3" />
-                          <span>
-                            {app.interviewRound || "Interview"}:{" "}
-                            {new Date(app.interviewDate).toLocaleDateString("en-IN", {
-                              month: "short",
-                              day: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
+                        {group.package && (
+                          <span className="rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-xs font-bold text-emerald-800">
+                            ₹{group.package} LPA
                           </span>
-                        </div>
-                      )}
+                        )}
+                        {group.location && (
+                          <span className="text-xs text-slate-500">
+                            📍 {group.location}
+                          </span>
+                        )}
+                      </div>
 
-                      {app.status === "selected" && (app.offeredPackage || drive.package) && (
-                        <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                          <DollarSign className="h-3 w-3" />
-                          <span>Offered: ₹{app.offeredPackage || drive.package} LPA</span>
-                        </div>
-                      )}
+                      {/* Status Breakdown for this Company */}
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                        <span className="font-bold text-slate-800">
+                          Total: {group.counts.all}
+                        </span>
+                        <span>•</span>
+                        <span className="text-blue-700 font-semibold">
+                          Shortlisted: {group.counts.shortlisted}
+                        </span>
+                        <span>•</span>
+                        <span className="text-purple-700 font-semibold">
+                          Interview: {group.counts.interview}
+                        </span>
+                        <span>•</span>
+                        <span className="text-emerald-700 font-semibold">
+                          Selected: {group.counts.selected}
+                        </span>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Right: Actions */}
-                  <div className="flex items-center gap-2 border-t md:border-t-0 pt-3 md:pt-0 border-slate-100 shrink-0">
-                    {/* View Profile Action */}
+                  {/* Company Specific Export Buttons */}
+                  <div className="flex items-center gap-2 flex-wrap shrink-0">
                     <button
-                      onClick={() => setSelectedStudentForDetail(student)}
-                      className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 px-2.5 py-1.5 text-xs font-semibold transition"
-                      title="View complete student details"
+                      onClick={() => handleExportCompanyExcel(group, "shortlisted")}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 text-xs font-bold shadow-xs transition active:scale-95"
+                      title={`Export shortlisted candidates for ${group.companyName}`}
                     >
-                      <Eye className="h-3.5 w-3.5 text-slate-500" />
-                      <span className="hidden sm:inline">Profile</span>
+                      <FileSpreadsheet className="h-3.5 w-3.5" />
+                      <span>Export Shortlisted</span>
+                      {group.counts.shortlisted > 0 && (
+                        <span className="rounded-full bg-emerald-500 px-1.5 py-0.2 text-[10px] font-extrabold">
+                          {group.counts.shortlisted}
+                        </span>
+                      )}
                     </button>
 
-                    {/* Resume Link */}
-                    {resumeUrl ? (
-                      <a
-                        href={resumeUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition"
-                        title="View Student Resume"
-                      >
-                        <FileText className="h-3.5 w-3.5 text-slate-500" />
-                        <span className="hidden sm:inline">Resume</span>
-                        <ExternalLink className="h-3 w-3 text-slate-400" />
-                      </a>
-                    ) : (
-                      <button
-                        disabled
-                        className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-400 opacity-60 cursor-not-allowed"
-                      >
-                        <FileText className="h-3.5 w-3.5" />
-                        <span className="hidden sm:inline">No Resume</span>
-                      </button>
-                    )}
-
-                    {/* Quick Action: Change Status Modal */}
                     <button
-                      onClick={() => handleOpenStatusModal(app)}
-                      className="flex items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-800 transition active:scale-95"
+                      onClick={() => handleExportCompanyExcel(group, "all")}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 px-3 py-1.5 text-xs font-semibold shadow-xs transition active:scale-95"
+                      title={`Export all registered applicant details for ${group.companyName}`}
                     >
-                      <Edit3 className="h-3.5 w-3.5" />
-                      <span>Update Status</span>
+                      <Download className="h-3.5 w-3.5 text-slate-500" />
+                      <span>Export All ({group.counts.all})</span>
                     </button>
                   </div>
                 </div>
 
-                {/* Prominent, Full-Width Message Box from Admin */}
-                {app.remarks && (
-                  <div className="w-full mt-2 pt-3 border-t border-slate-100 flex items-start gap-2.5 bg-amber-50/70 rounded-xl p-3 border border-amber-200/80">
-                    <MessageSquare className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
-                    <div className="min-w-0 flex-1">
-                      <span className="text-[11px] font-bold text-amber-900 uppercase tracking-wide">
-                        Admin Note & Instructions for Candidate:
-                      </span>
-                      <p className="text-xs sm:text-sm text-slate-800 font-medium whitespace-pre-wrap leading-relaxed mt-0.5">
-                        {app.remarks}
-                      </p>
-                    </div>
-                  </div>
-                )}
+                {/* Company Applicants List */}
+                <div className="p-4 sm:p-5 space-y-3 bg-slate-50/30">
+                  {group.applications.map(renderApplicantCard)}
+                </div>
               </div>
             );
           })}
+        </div>
+      ) : (
+        /* Flat List View */
+        <div className="space-y-3.5">
+          {filteredApplications.map(renderApplicantCard)}
         </div>
       )}
 
@@ -753,7 +1016,7 @@ export default function ManageApplications({
               )}
 
               {/* Conditional: Offer CTC Details */}
-              {newStatus === "selected" && (
+              {(newStatus === "selected" || newStatus === "offer_received") && (
                 <div className="p-3.5 bg-emerald-50/60 rounded-2xl border border-emerald-100 space-y-2 animate-in fade-in-50">
                   <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-900">
                     <CheckCircle2 className="h-4 w-4 text-emerald-600" />
@@ -816,6 +1079,145 @@ export default function ManageApplications({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Company-Wise Export Hub Modal */}
+      {isCompanyExportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <div className="w-full max-w-2xl max-h-[90vh] flex flex-col rounded-3xl bg-white shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-150 overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-slate-50/60 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-xs">
+                  <FolderDown className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 tracking-tight">
+                    Company-Wise Candidate Export Hub
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Export candidates cleanly separated company by company (individual Excel/CSV files).
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsCompanyExportModalOpen(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-200/60 hover:text-slate-700 transition"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Quick Bulk Actions */}
+            <div className="p-4 bg-indigo-50/50 border-b border-indigo-100/70 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+              <div>
+                <p className="text-xs font-bold text-indigo-950">
+                  Bulk One-Click Batch Export:
+                </p>
+                <p className="text-[11px] text-indigo-700">
+                  Downloads a separate, isolated Excel/CSV spreadsheet for every single recruiting company.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => handleExportAllCompaniesSeparate("shortlisted")}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 text-xs font-bold shadow-xs transition active:scale-95"
+                >
+                  <FileSpreadsheet className="h-3.5 w-3.5" />
+                  <span>Download All Shortlisted</span>
+                </button>
+                <button
+                  onClick={() => handleExportAllCompaniesSeparate("all")}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-300 bg-white hover:bg-indigo-50 text-indigo-900 px-3 py-1.5 text-xs font-bold shadow-xs transition active:scale-95"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  <span>Download All Applicants</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Companies List */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-3">
+              {applicationsByCompany.length === 0 ? (
+                <div className="py-12 text-center text-slate-400 text-xs">
+                  No company applications found.
+                </div>
+              ) : (
+                applicationsByCompany.map((group) => (
+                  <div
+                    key={group.key}
+                    className="p-3.5 rounded-2xl border border-slate-200 bg-white hover:border-indigo-300 hover:shadow-xs transition flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white font-black text-sm shadow-xs">
+                        {group.companyName.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="text-sm font-bold text-slate-900">
+                            {group.companyName}
+                          </h4>
+                          <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-600">
+                            {group.jobTitle}
+                          </span>
+                          {group.package && (
+                            <span className="text-[11px] font-bold text-emerald-700">
+                              ₹{group.package} LPA
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
+                          <span className="font-semibold text-slate-700">
+                            Total: {group.counts.all}
+                          </span>
+                          <span>•</span>
+                          <span className="text-blue-700 font-semibold">
+                            Shortlisted: {group.counts.shortlisted}
+                          </span>
+                          <span>•</span>
+                          <span className="text-emerald-700 font-semibold">
+                            Selected: {group.counts.selected}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                      <button
+                        onClick={() => handleExportCompanyExcel(group, "shortlisted")}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 px-2.5 py-1.5 text-xs font-bold transition active:scale-95"
+                        title="Download only shortlisted candidates for this company"
+                      >
+                        <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
+                        <span>Shortlisted ({group.counts.shortlisted})</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleExportCompanyExcel(group, "all")}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 px-2.5 py-1.5 text-xs font-semibold transition active:scale-95"
+                        title="Download all registered candidates for this company"
+                      >
+                        <Download className="h-3.5 w-3.5 text-slate-500" />
+                        <span>All ({group.counts.all})</span>
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 bg-slate-50/60 flex items-center justify-between text-xs text-slate-500 shrink-0">
+              <span>{applicationsByCompany.length} recruiting companies configured</span>
+              <button
+                onClick={() => setIsCompanyExportModalOpen(false)}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

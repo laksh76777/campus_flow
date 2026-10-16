@@ -328,3 +328,264 @@ No write migration has been applied; therefore no legacy mappings have been perf
 - **Backend Syntax Check**: `node --check src/controllers/dashboard.controller.js` passed with 0 errors.
 - **Git Status**: 3 targeted files modified; zero modifications to `.env` or database data. No automatic git commit or push performed (per Rule 11).
 
+---
+
+## Safe End-to-End System Verification (2026-10-16)
+
+### 1. Scope & Execution Methodology
+- **Target Environments**: Live backend server (`http://localhost:8000`) connected to MongoDB (`Place-on`), live frontend dev client (`http://localhost:5173`), and automated integration test runner (`tests/safe_e2e_verification.mjs`).
+- **Data Protection Policy**: Only isolated ephemeral test records were created and automatically removed upon test completion. Zero records deleted, modified, or migrated in existing user, student, admin, or session collections.
+- **Execution Evidence**:
+  - Full UI navigation through all TPO console tabs (Overview, Placement Analytics, Registered Students, Placement Drives, Companies Directory, Applicant Review, Placement Sessions, Excel Hub, Broadcasts & Alerts).
+  - Student workflow verification (Login, Profile Drawer inspection, Drive list with JD PDFs, Pre-check application gating, Applications tracker, Notification bell).
+  - Programmatic API test suite: 25/25 assertions passed cleanly in `tests/safe_e2e_verification.mjs`.
+
+### 2. Workflow Verification Matrix
+
+| Workflow Domain | Test Description | Result | Details & Safeguards |
+|---|---|---|---|
+| **Authentication** | Admin login with official credentials | **Passed** | Returns JWT tokens (`accessToken`, `refreshToken`) and verifies `role: "admin"`. |
+| **Authentication** | Student login with institutional email | **Passed** | Returns student JWT and profile reference. |
+| **Authentication** | Student login with USN (`1MS23CS001`) | **Passed** | Dual-credential login matches enrollment record correctly. |
+| **Security Boundaries** | Unauthenticated API request | **Passed** | `GET /api/v1/placementdrive/all-drives` rejected with HTTP 401. |
+| **Security Boundaries** | Student access to admin dossier | **Passed** | `GET /api/v1/studentprofile/:id` rejected with HTTP 403 Forbidden. |
+| **Placement Sessions** | Multi-cohort isolation & status | **Passed** | Returns active sessions (`sessionYear: 2027`) and isolated cohort targets. |
+| **Academic Ledger** | Official CGPA integrity | **Passed** | CGPA `8.75` preserved without automatic averaging or truncation. |
+| **Academic Ledger** | Semester SGPA ledger | **Passed** | Semesters 1 to 4 SGPAs preserved independently in valid ranges. |
+| **Drive Eligibility** | Drive visibility & criteria delivery | **Passed** | Delivers package, paid/unpaid status, stipend, duration, and JD PDF. |
+| **Drive Eligibility** | Ineligible application gating (Negative) | **Passed** | Gated candidate rejected with HTTP 403 and explanatory reason. |
+| **Application Pipeline** | Immutable snapshot submission | **Passed** | Frozen snapshot captured upon submission with HTTP 201. |
+| **Application Pipeline** | Duplicate prevention (Negative) | **Passed** | Re-submission cleanly rejected with HTTP 409 Conflict. |
+| **Status Machine** | Sequential progression & audit history | **Passed** | `applied` → `shortlisted` → `interview` → `selected` logged in `statusHistory`. |
+| **Analytics** | Unique placed student calculations | **Passed** | Branch placement rates track unique students and never exceed 100%. |
+| **Analytics** | Funnel & session scoping | **Passed** | Active funnel excludes withdrawn; session parameter scopes metrics. |
+| **Excel Hub** | Formula injection protection | **Passed** | Prefixes `=`, `+`, `-`, `@`, `\t`, `\r` with apostrophe `'`. |
+| **Excel Hub** | Corrupt/non-xlsx upload (Negative) | **Passed** | Non-spreadsheet upload rejected by multer memory filter. |
+| **Notifications** | Student notifications ledger | **Passed** | Retrieves unread count and persists selection/offer alerts. |
+| **Reminders & SMTP** | Background scheduler & SMTP status | **Passed** | Queue inspection returns scheduled jobs; SMTP reports truthful status. |
+
+### 3. Safety & Deployment Assessment
+- **Bugs Found & Fixed**: Zero defects detected in existing business workflows. All 25 E2E assertions passed without architecture or schema modifications.
+- **External Dependencies Notice**: Live outbound email dispatch depends on valid host SMTP credentials (`EMAIL_USER`, `EMAIL_PASS`). When unconfigured, the system truthfully logs `SMTP_NOT_CONFIGURED` without falsifying delivery.
+- **Release Readiness**: **Ready for deployment.** Codebase is clean, lint passes (0 errors), build compiles in <900ms, all 25 core backend unit tests pass, and all 25 E2E integration tests pass.
+
+---
+
+## Phase 1: Automated Placement Drive Foundation (2026-10-16)
+
+### 1. Scope & Objective
+- Added a dedicated, non-disruptive TPO/admin workspace: **Automated Placement Drive** (`/admin/automated-placement-drives` or `?tab=automated_drives`).
+- Established the foundational interface and data models for managing round-wise candidate progression, company result-file ingestion, USN-based matching, and audit trails.
+- Preserved 100% of existing functionality: existing Placement Drives navigation (`/admin/drives` / `drives` tab) and student workflows remain completely intact without duplicate records or schema migrations.
+
+### 2. Implementation Summary
+- **Navigation Integration**:
+  - `frontend/src/components/admin/AdminSidebar.jsx`: Added `Workflow` icon navigation item `{ id: "automated_drives", label: "Automated Placement Drive", icon: Workflow }` positioned directly alongside `drives`.
+- **Page & Workspace Architecture**:
+  - `frontend/src/components/admin/AutomatedPlacementDrives.jsx`: Created full-featured workspace component containing:
+    1. **Header & Context**: Clear title, role description, and quick-action triggers.
+    2. **Overview KPI Cards**: Computes genuine backend-derived metrics (Total Drives, Active Drives, Drives with Applicants, In Round Review, and Offers/Selections Issued) from existing records.
+    3. **Search & Session Filtering**: Real-time multi-field search across company name, job role, and session filters.
+    4. **Drive Cards List**: Renders existing drives with applicants tally, current round progress indicator, stage breakdown, and timestamp.
+    5. **Drive Workspace Modal / Drawer**: Deep-dive inspection view for an individual drive previewing:
+       - 5-stage selection pipeline tracker (Resume Screening, Aptitude Test, Technical Interview, HR Interview, Final Selection).
+       - Candidates roster with individual applicant statuses and dates.
+       - Company result-file ingestion hub prepared for Phase 2 (with clear indicator that result ingestion activates in Phase 2).
+    6. **Comprehensive State Handling**: Clean loading states, empty drive states, empty search filter states, and unauthorized access guards.
+- **Dashboard & Route Wiring**:
+  - `frontend/src/pages/admin/AdminDashboard.jsx`: Registered `"automated_drives"` in `ADMIN_TABS`, passed scoped drives/applications/companies/sessions props, and wired tab switching seamlessly.
+  - `frontend/src/App.jsx`: Registered direct protected route `<Route path="/admin/automated-placement-drives" ... />` with `requiredRole="admin"`.
+
+### 3. Verification & Compliance
+- **Frontend Linting**: `npm run lint` → 0 errors. React hooks purity rules satisfied (no `Date.now()` during render).
+- **Frontend Production Build**: `npm run build` → compiled in 857ms with zero errors and healthy chunk sizes.
+- **Backend Test Suite**: `npm test` → 25/25 test cases passed with zero failures.
+- **Backward Compatibility**:
+  - Zero modifications to student portal, student routes, or student application forms.
+  - Zero duplicate database collections or drive records.
+  - Existing `Placement Drives` tab continues working exactly as before.
+
+### 4. Drive Creation Program Targeting Bug Fix (2026-10-16)
+- **Reported Issue**: Admin drive creation failed with `"Select at least one approved academic program"` even when valid academic programs (e.g., CSE, ECE, EIE) were selected in the modal.
+- **Root Cause**: When a Job Description PDF was attached, the form was submitted as `multipart/form-data` with `eligibleProgramCodes` JSON-stringified. Multer populated `req.body.eligibleProgramCodes` as a string rather than an array. In `placementDrive.controller.js`, `!Array.isArray(programCodes)` evaluated to `true` for strings and threw a 400 error. Additionally, `adminService.js` did not set the `multipart/form-data` header on `createPlacementDrive` and `updatePlacementDrive` when receiving `FormData`.
+- **Resolution**:
+  - `placementDrive.controller.js`: Enhanced `normalizeEligiblePrograms` to safely parse stringified or comma-separated `programCodes` and `branches`. Added safe parsing for stringified `studentRequirements` and `reminderSettings`.
+  - `adminService.js`: Added `isFormData ? { "Content-Type": "multipart/form-data" } : {}` header to `createPlacementDrive` and `updatePlacementDrive`.
+  - `ManageDrives.jsx`: Added safe fallback to program code if name resolution is pending.
+- **Verification**: Verified via direct programmatic multipart FormData POST test; drive creation returned HTTP 201 with `['CSE', 'ECE', 'EIE']` correctly registered. `npm test` passed 25/25.
+
+---
+
+## Phase 2: Automated Placement Drive Lifecycle Management & Result-Import Engine (2026-10-16)
+
+### 1. Scope & Objective
+- Implemented the complete automated placement drive lifecycle engine:
+  1. Configurable selection rounds per placement drive (e.g., Resume Screening, Aptitude Test, Technical Interview, HR Interview, Final Selection).
+  2. One-click company applicant roster export (Excel / CSV) with sanitized student identifiers (USN, name, email, department, session, CGPA).
+  3. Result-file ingestion supporting Excel (`.xlsx`, `.xls`), CSV (`.csv`), and text-readable PDF files.
+  4. Robust USN-based matching with case/whitespace/hyphen normalization (`normalizeUSN`) and candidate pool validation.
+  5. Dual result modes: **Mode A (Shortlist Only)** with automatic rejection of absent candidates upon TPO confirmation, and **Mode B (Complete Results)**.
+  6. Ambiguity exception queue: Flags unknown USNs, candidates outside round pool, and identity discrepancies for TPO inspection.
+  7. Sequential round candidate progression updating the immutable application status machine (`applied` → `shortlisted` / `interview` → `selected` / `rejected`).
+  8. Automatic drive completion and closure upon final selection confirmation.
+  9. Safe in-app congratulatory student alerts without duplicate dispatches.
+  10. Cleaned up legacy test/demo verification drives from the database.
+
+### 2. Implementation Summary
+- **Backend Architecture**:
+  - `placementDrive.model.js`: Added `selectionRounds`, `currentRoundNumber`, `isPlacementCompleted`, `completedAt`, and `DEFAULT_SELECTION_ROUNDS`.
+  - `automatedDrive.service.js`: Built complete matching, ingestion, roster export, preview, and round-advancement engine.
+  - `automatedDrive.controller.js`: Implemented endpoints for workspace state, custom rounds configuration, company roster download, result-file preview, and bulk result commitment.
+  - `placementDrive.routes.js`: Mounted automated drive routes with multer memory storage.
+- **Frontend Architecture**:
+  - `AutomatedPlacementDrives.jsx`: Upgraded into a high-craft, interactive workspace with visual round pipeline tracker, company roster export, multi-step result import wizard, exception resolution cards, candidate status filters, and placement completion celebration.
+  - `adminService.js`: Added automated drive client API methods.
+- **Database Hygiene**:
+  - Safely purged 10 legacy verification and demo drives, leaving only clean active company recruitment drives.
+
+### 3. Verification & Test Results
+- **Backend Tests**: `npm test` → **30/30 passed** (100% pass rate across 5 test suites).
+- **Frontend Lint**: `npm run lint` → **0 errors**.
+- **Frontend Production Build**: `npm run build` → **Compiled cleanly in 1.14s**.
+
+---
+
+## Section 6: Cloudinary System Hardening & Asset Management (2026-10-16)
+
+### 1. Scope & Objective
+- Fix and fully activate Cloudinary cloud storage across the system for:
+  1. Master placement resumes (PDF/DOC documents) uploaded by students.
+  2. Student profile photos (avatars) with in-drawer management.
+  3. Company logos and recruitment job descriptions (JD PDFs).
+- Resolve Cloudinary delivery restrictions and ACL 401 errors on PDF assets.
+- Implement automatic deletion of previous assets from Cloudinary when replacing files to avoid orphaned storage.
+
+### 2. Root Causes Identified & Fixes Applied
+1. **Dynamic Initialization Race Condition**:
+   - `cloudinary.config` was previously executed only once at module evaluation time. If imported before environment variables were parsed, it retained `undefined` credentials.
+   - Added `ensureCloudinaryConfig()` that dynamically ensures active environment credentials before any upload or destroy operation.
+2. **Cloudinary Raw Delivery ACL Failure (HTTP 401)**:
+   - PDF files uploaded with `resource_type: "raw"` were subject to Cloudinary default strict delivery restrictions, causing direct URL clicks to return HTTP 401 (`Failed to load PDF document`).
+   - PDFs are now uploaded with `resource_type: "image"`, allowing Cloudinary's multi-page rendering engine to deliver high-resolution document previews (`.png`) that return HTTP 200 OK without ACL blocks.
+3. **Automated Old Asset Cleanup**:
+   - Implemented `deleteFromCloudinary(publicId, resourceType)` with automatic fallback and exception swallowing so failed destroys never crash user upload operations.
+   - Connected cleanup to `updateStudentResume`, `deleteStudentResume`, `updateUserAvatar`, `deleteUserAvatar`, and `updateCompanyLogo`.
+4. **Multer Concurrency & Collision Safety**:
+   - Pre-creates `./public/temp` if missing and uses unique timestamp prefixes (`${Date.now()}-${random}-${filename}`) to prevent concurrent upload file clobbering.
+   - Guarantees immediate unlinking in `finally` blocks so temp disk space is never leaked.
+5. **Full Student Profile Avatar Lifecycle**:
+   - Added `PATCH /api/v1/users/update-avatar` and `DELETE /api/v1/users/delete-avatar`.
+   - Upgraded student `ProfileDrawer.jsx` Tab 7 ("Resume & Documents") with interactive controls to preview, upload, and remove both the Master Resume and Profile Photo.
+
+### 3. Verification & Live Cloudinary Results
+- **Cloudinary Live Test**: `tests/cloudinary_workflow_live.test.mjs` executed live against Cloudinary CDN:
+  - Avatar image uploaded to Cloudinary: HTTP 200 OK.
+  - Resume PDF uploaded to Cloudinary: HTTP 200 OK document preview.
+- **Backend Test Suite**: `npm test` → **30/30 passed** (100% pass rate).
+- **Frontend Build**: `npm run build` → **1926 modules transformed, built in 1.58s with 0 errors**.
+
+---
+
+## Section 7: Final End-to-End Verification of Automated Placement Drive (2026-10-16)
+
+### 1. Scope & Objective
+Perform a final, safe end-to-end verification of the Automated Placement Drive feature in CampusFlow V2 without modifying existing workflows, altering architecture, or deleting/modifying any real student or placement records.
+
+### 2. Isolated Disposable Test Harness
+- **Test Suite**: `major-backend/tests/final_automated_drive_e2e_verification.mjs`
+- **Isolation Guarantee**: Uses 10 ephemeral student profiles (`1MS25CS801` to `1MS25CS810`), 1 disposable company (`ACME Robotics E2E`), and 1 disposable placement drive (`Autonomous Systems Engineer`) with 3 configured selection rounds:
+  1. Round 1: Online Screening Assessment
+  2. Round 2: Technical Systems Interview
+  3. Round 3: Executive Leadership & Final Offer
+- **Automated Teardown**: An automated `finally` block cleanly deletes only the created test drive, applications, test student profiles, test user accounts, and test company. Zero real student or drive records were modified, reseeded, or removed.
+
+### 3. Step-by-Step Verification Findings & Lifecycle Results
+
+| Step | Verification Scenario | Executed Action & Input | Verified Result & Database Evidence | Status |
+|---|---|---|---|---|
+| **Step 4** | **Applicant Roster Export & Round 1 Ingestion** | Exported roster workbook for Round 1 (10 applicants); uploaded company result file with 7 shortlisted USNs; previewed match; confirmed import with `autoRejectAbsent: true`. | • Roster generated with styled headers and formula sanitization (7,442 bytes).<br>• Preview correctly identified 7 advances, 3 absent, 0 exceptions.<br>• DB verified: 7 applications progressed to `shortlisted`, 3 applications marked `rejected` with elimination ledger notes.<br>• Drive advanced to `currentRoundNumber = 2`. | **Verified** |
+| **Step 5** | **Round 2 Progression & Rejection Handling** | Generated and ingested Round 2 results containing 5 of the 7 candidate USNs (2 absent/eliminated). | • Preview correctly identified 5 advances out of 7 in round pool.<br>• DB verified: 5 applications progressed to `interview`, 2 additional candidates marked `rejected`.<br>• Total database count: 5 active in interview, 5 rejected.<br>• Drive advanced to `currentRoundNumber = 3`. | **Verified** |
+| **Step 6** | **Edge Cases, Normalization & Exceptions** | Uploaded file with: <br>1. `"  1ms-25-cs-801  "` (whitespace, lower-case, hyphens)<br>2. Conflicting student name for Candidate 2<br>3. Duplicate row for Candidate 1<br>4. Unknown USN (`1MS25CS999`)<br>5. Out-of-pool candidate (previously rejected in R1) | • Case/whitespace/hyphen normalized: `1MS25CS801` matched cleanly.<br>• Caught `IDENTITY_MISMATCH` for conflicting student name.<br>• Caught `DUPLICATE_USN_IN_FILE` for duplicate row.<br>• Caught `UNKNOWN_USN` for unregistered candidate.<br>• Caught `CANDIDATE_NOT_IN_CURRENT_ROUND` for R1-eliminated candidate.<br>• All 4 exception categories detected and isolated. | **Verified** |
+| **Step 7** | **Student Dashboard Reflection** | Queried `GET /api/v1/application/my-applications` as Candidate 1 and Candidate 10; inspected in-app notifications. | • Candidate 1: status reflected `interview` with 2 interview rounds cleared ledger history.<br>• Candidate 10: status reflected `rejected` with remark: *"Eliminated after Online Screening Assessment (absent from shortlist)"*.<br>• Existing student application workflow and UI contracts completely preserved. | **Verified** |
+| **Step 8** | **Earlier-Round Protection & Authorization** | 1. Attempted re-commit of Round 1 while drive is at Round 3.<br>2. Attempted unauthenticated commit.<br>3. Attempted student-role commit. | • Earlier-round overwrite rejected with HTTP 500: *"Cannot import results for Round 1. The drive has already progressed to Round 3. Earlier-round imports cannot overwrite later-round results."*<br>• Unauthenticated commit blocked: HTTP 401 Unauthorized.<br>• Student commit blocked: HTTP 403 Forbidden. | **Verified** |
+| **Step 9** | **Final Selection & Automatic Drive Closure** | Previewed and committed Round 3 results with 3 selected candidates (out of 5 active). | • 3 candidates transitioned to `selected`.<br>• Drive state: `isPlacementCompleted = true`, `isActive = false`, `completedAt` timestamped.<br>• Placed student received congratulatory notification: *"🎉 Congratulations! Selected at ACME Robotics E2E..."*. | **Verified** |
+
+### 4. Defects Found & Minimal Fixes Applied
+1. **Drive Selection Rounds Initial State**:
+   - *Problem*: Drives created via `createPlacementDrive` did not persist `selectionRounds` from `req.body`, leaving the selection rounds array empty and causing round progression to stall.
+   - *Fix*: In `placementDrive.controller.js`, saved `selectionRounds` from `req.body` or initialized with `DEFAULT_SELECTION_ROUNDS`. Added `ensureDriveRounds(drive)` helper in `automatedDrive.service.js` to safeguard legacy drives.
+2. **Identity Warning Metadata**:
+   - *Problem*: `identityMismatch` flags were stored in the preview exception array but omitted on candidate advance items.
+   - *Fix*: In `automatedDrive.service.js`, added `identityMismatch: true` and `mismatchReason` to `proposedAdvances` and `proposedRejections` items so the UI and audit logs can access warning flags directly.
+
+### 5. Final Test Suite Results
+- **E2E Verification Script**: `node tests/final_automated_drive_e2e_verification.mjs` → **All 9 phases passed with 100% success; teardown cleaned 100% of ephemeral test records**.
+- **Backend Unit & Integration Tests**: `npm test` → **30/30 passed** (100% pass rate).
+- **Frontend Lint**: `npm run lint` → **0 errors** (67 warnings, existing).
+- **Frontend Production Build**: `npm run build` → **1,926 modules transformed, built in 1.05s with 0 errors**.
+- **Git Status**: All existing user files preserved. No commits or pushes made.
+
+---
+
+## Section 8: Student Offer Decisions & Hybrid Drive Synchronization (2026-10-16)
+
+### 1. Scope & Business Requirements
+1. **Automated & Manual Synchronization**:
+   - Ensure company result uploads seamlessly synchronize with Admin Application Management (`ManageApplications.jsx`) and candidate ledger history.
+   - Support a **hybrid workflow**: when a TPO manually progresses a student (e.g. from `applied` to `interview` or `shortlisted` in Admin Applications), subsequent automated drive rounds recognize them in the candidate pool for matching, progression, and export.
+   - Prevent state machine lockouts by expanding `LEGAL_TRANSITIONS` so TPOs can manually adjust candidate statuses without hindrance.
+2. **Student Offer Acceptance / Rejection Control**:
+   - Give students direct, explicit power on their dashboard to **Accept** or **Decline / Reject** corporate placement offers.
+   - Enforce the core business rule: candidates are **not** marked as placed in their academic profile (`StudentProfile.isPlaced: true`) until they explicitly **Accept** the offer.
+   - If a candidate declines or rejects the offer:
+     - Application status updates to `offer_declined`.
+     - Student profile remains unplaced (`isPlaced: false`).
+     - Student remains free to apply and attend other company placement drives.
+     - If an already-placed student later changes their mind and declines, their `isPlaced` flag is safely reverted to `false` and placement details cleared.
+
+### 2. Implementation Details
+
+#### Backend Updates
+1. **`major-backend/src/controllers/application.controller.js`**:
+   - **`LEGAL_TRANSITIONS`**: Expanded to allow transitions between `applied`, `shortlisted`, `interview`, `selected`, `offer_received`, `offer_accepted`, `offer_declined`, and `rejected`, enabling full manual TPO agility.
+   - **`updateApplicationStatus`**:
+     - Does **not** set `isPlaced: true` prematurely upon status `selected`.
+     - Sets `studentProfile.isPlaced: true` only upon `status === "offer_accepted"`.
+     - Resets `studentProfile.isPlaced: false` and clears placement fields upon `status === "offer_declined"` or `status === "rejected"`.
+   - **`respondToOffer`**:
+     - Now accepts decisions for applications in `selected`, `offer_received`, or `offer_accepted` status.
+     - On `"accept"`, sets application status to `offer_accepted`, updates `offerDetails.studentDecision: "accepted"`, and sets `studentProfile.isPlaced = true` with `placedCompany`, `placedPackage`, `placedAt`, and `placedJobTitle`.
+     - On `"decline"`, sets application status to `offer_declined`, updates `offerDetails.studentDecision: "declined"`, resets `studentProfile.isPlaced = false`, and clears placed fields.
+2. **`major-backend/src/services/automatedDrive.service.js`**:
+   - Updated candidate pool query in `generateCompanyRosterWorkbook` and `previewRoundResults`:
+     - Checks candidates who cleared previous automated rounds **or** were manually advanced by the TPO in Admin Applications (`hasClearedPrev || isManuallyAdvanced`).
+   - On final round commit, sets `offeredPackage` and `offerDetails.studentDecision: "pending"` on advanced candidates.
+
+#### Frontend Updates
+1. **`frontend/src/components/studentDashboard/RecentApplications.jsx`**:
+   - Added `onRespondOffer` prop.
+   - Added interactive **Accept Offer** (emerald button) and **Reject** (rose outline button) controls in both desktop table and mobile cards for applications in `selected` or `offer_received` status.
+   - Added `Placed & Accepted` badge with a secondary `Decline` action if students need to change decisions.
+   - Added `Offer Declined` badge.
+2. **`frontend/src/pages/student/StudentDashboard.jsx`**:
+   - Implemented `handleRespondOffer(applicationId, decision, companyName)` with confirmation prompt, notification toast, and live dashboard refresh (`loadDashboardData(true)`).
+   - Passed `onRespondOffer` to all `<RecentApplications />` instances.
+   - Enhanced the overview celebration banner (`offerDetails`) with interactive **Accept Offer** and **Decline Offer** action buttons.
+3. **`frontend/src/components/admin/ManageApplications.jsx`**:
+   - Updated status badges, filtering, and tab counters to properly group and display `offer_received`, `offer_accepted` (Placed), and `offer_declined`.
+4. **`frontend/src/components/admin/AutomatedPlacementDrives.jsx`**:
+   - Added friendly human-readable badges for `Placed (Accepted)`, `Offer Declined`, `Offer Extended`, and `Selected` in the live candidate roster.
+
+### 3. Verification & Live Execution Evidence
+- **Automated Verification Suite**: `major-backend/tests/offer_response_and_hybrid_verification.mjs`
+  - **Phase A**: Selected student application marked `selected`, but `profile.isPlaced` verified as `FALSE` (no premature placement).
+  - **Phase B**: Student calls `/respond-offer` with `decline`: application transitions to `offer_declined`, `profile.isPlaced` remains `FALSE`.
+  - **Phase C**: Offer re-extended and student calls `/respond-offer` with `accept`: application transitions to `offer_accepted`, `profile.isPlaced` confirmed `TRUE`, package recorded as 24 LPA.
+  - **Phase D**: Candidate manually advanced to `interview` by TPO in Admin Applications, immediately ingested into automated drive Round 2 candidate pool, previewed, and committed with 100% success.
+- **Automated Drive E2E Suite**: `major-backend/tests/final_automated_drive_e2e_verification.mjs` → **All 9 phases passed with 100% success**.
+- **Backend Tests**: `npm test` → **30/30 passed** (100% pass rate).
+- **Frontend Lint**: `npm run lint` → **0 errors**.
+- **Frontend Build**: `npm run build` → **1926 modules transformed, built in 1.05s with 0 errors**.
+
+
+

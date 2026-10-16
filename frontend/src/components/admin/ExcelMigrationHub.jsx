@@ -21,6 +21,7 @@ import {
   Users,
   Briefcase
 } from "lucide-react";
+import toast from "react-hot-toast";
 import { excelService } from "../../services/excelService";
 
 export default function ExcelMigrationHub({ sessions = [], drives = [], onRefresh }) {
@@ -87,11 +88,15 @@ export default function ExcelMigrationHub({ sessions = [], drives = [], onRefres
   // Template Download Handler
   const handleDownloadTemplate = async (type) => {
     try {
-      setStatusMessage({ type: "info", text: `Downloading ${type} template...` });
+      setStatusMessage({ type: "info", text: `Generating ${type.replace(/_/g, " ")} template with registered students...` });
+      toast.loading("Generating template with stored students...", { id: "template-dl" });
       await excelService.downloadTemplate(type);
-      setStatusMessage({ type: "success", text: "Template downloaded successfully." });
+      setStatusMessage({ type: "success", text: `Template downloaded successfully with student records populated.` });
+      toast.success("Template downloaded with registered student roster!", { id: "template-dl" });
     } catch (err) {
-      setStatusMessage({ type: "error", text: err.response?.data?.message || err.message });
+      const errMsg = err.response?.data?.message || err.message;
+      setStatusMessage({ type: "error", text: errMsg });
+      toast.error(errMsg || "Failed to download template", { id: "template-dl" });
     }
   };
 

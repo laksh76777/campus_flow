@@ -58,6 +58,28 @@ export const updateStudentResume = async (formData) => {
   return response.data;
 };
 
+// Delete student resume
+export const deleteStudentResume = async () => {
+  const response = await api.delete("/studentprofile/delete-resume");
+  return response.data;
+};
+
+// Upload / update user avatar image
+export const updateUserAvatar = async (formData) => {
+  const response = await api.patch("/users/update-avatar", formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+  return response.data;
+};
+
+// Delete user avatar image
+export const deleteUserAvatar = async () => {
+  const response = await api.delete("/users/delete-avatar");
+  return response.data;
+};
+
 // Check student eligibility breakdown for a drive
 export const checkDriveEligibility = async (driveId) => {
   const response = await api.get(`/placementdrive/${driveId}/eligibility-check`);
@@ -103,3 +125,14 @@ export const checkPreApplicationRequirements = async (driveId) => {
   return response.data;
 };
 
+// Lock student profile after verification
+export const lockProfile = async (targetUserId) => {
+  const response = await api.post("/studentprofile/lock-profile", { userId: targetUserId });
+  return response.data;
+};
+
+// Request profile detail modification from TPO
+export const requestProfileModification = async (modificationData) => {
+  const response = await api.post("/studentprofile/request-modification", modificationData);
+  return response.data;
+};

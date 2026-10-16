@@ -101,6 +101,14 @@ function App() {
           }
         />
         <Route
+          path="/admin/automated-placement-drives"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminDashboard initialTab="automated_drives" />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/admin/companies"
           element={
             <ProtectedRoute requiredRole="admin">

@@ -12,15 +12,15 @@ import { resolveStudentProgram } from "../constants/programCatalog.js";
 
 // Legal status transitions state machine
 const LEGAL_TRANSITIONS = {
-    applied: ["shortlisted", "rejected", "on_hold", "withdrawn"],
-    shortlisted: ["interview", "rejected", "on_hold", "withdrawn"],
-    interview: ["interview", "selected", "rejected", "on_hold"],
-    on_hold: ["shortlisted", "interview", "selected", "rejected", "withdrawn"],
-    selected: ["offer_received", "rejected"],
-    offer_received: ["offer_accepted", "offer_declined"],
-    offer_accepted: [],
-    offer_declined: [],
-    rejected: [],
+    applied: ["shortlisted", "interview", "selected", "rejected", "on_hold", "withdrawn"],
+    shortlisted: ["applied", "interview", "selected", "rejected", "on_hold", "withdrawn"],
+    interview: ["interview", "shortlisted", "selected", "rejected", "on_hold"],
+    on_hold: ["applied", "shortlisted", "interview", "selected", "rejected", "withdrawn"],
+    selected: ["offer_received", "offer_accepted", "offer_declined", "rejected", "interview", "shortlisted"],
+    offer_received: ["offer_accepted", "offer_declined", "rejected", "selected"],
+    offer_accepted: ["offer_declined", "rejected", "selected"],
+    offer_declined: ["offer_accepted", "selected", "rejected"],
+    rejected: ["shortlisted", "interview", "applied", "on_hold"],
     withdrawn: ["applied"]
 };
 
@@ -574,8 +574,8 @@ const updateApplicationStatus = asyncHandler(async (req, res) => {
             }
         });
 
-    // Mark student profile as placed upon confirmed selection or offer acceptance
-    if (status === "selected" || status === "offer_accepted") {
+    // Mark student profile as placed only upon confirmed offer acceptance
+    if (status === "offer_accepted") {
         try {
             const compName = updatedApplication?.placementDrive?.company?.companyName || updatedApplication?.placementDrive?.company?.name || "";
             await StudentProfile.findByIdAndUpdate(application.student, {
@@ -589,6 +589,21 @@ const updateApplicationStatus = asyncHandler(async (req, res) => {
             });
         } catch (profileErr) {
             console.error("Failed to mark student as placed:", profileErr.message);
+        }
+    } else if (status === "offer_declined" || status === "rejected") {
+        try {
+            const compName = updatedApplication?.placementDrive?.company?.companyName || updatedApplication?.placementDrive?.company?.name || "";
+            const currentProfile = await StudentProfile.findById(application.student);
+            if (currentProfile && (currentProfile.placedCompany === compName || !currentProfile.placedCompany)) {
+                currentProfile.isPlaced = false;
+                currentProfile.placedCompany = "";
+                currentProfile.placedPackage = null;
+                currentProfile.placedAt = null;
+                currentProfile.placedJobTitle = "";
+                await currentProfile.save();
+            }
+        } catch (profileErr) {
+            console.error("Failed to reset student placed status:", profileErr.message);
         }
     }
 
@@ -686,37 +701,56 @@ const respondToOffer = asyncHandler(async (req, res) => {
         throw new ApiError(403, "You are not authorized to respond to this offer");
     }
 
-    if (application.status !== "offer_received") {
-        throw new ApiError(400, `Cannot respond to offer when status is "${application.status}"`);
+    if (!["offer_received", "selected", "offer_accepted"].includes(application.status)) {
+        throw new ApiError(400, `Cannot respond to offer when status is "${application.status}". Offers can only be accepted or declined when status is 'selected', 'offer_received', or 'offer_accepted'.`);
     }
 
-    const newStatus = decision === "accept" ? "offer_accepted" : "offer_declined";
+    const isAccept = decision === "accept";
+    const newStatus = isAccept ? "offer_accepted" : "offer_declined";
+    const previousStatus = application.status;
     application.status = newStatus;
-    application.offerDetails.studentDecision = decision === "accept" ? "accepted" : "declined";
+    if (!application.offerDetails) application.offerDetails = {};
+    application.offerDetails.studentDecision = isAccept ? "accepted" : "declined";
     application.offerDetails.decisionAt = new Date();
 
     if (!application.statusHistory) application.statusHistory = [];
     application.statusHistory.push({
-        fromStatus: "offer_received",
+        fromStatus: previousStatus,
         toStatus: newStatus,
-        remarks: remarks || `Candidate decision: ${decision.toUpperCase()}`,
+        remarks: remarks || `Candidate decision: ${isAccept ? "ACCEPTED" : "DECLINED"}`,
         updatedBy: req.user._id,
         updatedAt: new Date()
     });
 
     await application.save();
 
-    if (decision === "accept") {
+    if (isAccept) {
         studentProfile.isPlaced = true;
         studentProfile.placedCompany = application.placementDrive?.company?.companyName || application.placementDrive?.company?.name || "";
         studentProfile.placedPackage = application.offeredPackage || application.placementDrive?.package || null;
         studentProfile.placedAt = new Date();
         studentProfile.placedJobTitle = application.placementDrive?.jobTitle || "";
         await studentProfile.save();
+    } else {
+        const compName = application.placementDrive?.company?.companyName || application.placementDrive?.company?.name || "";
+        if (studentProfile.placedCompany === compName || !studentProfile.placedCompany) {
+            studentProfile.isPlaced = false;
+            studentProfile.placedCompany = "";
+            studentProfile.placedPackage = null;
+            studentProfile.placedAt = null;
+            studentProfile.placedJobTitle = "";
+            await studentProfile.save();
+        }
     }
 
     return res.status(200).json(
-        new ApiResponse(200, application, `Offer successfully ${decision}ed!`)
+        new ApiResponse(
+            200, 
+            application, 
+            isAccept 
+                ? "Congratulations! You have accepted the placement offer and are officially placed!" 
+                : "Placement offer declined successfully."
+        )
     );
 });
 

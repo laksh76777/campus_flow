@@ -7,7 +7,7 @@ import { getCatalogProgram, resolveStudentProgram, normalizeDegreeType } from ".
 import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
-import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import { uploadOnCloudinary, deleteFromCloudinary } from "../utils/cloudinary.js";
 
 const generateAccessAndRefreshToken = async (userId) => {
     try {
@@ -178,7 +178,10 @@ const registerUser = asyncHandler(async (req, res) => {
     const avatarLocalPath = req.files?.avatar?.[0]?.path;
     let avatar = null;
     if (avatarLocalPath) {
-        avatar = await uploadOnCloudinary(avatarLocalPath);
+        avatar = await uploadOnCloudinary(avatarLocalPath, {
+            folder: "campusflow/avatars",
+            resource_type: "image"
+        });
         if (!avatar) {
             throw new ApiError(500, "Avatar upload failed");
         }
@@ -454,6 +457,67 @@ const changeCurrentPassword = asyncHandler(async(req,res)=>{
         new ApiResponse(200, {},"password changed successfully")
     )
 })
+
+const updateUserAvatar = asyncHandler(async (req, res) => {
+    const avatarLocalPath = req.file?.path;
+
+    if (!avatarLocalPath) {
+        throw new ApiError(400, "Avatar image file is required");
+    }
+
+    const uploadedAvatar = await uploadOnCloudinary(avatarLocalPath, {
+        folder: "campusflow/avatars",
+        resource_type: "image"
+    });
+
+    if (!uploadedAvatar || (!uploadedAvatar.secure_url && !uploadedAvatar.url)) {
+        throw new ApiError(400, "Failed to upload avatar to Cloudinary");
+    }
+
+    const user = await User.findById(req.user?._id);
+    if (!user) {
+        throw new ApiError(404, "User not found");
+    }
+
+    // Safely delete previous avatar from Cloudinary if existed
+    if (user.avatar?.publicId) {
+        await deleteFromCloudinary(user.avatar.publicId, "image");
+    }
+
+    user.avatar = {
+        url: uploadedAvatar.secure_url || uploadedAvatar.url,
+        publicId: uploadedAvatar.public_id
+    };
+
+    await user.save({ validateBeforeSave: false });
+
+    return res.status(200).json(
+        new ApiResponse(200, { avatar: user.avatar, user }, "Avatar updated successfully")
+    );
+});
+
+const deleteUserAvatar = asyncHandler(async (req, res) => {
+    const user = await User.findById(req.user?._id);
+    if (!user) {
+        throw new ApiError(404, "User not found");
+    }
+
+    if (user.avatar?.publicId) {
+        await deleteFromCloudinary(user.avatar.publicId, "image");
+    }
+
+    user.avatar = {
+        url: "",
+        publicId: ""
+    };
+
+    await user.save({ validateBeforeSave: false });
+
+    return res.status(200).json(
+        new ApiResponse(200, { avatar: user.avatar, user }, "Avatar removed successfully")
+    );
+});
+
 export {
     registerUser,
     loginUser,
@@ -461,5 +525,7 @@ export {
     refreshAccessToken,
     currentUser,
     updateAccountDetails,
-    changeCurrentPassword
+    changeCurrentPassword,
+    updateUserAvatar,
+    deleteUserAvatar
 }

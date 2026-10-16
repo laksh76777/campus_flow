@@ -13,6 +13,7 @@ import {
   Bell,
   FileText,
   Paperclip,
+  Trash2,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { getPublicDepartments } from "../../services/authService";
@@ -78,6 +79,7 @@ export default function ManageDrives({
   companies = [],
   onCreateDrive,
   onToggleDriveStatus,
+  onDeleteDrive,
   onViewApplicants,
   isCreateModalOpen,
   setIsCreateModalOpen,
@@ -167,7 +169,7 @@ export default function ManageDrives({
       const payload = {
         ...formData,
         eligibleBranches: formData.eligibleProgramCodes.map(
-          (code) => programs.find((program) => program.code === code)?.name
+          (code) => programs.find((program) => program.code === code)?.name || code
         ),
         package: Number(formData.package),
         minimumCGPA: Number(formData.minimumCGPA),
@@ -460,16 +462,29 @@ export default function ManageDrives({
                     <span>View Applicants</span>
                   </button>
 
-                  <button
-                    onClick={() => onToggleDriveStatus(d._id, isActive)}
-                    className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition ${
-                      isActive
-                        ? "text-slate-600 bg-slate-100 hover:bg-rose-50 hover:text-rose-600"
-                        : "text-emerald-700 bg-emerald-50 hover:bg-emerald-100"
-                    }`}
-                  >
-                    {isActive ? "Close Drive" : "Reopen Drive"}
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => onToggleDriveStatus(d._id, isActive)}
+                      className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition ${
+                        isActive
+                          ? "text-slate-600 bg-slate-100 hover:bg-rose-50 hover:text-rose-600"
+                          : "text-emerald-700 bg-emerald-50 hover:bg-emerald-100"
+                      }`}
+                    >
+                      {isActive ? "Close Drive" : "Reopen Drive"}
+                    </button>
+
+                    {onDeleteDrive && (
+                      <button
+                        type="button"
+                        onClick={() => onDeleteDrive(d._id, compName, d.jobTitle)}
+                        className="rounded-lg p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition cursor-pointer"
+                        title="Delete Placement Drive"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             );
