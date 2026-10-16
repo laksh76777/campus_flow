@@ -1,6 +1,9 @@
 import nodemailer from "nodemailer";
+import { reloadEnv } from "../../env.js";
 
 let transporter = null;
+let isTestingMock = false;
+let cachedConfigKey = "";
 
 /**
  * Validates whether an email string follows RFC 5322 format.
@@ -89,15 +92,24 @@ export const getSenderAddress = () => {
 
 /**
  * Builds or returns cached Nodemailer transporter with connection timeouts.
+ * Reconfigures automatically if credentials in environment have changed.
  */
-export const getTransporter = () => {
-    if (transporter) return transporter;
+export const getTransporter = (forceRefresh = false) => {
+    if (isTestingMock && transporter) return transporter;
 
     const emailUser = (process.env.EMAIL_USER || process.env.SMTP_USER || "").trim();
     const emailPass = (process.env.EMAIL_PASS || process.env.SMTP_PASS || "").trim();
     const smtpHost = (process.env.SMTP_HOST || "smtp.gmail.com").trim();
     const smtpPort = Number(process.env.SMTP_PORT) || 587;
     const isSecure = smtpPort === 465 || process.env.SMTP_SECURE === "true";
+
+    const configKey = `${emailUser}:${emailPass}:${smtpHost}:${smtpPort}:${isSecure}`;
+
+    if (transporter && !forceRefresh && cachedConfigKey === configKey) {
+        return transporter;
+    }
+
+    cachedConfigKey = configKey;
 
     if (isSmtpConfigured()) {
         transporter = nodemailer.createTransport({
@@ -112,6 +124,8 @@ export const getTransporter = () => {
             greetingTimeout: 10000,
             socketTimeout: 15000,
         });
+    } else {
+        transporter = null;
     }
 
     return transporter;
@@ -121,8 +135,14 @@ export const getTransporter = () => {
  * Force reconfiguration of transporter (useful on configuration refresh or test cleanup).
  */
 export const reconfigureTransporter = () => {
+    try {
+        reloadEnv();
+    } catch {
+        // Fallback for isolated test runners
+    }
     transporter = null;
-    return getTransporter();
+    cachedConfigKey = "";
+    return getTransporter(true);
 };
 
 /**
@@ -130,6 +150,10 @@ export const reconfigureTransporter = () => {
  */
 export const resetTransporterForTesting = (mock = null) => {
     transporter = mock;
+    isTestingMock = mock !== null;
+    if (!mock) {
+        cachedConfigKey = "";
+    }
 };
 
 /**
@@ -200,7 +224,7 @@ export const verifySmtpConnection = async () => {
         };
     }
 
-    const mailer = getTransporter();
+    const mailer = getTransporter(true);
     if (!mailer) {
         return {
             verified: false,
