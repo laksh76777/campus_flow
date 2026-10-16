@@ -124,6 +124,8 @@ export default function StudentNavbar({
       messageLower.includes("status")
     ) {
       onSelectTab?.("applications");
+    } else {
+      onSelectTab?.("notifications");
     }
   };
 
@@ -155,6 +157,7 @@ export default function StudentNavbar({
     overview: "Dashboard Overview",
     drives: "Placement Drives",
     applications: "My Applications",
+    notifications: "Message & Notification Center",
     profile: "Academic Profile",
   };
 

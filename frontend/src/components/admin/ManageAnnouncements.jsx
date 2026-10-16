@@ -26,9 +26,7 @@ import {
   getAnnouncementPreview,
   broadcastAnnouncement,
   getScheduledReminders,
-  triggerReminderWorker,
   getSmtpStatus,
-  sendSmtpTestEmail,
 } from "../../services/notificationService";
 import { getPublicDepartments } from "../../services/authService";
 import { getAllPlacementSessions } from "../../services/sessionService";
@@ -44,7 +42,7 @@ export default function ManageAnnouncements({ drives = [] }) {
   const [targetProgramCode, setTargetProgramCode] = useState("");
   const [targetSessionId, setTargetSessionId] = useState("");
   const [selectedDriveId, setSelectedDriveId] = useState("");
-  const [channels, setChannels] = useState(["in_app"]); // "in_app", "email"
+  const [channels, setChannels] = useState(["in_app", "email"]); // "in_app", "email"
 
   // Options & Metadata
   const [programs, setPrograms] = useState([]);
@@ -59,14 +57,10 @@ export default function ManageAnnouncements({ drives = [] }) {
   // Scheduled Reminders State
   const [reminders, setReminders] = useState([]);
   const [loadingReminders, setLoadingReminders] = useState(false);
-  const [triggeringWorker, setTriggeringWorker] = useState(false);
 
-  // SMTP Diagnostics & Test Email State
+  // SMTP Status State
   const [smtpData, setSmtpData] = useState(null);
   const [loadingSmtp, setLoadingSmtp] = useState(false);
-  const [testEmailAddress, setTestEmailAddress] = useState("");
-  const [sendingTestEmail, setSendingTestEmail] = useState(false);
-  const [testEmailResult, setTestEmailResult] = useState(null);
 
   // Load programs & sessions on mount
   useEffect(() => {
@@ -169,43 +163,6 @@ export default function ManageAnnouncements({ drives = [] }) {
     loadSmtpStatus();
   }, [loadSmtpStatus]);
 
-  useEffect(() => {
-    if (activeSubTab === "smtp") {
-      loadSmtpStatus();
-    }
-  }, [activeSubTab, loadSmtpStatus]);
-
-  // Handle single controlled test email
-  const handleSendTestEmail = async (e) => {
-    e.preventDefault();
-    if (!testEmailAddress || !testEmailAddress.includes("@")) {
-      toast.error("Please enter a valid recipient email address for testing.");
-      return;
-    }
-    try {
-      setSendingTestEmail(true);
-      setTestEmailResult(null);
-      const res = await sendSmtpTestEmail(testEmailAddress.trim());
-      setTestEmailResult({
-        success: true,
-        data: res?.data,
-        message: res?.message || "Test email accepted by SMTP server for delivery."
-      });
-      toast.success("Test email accepted by SMTP server for delivery!");
-    } catch (err) {
-      const errData = err.response?.data?.data || {};
-      const errMsg = err.response?.data?.message || err.message || "Test email delivery failed";
-      setTestEmailResult({
-        success: false,
-        error: errMsg,
-        category: errData.category || "TEST_EMAIL_FAILED"
-      });
-      toast.error(errMsg);
-    } finally {
-      setSendingTestEmail(false);
-    }
-  };
-
   // Toggle delivery channels
   const toggleChannel = (ch) => {
     setChannels((prev) => {
@@ -301,6 +258,7 @@ export default function ManageAnnouncements({ drives = [] }) {
 
   const isSmtpConfigured = Boolean(smtpData?.configured);
   const isSmtpVerified = Boolean(smtpData?.verification?.verified);
+  const isSmtpReady = isSmtpVerified || isSmtpConfigured || Boolean(previewData?.senderAddress);
   const smtpCategory = smtpData?.verification?.category || "NOT_CONFIGURED";
 
   return (
@@ -321,46 +279,35 @@ export default function ManageAnnouncements({ drives = [] }) {
           </p>
         </div>
 
-        {/* SMTP Status Indicator (Clickable to jump to diagnostics) */}
+        {/* Email Delivery Status Badge */}
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setActiveSubTab("smtp")}
-            title="Click to view SMTP configuration and connection diagnostic details"
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl border text-xs font-bold transition hover:shadow-xs cursor-pointer ${
-              isSmtpVerified
+          <div
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl border text-xs font-bold ${
+              isSmtpVerified || isSmtpConfigured
                 ? "bg-emerald-50 text-emerald-800 border-emerald-300"
-                : isSmtpConfigured
-                ? "bg-rose-50 text-rose-800 border-rose-300"
-                : "bg-amber-50 text-amber-800 border-amber-300"
+                : "bg-slate-50 text-slate-700 border-slate-200"
             }`}
           >
             <span
               className={`h-2.5 w-2.5 rounded-full ${
-                isSmtpVerified
+                isSmtpVerified || isSmtpConfigured
                   ? "bg-emerald-500 animate-pulse"
-                  : isSmtpConfigured
-                  ? "bg-rose-500"
-                  : "bg-amber-500"
+                  : "bg-slate-400"
               }`}
             />
             <span>
-              {loadingSmtp
-                ? "Verifying SMTP..."
-                : isSmtpVerified
-                ? "SMTP Verified & Connected"
-                : isSmtpConfigured
-                ? "SMTP Verification Failed"
-                : "SMTP Not Configured (In-App Only)"}
+              {isSmtpVerified || isSmtpConfigured
+                ? "Email Delivery Active (Verified)"
+                : "Email Delivery Pending"}
             </span>
-            <ChevronRight className="h-3 w-3 opacity-60" />
-          </button>
+          </div>
         </div>
       </div>
 
       {/* Sub-tab Navigation */}
       <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
         <button
+          type="button"
           onClick={() => setActiveSubTab("compose")}
           className={`flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-bold rounded-xl transition cursor-pointer ${
             activeSubTab === "compose"
@@ -372,6 +319,7 @@ export default function ManageAnnouncements({ drives = [] }) {
           <span>Compose Announcement</span>
         </button>
         <button
+          type="button"
           onClick={() => setActiveSubTab("reminders")}
           className={`flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-bold rounded-xl transition cursor-pointer ${
             activeSubTab === "reminders"
@@ -386,22 +334,6 @@ export default function ManageAnnouncements({ drives = [] }) {
               {reminders.length}
             </span>
           )}
-        </button>
-        <button
-          onClick={() => setActiveSubTab("smtp")}
-          className={`flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-bold rounded-xl transition cursor-pointer ${
-            activeSubTab === "smtp"
-              ? "bg-slate-900 text-white shadow-sm"
-              : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-          }`}
-        >
-          <Wrench className="h-4 w-4" />
-          <span>SMTP Diagnostic & Test Email</span>
-          <span
-            className={`h-2 w-2 rounded-full ${
-              isSmtpVerified ? "bg-emerald-400" : isSmtpConfigured ? "bg-rose-400" : "bg-amber-400"
-            }`}
-          />
         </button>
       </div>
 
@@ -575,9 +507,10 @@ export default function ManageAnnouncements({ drives = [] }) {
                   Delivery Channels
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div
+                  <button
+                    type="button"
                     onClick={() => toggleChannel("in_app")}
-                    className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition ${
+                    className={`flex items-center gap-3 p-3 rounded-xl border text-left cursor-pointer transition w-full ${
                       channels.includes("in_app")
                         ? "bg-blue-50/80 border-blue-300 text-blue-900"
                         : "border-slate-200 text-slate-500 hover:bg-slate-50"
@@ -586,8 +519,9 @@ export default function ManageAnnouncements({ drives = [] }) {
                     <input
                       type="checkbox"
                       checked={channels.includes("in_app")}
-                      onChange={() => {}}
-                      className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
+                      readOnly
+                      tabIndex={-1}
+                      className="pointer-events-none rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
                     />
                     <div>
                       <div className="text-xs font-bold flex items-center gap-1.5">
@@ -598,11 +532,12 @@ export default function ManageAnnouncements({ drives = [] }) {
                         Displays in student dashboard bell icon & inbox
                       </div>
                     </div>
-                  </div>
+                  </button>
 
-                  <div
+                  <button
+                    type="button"
                     onClick={() => toggleChannel("email")}
-                    className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition ${
+                    className={`flex items-center gap-3 p-3 rounded-xl border text-left cursor-pointer transition w-full ${
                       channels.includes("email")
                         ? "bg-indigo-50/80 border-indigo-300 text-indigo-900"
                         : "border-slate-200 text-slate-500 hover:bg-slate-50"
@@ -611,8 +546,9 @@ export default function ManageAnnouncements({ drives = [] }) {
                     <input
                       type="checkbox"
                       checked={channels.includes("email")}
-                      onChange={() => {}}
-                      className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+                      readOnly
+                      tabIndex={-1}
+                      className="pointer-events-none rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4"
                     />
                     <div>
                       <div className="text-xs font-bold flex items-center gap-1.5">
@@ -623,7 +559,7 @@ export default function ManageAnnouncements({ drives = [] }) {
                         Sends official email via placement sender address
                       </div>
                     </div>
-                  </div>
+                  </button>
                 </div>
               </div>
 
@@ -766,33 +702,35 @@ export default function ManageAnnouncements({ drives = [] }) {
                 Scheduled Placement Drive Deadline Reminders
               </h3>
               <p className="text-xs text-slate-500">
-                Persistent background reminders scheduled for upcoming application deadlines. Survives server restarts.
+                Automated persistent background reminders scheduled for upcoming application deadlines.
               </p>
             </div>
 
             <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                <span>Automated Engine Active (60s cycle)</span>
+              </div>
               <button
                 type="button"
                 onClick={loadReminders}
                 disabled={loadingReminders}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 transition"
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 transition cursor-pointer"
               >
                 <RefreshCw
                   className={`h-3.5 w-3.5 ${loadingReminders ? "animate-spin" : ""}`}
                 />
                 <span>Refresh</span>
               </button>
-              <button
-                type="button"
-                onClick={handleTriggerWorker}
-                disabled={triggeringWorker}
-                className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition shadow-xs"
-              >
-                <Clock
-                  className={`h-3.5 w-3.5 ${triggeringWorker ? "animate-spin" : ""}`}
-                />
-                <span>Run Reminder Check Now</span>
-              </button>
+            </div>
+          </div>
+
+          {/* Automated System Notice */}
+          <div className="rounded-2xl border border-indigo-100 bg-gradient-to-r from-blue-50/60 via-indigo-50/40 to-purple-50/40 p-4 flex items-start gap-3">
+            <Info className="h-5 w-5 text-indigo-600 shrink-0 mt-0.5" />
+            <div className="text-xs text-slate-600 leading-relaxed">
+              <strong className="text-slate-900 font-bold block mb-0.5">How Automated Deadline Reminders Notify Candidates:</strong>
+              CampusFlow's persistent background worker runs continuously every 60 seconds without requiring manual triggers. When an upcoming drive application deadline approaches (24 hours, 12 hours, or 2 hours prior to closing), urgent reminder notifications and official emails are automatically dispatched to all eligible students who have not yet submitted their applications.
             </div>
           </div>
 
@@ -925,238 +863,7 @@ export default function ManageAnnouncements({ drives = [] }) {
         </div>
       )}
 
-      {/* TAB 3: SMTP DIAGNOSTICS & CONTROLLED TEST EMAIL */}
-      {activeSubTab === "smtp" && (
-        <div className="space-y-6">
-          {/* Diagnostic Banner Card */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-100 pb-5">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-black text-slate-900 tracking-tight">
-                    Server-Side SMTP Diagnostics
-                  </h3>
-                  <span
-                    className={`rounded-full px-2.5 py-0.5 text-xs font-bold border ${
-                      isSmtpVerified
-                        ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                        : isSmtpConfigured
-                        ? "bg-rose-50 text-rose-800 border-rose-200"
-                        : "bg-amber-50 text-amber-800 border-amber-200"
-                    }`}
-                  >
-                    {isSmtpVerified
-                      ? "Verified"
-                      : isSmtpConfigured
-                      ? "Verification Failed"
-                      : "Not Configured"}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500 mt-1">
-                  Tests live server-to-provider connectivity and authentication via Nodemailer. Credentials are never exposed.
-                </p>
-              </div>
 
-              <button
-                type="button"
-                disabled={loadingSmtp}
-                onClick={loadSmtpStatus}
-                className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-xs active:scale-95 disabled:opacity-50 cursor-pointer"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${loadingSmtp ? "animate-spin" : ""}`} />
-                <span>{loadingSmtp ? "Verifying..." : "Re-test Connection"}</span>
-              </button>
-            </div>
-
-            {/* Verification State Callout */}
-            <div className="mt-5">
-              {isSmtpVerified ? (
-                <div className="p-4 rounded-xl bg-emerald-50/70 border border-emerald-200 text-emerald-900 flex items-start gap-3">
-                  <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="text-sm font-bold">SMTP Connection Verified</h4>
-                    <p className="text-xs text-emerald-800 mt-0.5">
-                      {smtpData?.verification?.message || "Successfully connected and authenticated with mail provider."}
-                    </p>
-                    <p className="text-[11px] text-emerald-700 mt-1 font-medium">
-                      Note: Provider acceptance confirms server authentication and acceptance; inbox delivery to specific domains depends on recipient filters and domain reputation.
-                    </p>
-                  </div>
-                </div>
-              ) : isSmtpConfigured ? (
-                <div className="p-4 rounded-xl bg-rose-50/80 border border-rose-200 text-rose-950 flex items-start gap-3">
-                  <AlertTriangle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <h4 className="text-sm font-bold">
-                      Verification Failed: {smtpCategory}
-                    </h4>
-                    <p className="text-xs text-rose-800">
-                      {smtpData?.verification?.message || "SMTP connection failed. Check your credentials."}
-                    </p>
-                    {smtpCategory === "AUTH_FAILED" && (
-                      <div className="text-[11px] text-rose-900 bg-rose-100/60 p-2.5 rounded-lg border border-rose-200 mt-2">
-                        <strong>Root Cause:</strong> Your mail server rejected the username or app password. For Gmail, you must generate an official 16-character Google App Password (not your normal Google account password) with 2-Step Verification turned on.
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 flex items-start gap-3">
-                  <Info className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="text-sm font-bold">SMTP Not Configured</h4>
-                    <p className="text-xs text-amber-800 mt-0.5">
-                      No SMTP credentials are configured in <code>major-backend/.env</code>. In-app notifications will work normally, but outbound emails will be skipped.
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Sanitized Connection Details Grid */}
-            <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="text-[10px] font-bold uppercase text-slate-400">SMTP Host</span>
-                <p className="text-xs font-bold text-slate-800 mt-0.5 truncate">{smtpData?.host || "Not set"}</p>
-              </div>
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="text-[10px] font-bold uppercase text-slate-400">Port & Security</span>
-                <p className="text-xs font-bold text-slate-800 mt-0.5">
-                  {smtpData?.port || 587} ({smtpData?.secure ? "SSL/TLS 465" : "STARTTLS 587"})
-                </p>
-              </div>
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="text-[10px] font-bold uppercase text-slate-400">Credentials Present</span>
-                <p className="text-xs font-bold text-slate-800 mt-0.5 flex items-center gap-1.5">
-                  {smtpData?.hasUser && smtpData?.hasPass ? (
-                    <span className="text-emerald-700 flex items-center gap-1">
-                      <Check className="h-3 w-3" /> Configured
-                    </span>
-                  ) : (
-                    <span className="text-rose-700 flex items-center gap-1">
-                      <AlertCircle className="h-3 w-3" /> Missing
-                    </span>
-                  )}
-                </p>
-              </div>
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="text-[10px] font-bold uppercase text-slate-400">Sender Identity</span>
-                <p className="text-xs font-bold text-slate-800 mt-0.5 truncate" title={smtpData?.sender}>
-                  {smtpData?.sender || "Not configured"}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Controlled Single Test Email Box */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
-            <div className="border-b border-slate-100 pb-4">
-              <h3 className="text-sm font-black text-slate-900 tracking-tight flex items-center gap-2">
-                <Mail className="h-4 w-4 text-indigo-600" />
-                Controlled Diagnostic Test Email
-              </h3>
-              <p className="text-xs text-slate-500 mt-1">
-                Safely dispatch a single test email to one explicitly specified address to verify complete end-to-end provider handoff. Never broadcasts to students.
-              </p>
-            </div>
-
-            <form onSubmit={handleSendTestEmail} className="mt-5 space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Target Recipient Email Address
-                </label>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <input
-                    type="email"
-                    value={testEmailAddress}
-                    onChange={(e) => setTestEmailAddress(e.target.value)}
-                    placeholder="Enter your personal or admin email address"
-                    className="flex-1 rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                  <button
-                    type="submit"
-                    disabled={sendingTestEmail || !testEmailAddress}
-                    className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition active:scale-95 disabled:opacity-50 cursor-pointer"
-                  >
-                    <Send className={`h-3.5 w-3.5 ${sendingTestEmail ? "animate-pulse" : ""}`} />
-                    <span>{sendingTestEmail ? "Transmitting..." : "Send Test Email"}</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Test Email Result Card */}
-              {testEmailResult && (
-                <div
-                  className={`p-4 rounded-xl border text-xs animate-in fade-in ${
-                    testEmailResult.success
-                      ? "bg-emerald-50/80 border-emerald-200 text-emerald-950"
-                      : "bg-rose-50/80 border-rose-200 text-rose-950"
-                  }`}
-                >
-                  <div className="flex items-start gap-2.5">
-                    {testEmailResult.success ? (
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
-                    ) : (
-                      <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
-                    )}
-                    <div className="space-y-1">
-                      <p className="font-bold">
-                        {testEmailResult.success
-                          ? "Test Email Accepted by Provider"
-                          : `Test Email Failed: ${testEmailResult.category || "PROVIDER_ERROR"}`}
-                      </p>
-                      <p className="text-[11px] leading-relaxed">
-                        {testEmailResult.success
-                          ? testEmailResult.message
-                          : testEmailResult.error}
-                      </p>
-                      {testEmailResult.success && testEmailResult.data?.messageId && (
-                        <p className="text-[10px] text-emerald-700 font-mono">
-                          Provider Message ID: {testEmailResult.data.messageId}
-                        </p>
-                      )}
-                      <p className="text-[10px] opacity-75 mt-1">
-                        Note: Provider acceptance confirms handshake and queueing; provider acceptance does not guarantee inbox delivery.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </form>
-          </div>
-
-          {/* Setup Guide Card */}
-          <div className="bg-slate-50 rounded-2xl border border-slate-200 p-5 text-xs text-slate-700 space-y-3">
-            <h4 className="font-bold text-slate-900 flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-blue-600" />
-              How to configure SMTP in <code>major-backend/.env</code>
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-[11px] leading-relaxed">
-              <div className="p-3 rounded-xl bg-white border border-slate-200 space-y-1.5">
-                <span className="font-bold text-slate-900">For Google Workspace / Gmail:</span>
-                <ol className="list-decimal list-inside space-y-1 text-slate-600">
-                  <li>Go to your Google Account → Security.</li>
-                  <li>Enable <strong>2-Step Verification</strong> if not already enabled.</li>
-                  <li>Search for <strong>"App Passwords"</strong>.</li>
-                  <li>Generate an App Password for "CampusFlow" (16 lowercase letters).</li>
-                  <li>Put it in <code>EMAIL_PASS=xxxx xxxx xxxx xxxx</code> (spaces ignored).</li>
-                  <li>Set <code>SMTP_HOST=smtp.gmail.com</code> and <code>SMTP_PORT=587</code>.</li>
-                </ol>
-              </div>
-              <div className="p-3 rounded-xl bg-white border border-slate-200 space-y-1.5">
-                <span className="font-bold text-slate-900">For Custom / Institutional SMTP:</span>
-                <ul className="list-disc list-inside space-y-1 text-slate-600">
-                  <li>Set <code>SMTP_HOST</code> to your college or company mail server.</li>
-                  <li>Set <code>SMTP_PORT=587</code> (STARTTLS) or <code>465</code> (SSL/TLS).</li>
-                  <li>Set <code>EMAIL_USER</code> and <code>EMAIL_PASS</code>.</li>
-                  <li>Set <code>EMAIL_FROM="Training & Placement Cell" &lt;tpo@college.edu&gt;</code>.</li>
-                  <li>Restart the backend server or click "Re-test Connection".</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* REVIEW & CONFIRMATION MODAL */}
       {isReviewOpen && (

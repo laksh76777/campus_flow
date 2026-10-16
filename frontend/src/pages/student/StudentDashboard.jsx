@@ -74,6 +74,15 @@ export default function StudentDashboard() {
   const [activeTab, setActiveTab] = useState(
     () => STUDENT_ROUTE_TABS[location.pathname] || "overview"
   );
+
+  // Sync activeTab whenever the route URL changes
+  useEffect(() => {
+    const routeTab = STUDENT_ROUTE_TABS[location.pathname];
+    if (routeTab) {
+      setActiveTab(routeTab);
+    }
+  }, [location.pathname]);
+
   const [isProfileDrawerOpen, setIsProfileDrawerOpen] = useState(false);
   const [drawerSection, setDrawerSection] = useState("academic");
   const [drawerEditing, setDrawerEditing] = useState(false);
@@ -369,6 +378,7 @@ export default function StudentDashboard() {
   }, [location.pathname]);
 
   const handleTabChange = (tab) => {
+    setActiveTab(tab);
     const destination = Object.entries(STUDENT_ROUTE_TABS).find(
       ([, routeTab]) => routeTab === tab
     )?.[0];

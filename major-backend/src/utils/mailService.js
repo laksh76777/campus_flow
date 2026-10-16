@@ -391,6 +391,17 @@ export const sendApplicationStatusEmail = async ({
         const badge = getStatusBadgeColor(status);
         const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
         const subject = `[Placement Cell] Update: ${companyName} - ${badge.label}`;
+        const formattedInterviewDate = interviewDate
+            ? new Date(interviewDate).toLocaleDateString("en-US", {
+                weekday: "long",
+                year: "numeric",
+                month: "short",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: true
+            })
+            : null;
 
         const htmlContent = `
         <!DOCTYPE html>
@@ -426,12 +437,12 @@ export const sendApplicationStatusEmail = async ({
                 <div class="info-row"><span>Role</span><span><strong>${jobTitle || "Campus Drive"}</strong></span></div>
                 ${offeredPackage ? `<div class="info-row"><span>CTC</span><span style="color:#059669"><strong>₹${offeredPackage} LPA</strong></span></div>` : ""}
                 ${interviewRound ? `<div class="info-row"><span>Round</span><span>${interviewRound}</span></div>` : ""}
-                ${interviewDate ? `<div class="info-row"><span>Date/Time</span><span>${new Date(interviewDate).toLocaleString()}</span></div>` : ""}
+                ${formattedInterviewDate ? `<div class="info-row"><span>Date/Time</span><span>${formattedInterviewDate}</span></div>` : ""}
                 ${interviewLocation ? `<div class="info-row"><span>Location / Link</span><span>${interviewLocation}</span></div>` : ""}
               </div>
               ${remarks ? `<div style="background:#fffbeb;border:1px solid #fde68a;padding:14px;border-radius:10px;color:#92400e;margin:16px 0;"><strong>Officer Remarks:</strong><br/>${remarks}</div>` : ""}
               <div style="text-align:center;margin-top:20px;">
-                <a href="${frontendUrl}/student-dashboard?tab=applications" class="btn">View in Placement Portal</a>
+                <a href="${frontendUrl}/my-applications" class="btn">View in Placement Portal</a>
               </div>
             </div>
             <div class="footer"><p>This is an automated notification from CampusFlow.</p></div>
@@ -450,7 +461,7 @@ export const sendApplicationStatusEmail = async ({
             to: recipient,
             subject,
             html: htmlContent,
-            text: `Hello ${studentName || "Student"}, your application with ${companyName} (${jobTitle}) status is updated to ${badge.label}. View details: ${frontendUrl}/student-dashboard?tab=applications`
+            text: `Hello ${studentName || "Student"}, your application with ${companyName} (${jobTitle}) status is updated to ${badge.label}. View details: ${frontendUrl}/my-applications`
         });
 
         return { accepted: true, messageId: info.messageId };
@@ -478,13 +489,14 @@ export const sendDeadlineReminderEmail = async ({
         }
 
         const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
-        const formattedDeadline = new Date(deadline).toLocaleString("en-US", {
-            weekday: "short",
+        const formattedDeadline = new Date(deadline).toLocaleDateString("en-US", {
+            weekday: "long",
+            year: "numeric",
             month: "short",
             day: "numeric",
-            year: "numeric",
             hour: "2-digit",
-            minute: "2-digit"
+            minute: "2-digit",
+            hour12: true
         });
 
         const subject = `[Urgent Reminder] ${companyName} (${jobTitle}) - Application Closes in ${offsetHours} Hours`;
@@ -586,39 +598,74 @@ export const sendBroadcastAnnouncementEmail = async ({
         const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
         const subject = priority === "urgent" ? `[URGENT Placement Alert] ${title}` : `[Placement Office Notice] ${title}`;
 
+        const formattedDate = new Date().toLocaleDateString("en-US", {
+            weekday: "long",
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: true
+        });
+
+        const isUrgent = priority === "urgent";
+
         const htmlContent = `
         <!DOCTYPE html>
         <html>
         <head>
           <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>${title}</title>
           <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #1e293b; }
-            .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0; }
-            .header { background: ${priority === "urgent" ? "linear-gradient(135deg, #7f1d1d 0%, #1e1b4b 100%)" : "linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)"}; color: #ffffff; padding: 28px; }
-            .header h1 { margin: 0; font-size: 19px; font-weight: 800; }
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f1f5f9; margin: 0; padding: 24px 12px; color: #1e293b; -webkit-font-smoothing: antialiased; }
+            .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 20px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+            .header { background: ${isUrgent ? "linear-gradient(135deg, #881337 0%, #4c0519 100%)" : "linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)"}; color: #ffffff; padding: 32px 28px; }
+            .header-tag { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: ${isUrgent ? "#fecdd3" : "#a5b4fc"}; margin-bottom: 6px; }
+            .header h1 { margin: 0; font-size: 20px; font-weight: 800; line-height: 1.3; }
             .content { padding: 28px; }
-            .announcement-box { background: ${priority === "urgent" ? "#fef2f2" : "#f8fafc"}; border: 1px solid ${priority === "urgent" ? "#fecaca" : "#e2e8f0"}; border-radius: 12px; padding: 20px; margin: 18px 0; font-size: 14px; line-height: 1.6; color: #1e293b; }
-            .btn { display: inline-block; background: #2563eb; color: #ffffff !important; text-decoration: none; padding: 12px 24px; border-radius: 10px; font-size: 14px; font-weight: 600; }
-            .footer { padding: 20px 28px; background: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 12px; color: #94a3b8; text-align: center; }
+            .meta-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid #f1f5f9; }
+            .badge { display: inline-block; padding: 5px 12px; border-radius: 9999px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; }
+            .badge-urgent { background: #ffe4e6; color: #9f1239; border: 1px solid #fecdd3; }
+            .badge-notice { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+            .timestamp { font-size: 12px; color: #64748b; font-weight: 600; }
+            .greeting { font-size: 15px; color: #334155; margin-bottom: 16px; }
+            .title-box { font-size: 18px; font-weight: 800; color: #0f172a; margin-bottom: 16px; line-height: 1.35; }
+            .announcement-box { background: ${isUrgent ? "#fff1f2" : "#f8fafc"}; border: 1px solid ${isUrgent ? "#ffe4e6" : "#e2e8f0"}; border-left: 4px solid ${isUrgent ? "#e11d48" : "#3b82f6"}; border-radius: 12px; padding: 20px; font-size: 14px; line-height: 1.65; color: #1e293b; }
+            .announcement-box p { margin: 0 0 10px 0; }
+            .announcement-box p:last-child { margin-bottom: 0; }
+            .cta-wrapper { text-align: center; margin: 28px 0 12px 0; }
+            .btn { display: inline-block; background: ${isUrgent ? "#e11d48" : "#2563eb"}; color: #ffffff !important; text-decoration: none; padding: 13px 30px; border-radius: 12px; font-size: 14px; font-weight: 700; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+            .footer { padding: 24px 28px; background: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: center; line-height: 1.5; }
+            .footer-disclaimer { font-size: 11px; color: #94a3b8; margin-top: 8px; }
           </style>
         </head>
         <body>
           <div class="container">
             <div class="header">
+              <div class="header-tag">Official Recruitment Bulletin</div>
               <h1>Training & Placement Directorate</h1>
-              <p style="margin: 4px 0 0 0; color: #cbd5e1; font-size: 13px;">Official Candidate Broadcast</p>
             </div>
             <div class="content">
-              <p>Dear <strong>${studentName || "Student"}</strong>,</p>
-              <h2 style="font-size: 17px; font-weight: 800; color: #0f172a; margin: 16px 0 8px 0;">${title}</h2>
-              <div class="announcement-box">
-                ${message.replace(/\n/g, "<br/>")}
+              <div class="meta-bar">
+                <span class="badge ${isUrgent ? "badge-urgent" : "badge-notice"}">
+                  ${isUrgent ? "🚨 Urgent Placement Alert" : "📢 TPO Announcement"}
+                </span>
+                <span class="timestamp">${formattedDate}</span>
               </div>
-              <div style="text-align: center; margin-top: 24px;">
-                <a href="${frontendUrl}/student-dashboard" class="btn">Open Student Portal</a>
+              <div class="greeting">Dear <strong>${studentName || "Candidate"}</strong>,</div>
+              <div class="title-box">${title}</div>
+              <div class="announcement-box">
+                ${message.replace(/\n\n/g, "</p><p>").replace(/\n/g, "<br/>")}
+              </div>
+              <div class="cta-wrapper">
+                <a href="${frontendUrl}/notifications" class="btn">Open Notification Center</a>
               </div>
             </div>
-            <div class="footer"><p>Sent by CampusFlow Training & Placement Office.</p></div>
+            <div class="footer">
+              <div><strong>CampusFlow Placement Office</strong> • Direct Student Communications</div>
+              <div class="footer-disclaimer">This official broadcast was sent to your registered student email address. Please visit your student portal to review full details.</div>
+            </div>
           </div>
         </body>
         </html>
@@ -634,7 +681,7 @@ export const sendBroadcastAnnouncementEmail = async ({
             to: studentEmail.trim(),
             subject,
             html: htmlContent,
-            text: `Dear ${studentName || "Student"},\n\n[${title}]\n\n${message}\n\nView portal: ${frontendUrl}/student-dashboard`
+            text: `Dear ${studentName || "Candidate"},\n\n[${title}]\n\nDate: ${formattedDate}\n\n${message}\n\nView details on your student portal: ${frontendUrl}/notifications`
         });
 
         return { accepted: true, messageId: info.messageId };
