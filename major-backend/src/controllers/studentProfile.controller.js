@@ -1028,8 +1028,15 @@ const reviewModificationRequest = asyncHandler(async (req, res) => {
             const afterVal = change.afterValue;
 
             if (field === "backlogs" || field === "activeBacklogs") {
-                profile.backlogs = Number(afterVal) || 0;
-                profile.activeBacklogs = Number(afterVal) || 0;
+                const newBacklogCount = Number(afterVal) || 0;
+                profile.backlogs = newBacklogCount;
+                profile.activeBacklogs = newBacklogCount;
+                if (newBacklogCount === 0 && Array.isArray(profile.backlogDetails)) {
+                    profile.backlogDetails.forEach((b) => {
+                        b.status = "CLEARED";
+                        b.clearedDate = new Date();
+                    });
+                }
             } else if (field === "clearedBacklogsCount") {
                 profile.clearedBacklogsCount = Number(afterVal) || 0;
             } else if (field === "cgpa") {

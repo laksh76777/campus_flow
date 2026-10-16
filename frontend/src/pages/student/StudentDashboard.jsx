@@ -23,6 +23,11 @@ import {
   Mail,
   Check,
   Building2,
+  FileText,
+  Layers,
+  AlertTriangle,
+  Home,
+  Users as UsersIcon,
 } from "lucide-react";
 
 import StudentSidebar from "../../components/studentDashboard/StudentSidebar";
@@ -48,6 +53,7 @@ import {
   markAllNotificationsAsRead,
 } from "../../services/notificationService";
 import { useAuth } from "../../context/authContextDef";
+import { getResumeViewUrl } from "../../utils/resumeHelper";
 
 const STUDENT_ROUTE_TABS = {
   "/student-dashboard": "overview",
@@ -129,6 +135,14 @@ export default function StudentDashboard() {
   const [eligibleDrives, setEligibleDrives] = useState([]);
   const [applications, setApplications] = useState([]);
   const [user, setUser] = useState(null);
+
+  const semMap = useMemo(() => {
+    const map = {};
+    (studentProfile?.semesterResults || []).forEach((s) => {
+      map[s.semester] = s.sgpa;
+    });
+    return map;
+  }, [studentProfile?.semesterResults]);
 
   // Notification / Message Center States
   const [notifications, setNotifications] = useState([]);
@@ -1024,6 +1038,199 @@ export default function StudentDashboard() {
                     <span className="text-slate-400">Department: </span>
                     <strong className="text-slate-800">{studentBranch}</strong>
                   </div>
+                </div>
+              </div>
+
+              {/* Secondary & Higher Secondary Education (10th & 12th/Diploma) */}
+              <div className="rounded-xl border border-slate-100 p-5 space-y-4 bg-slate-50/50">
+                <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
+                  <h4 className="font-bold text-slate-900 uppercase tracking-wider text-[11px] flex items-center gap-2">
+                    <Award className="h-4 w-4 text-emerald-600" />
+                    <span>Secondary & Higher Secondary Records</span>
+                  </h4>
+                  <button
+                    onClick={() => handleOpenProfileToSection("secondary", true)}
+                    className="text-xs font-bold text-blue-600 hover:text-blue-800"
+                  >
+                    Edit Records
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                  {/* 10th Record */}
+                  <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-black text-slate-900 uppercase text-[11px]">10th Standard (SSC)</span>
+                      <span className="text-sm font-extrabold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100">
+                        {studentProfile?.tenthDetails?.percentage ?? studentProfile?.tenthPercentage ?? "--"}%
+                      </span>
+                    </div>
+                    <p className="font-bold text-slate-700">{studentProfile?.tenthDetails?.schoolName || "School Name not entered"}</p>
+                    <p className="text-slate-500 text-[11px]">
+                      Board: {studentProfile?.tenthDetails?.board || "CBSE"} • Passing Year: {studentProfile?.tenthDetails?.passingYear || "--"}
+                    </p>
+                  </div>
+
+                  {/* 12th / Diploma Record */}
+                  <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-black text-slate-900 uppercase text-[11px]">
+                        {studentProfile?.twelfthOrDiplomaDetails?.qualificationType || "Class 12"} Record
+                      </span>
+                      <span className="text-sm font-extrabold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-100">
+                        {studentProfile?.twelfthOrDiplomaDetails?.percentage ?? studentProfile?.twelfthPercentage ?? "--"}%
+                      </span>
+                    </div>
+                    <p className="font-bold text-slate-700">{studentProfile?.twelfthOrDiplomaDetails?.institutionName || "Institution not entered"}</p>
+                    <p className="text-slate-500 text-[11px]">
+                      Authority: {studentProfile?.twelfthOrDiplomaDetails?.boardOrUniversity || "CBSE"} • Passing Year: {studentProfile?.twelfthOrDiplomaDetails?.passingYear || "--"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Semester-Wise SGPA Ledger */}
+              <div className="rounded-xl border border-slate-100 p-5 space-y-3 bg-slate-50/50">
+                <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
+                  <h4 className="font-bold text-slate-900 uppercase tracking-wider text-[11px] flex items-center gap-2">
+                    <Layers className="h-4 w-4 text-blue-600" />
+                    <span>Semester-Wise SGPA Breakdown (Sem 1 - 8)</span>
+                  </h4>
+                  <button
+                    onClick={() => handleOpenProfileToSection("semesters", false)}
+                    className="text-xs font-bold text-blue-600 hover:text-blue-800"
+                  >
+                    Manage SGPAs
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => {
+                    const sgpaVal = semMap[sem];
+                    const hasVal = sgpaVal !== undefined && sgpaVal !== null;
+                    return (
+                      <div key={sem} className="rounded-xl border border-slate-200 bg-white p-3 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-slate-600">Semester {sem}</span>
+                          {hasVal ? (
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                          ) : (
+                            <span className="text-[10px] text-slate-400">Pending</span>
+                          )}
+                        </div>
+                        <p className={`text-lg font-extrabold font-mono ${hasVal ? "text-blue-600" : "text-slate-300"}`}>
+                          {hasVal ? Number(sgpaVal).toFixed(2) : "--"}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Backlogs & Education Gaps Summary */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Backlogs Card */}
+                <div className="rounded-xl border border-slate-100 p-5 space-y-3 bg-slate-50/50">
+                  <h4 className="font-bold text-slate-900 uppercase tracking-wider text-[11px] flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-500" />
+                    <span>Backlogs & Arrears</span>
+                  </h4>
+                  <div className="rounded-xl border border-slate-200 bg-white p-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-700">Active Arrears:</span>
+                      <span className={`text-sm font-extrabold ${studentProfile?.backlogs > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                        {studentProfile?.backlogs ?? 0}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      {studentProfile?.backlogs > 0
+                        ? `${studentProfile.backlogs} active arrear(s) recorded.`
+                        : "0 Active Arrears — Clean Academic Record."}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Education Gaps Card */}
+                <div className="rounded-xl border border-slate-100 p-5 space-y-3 bg-slate-50/50">
+                  <h4 className="font-bold text-slate-900 uppercase tracking-wider text-[11px] flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-purple-600" />
+                    <span>Education Gaps</span>
+                  </h4>
+                  <div className="rounded-xl border border-slate-200 bg-white p-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-700">Declared Gaps:</span>
+                      <span className="text-xs font-extrabold text-slate-800">
+                        {studentProfile?.hasEducationGap ? `${studentProfile?.educationGaps?.length || 1} Period(s)` : "None"}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      {studentProfile?.hasEducationGap
+                        ? studentProfile?.educationGaps?.[0]?.reason || "Gap period declared."
+                        : "Continuous academic track record."}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Family & Address Information */}
+              <div className="rounded-xl border border-slate-100 p-5 space-y-3 bg-slate-50/50 text-xs">
+                <h4 className="font-bold text-slate-900 uppercase tracking-wider text-[11px] flex items-center gap-2">
+                  <Home className="h-4 w-4 text-slate-600" />
+                  <span>Family & Address Details</span>
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                  <div className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-1">
+                    <span className="text-[11px] text-slate-400 font-bold block">Parents</span>
+                    <p className="font-bold text-slate-800">Father: {studentProfile?.family?.fatherName || "Not entered"}</p>
+                    <p className="font-bold text-slate-800">Mother: {studentProfile?.family?.motherName || "Not entered"}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-1">
+                    <span className="text-[11px] text-slate-400 font-bold block">Current Address</span>
+                    <p className="font-bold text-slate-800">{studentProfile?.currentAddress?.street || "Not entered"}</p>
+                    <p className="text-slate-500 text-[11px]">
+                      {studentProfile?.currentAddress?.city ? `${studentProfile.currentAddress.city}, ` : ""}
+                      {studentProfile?.currentAddress?.state ? `${studentProfile.currentAddress.state} ` : ""}
+                      {studentProfile?.currentAddress?.pincode ? `- ${studentProfile.currentAddress.pincode}` : ""}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Master Placement Resume Card */}
+              <div className="rounded-xl border border-slate-100 p-5 space-y-3 bg-slate-50/50">
+                <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
+                  <h4 className="font-bold text-slate-900 uppercase tracking-wider text-[11px] flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-blue-600" />
+                    <span>Master Placement Resume</span>
+                  </h4>
+                  <button
+                    onClick={() => handleOpenProfileToSection("resume", true)}
+                    className="text-xs font-bold text-blue-600 hover:text-blue-800"
+                  >
+                    Upload / Replace
+                  </button>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl border border-slate-200 bg-white">
+                  <div className="flex items-center gap-2.5">
+                    <CheckCircle2 className={`h-4 w-4 ${studentProfile?.resume?.url ? "text-emerald-500" : "text-amber-500"}`} />
+                    <div>
+                      <p className="text-xs font-bold text-slate-800">
+                        {studentProfile?.resume?.url ? "Active Placement Resume Attached" : "No Resume Uploaded Yet"}
+                      </p>
+                      <p className="text-[11px] text-slate-400">
+                        Used automatically by recruiters when you apply to placement drives.
+                      </p>
+                    </div>
+                  </div>
+                  {studentProfile?.resume?.url && (
+                    <a
+                      href={getResumeViewUrl(studentProfile.resume.url)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-bold transition border border-blue-200"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      <span>View Resume</span>
+                    </a>
+                  )}
                 </div>
               </div>
 
