@@ -3,7 +3,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { User } from "../models/user.models.js";
 import { StudentProfile } from "../models/studentProfile.model.js";
 import { PlacementSession } from "../models/placementSession.model.js";
-import { getCatalogProgram, normalizeDegreeType } from "../constants/programCatalog.js";
+import { getCatalogProgram, resolveStudentProgram, normalizeDegreeType } from "../constants/programCatalog.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
@@ -92,7 +92,7 @@ const registerUser = asyncHandler(async (req, res) => {
     }
 
     // 3. Academic program validation against the authoritative catalogue
-    const selectedProgram = getCatalogProgram(programCode);
+    const selectedProgram = getCatalogProgram(programCode) || resolveStudentProgram(req.body);
     if (!selectedProgram) {
         throw new ApiError(400, "A valid approved programCode is required");
     }
