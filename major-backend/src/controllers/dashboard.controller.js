@@ -14,6 +14,19 @@ import { studentMatchesDriveProgram } from "../services/programTargeting.service
  * recruitment funnel, and corporate recruiter rankings.
  */
 const getDashboardStats = asyncHandler(async (req, res) => {
+    const { sessionId, placementSession } = req.query;
+    const targetSessionId = sessionId || placementSession;
+
+    const studentFilter = targetSessionId ? { placementSession: targetSessionId } : {};
+    const driveFilter = targetSessionId ? { placementSession: targetSessionId } : {};
+
+    let appFilter = {};
+    if (targetSessionId) {
+        const sessionDrives = await PlacementDrive.find(driveFilter).select("_id");
+        const driveIds = sessionDrives.map((d) => d._id);
+        appFilter = { placementDrive: { $in: driveIds } };
+    }
+
     const [
         totalCompanies,
         activeCompanies,
@@ -33,22 +46,22 @@ const getDashboardStats = asyncHandler(async (req, res) => {
     ] = await Promise.all([
         Company.countDocuments(),
         Company.countDocuments({ isActive: true }),
-        PlacementDrive.countDocuments(),
-        PlacementDrive.countDocuments({ isActive: true }),
-        StudentProfile.countDocuments(),
-        Application.countDocuments(),
-        Application.countDocuments({ status: "applied" }),
-        Application.countDocuments({ status: "shortlisted" }),
-        Application.countDocuments({ status: "interview" }),
-        Application.countDocuments({ status: "rejected" }),
-        Application.countDocuments({ status: "selected" }),
-        Application.countDocuments({ status: "withdrawn" }),
+        PlacementDrive.countDocuments(driveFilter),
+        PlacementDrive.countDocuments({ ...driveFilter, isActive: true }),
+        StudentProfile.countDocuments(studentFilter),
+        Application.countDocuments(appFilter),
+        Application.countDocuments({ ...appFilter, status: "applied" }),
+        Application.countDocuments({ ...appFilter, status: "shortlisted" }),
+        Application.countDocuments({ ...appFilter, status: "interview" }),
+        Application.countDocuments({ ...appFilter, status: "rejected" }),
+        Application.countDocuments({ ...appFilter, status: "selected" }),
+        Application.countDocuments({ ...appFilter, status: "withdrawn" }),
 
         // Profiles with branch info
-        StudentProfile.find().select("programCode programLevel degreeType course branch department cgpa"),
+        StudentProfile.find(studentFilter).select("programCode programLevel degreeType course branch department cgpa"),
 
         // Selected applications with populated placement drive and company for salary/company analytics
-        Application.find({ status: "selected" })
+        Application.find({ ...appFilter, status: "selected" })
             .populate({
                 path: "placementDrive",
                 populate: {
@@ -60,7 +73,7 @@ const getDashboardStats = asyncHandler(async (req, res) => {
             .populate("student", "programCode programLevel degreeType course branch department"),
 
         // All placement drives with company info
-        PlacementDrive.find()
+        PlacementDrive.find(driveFilter)
             .populate("company", "companyName")
             .select("jobTitle package numberOfOpenings isActive createdAt")
     ]);
@@ -72,7 +85,13 @@ const getDashboardStats = asyncHandler(async (req, res) => {
         const raw = profile.branch || profile.department || "Unassigned";
         const key = program?.code || `LEGACY:${raw}`;
         if (!branchMap[key]) {
-            branchMap[key] = { programCode: program?.code || null, branch: program?.name || raw, registered: 0, placed: 0 };
+            branchMap[key] = {
+                programCode: program?.code || null,
+                branch: program?.name || raw,
+                registered: 0,
+                placed: 0,
+                placedStudentIds: new Set()
+            };
         }
         branchMap[key].registered += 1;
     });
@@ -80,12 +99,16 @@ const getDashboardStats = asyncHandler(async (req, res) => {
     const placedStudentIds = new Set();
     selectedApps.forEach((app) => {
         if (app.student && app.student._id) {
-            placedStudentIds.add(app.student._id.toString());
+            const studentId = app.student._id.toString();
+            placedStudentIds.add(studentId);
             const program = resolveStudentProgram(app.student);
             const raw = app.student.branch || app.student.department || "Unassigned";
             const key = program?.code || `LEGACY:${raw}`;
             if (branchMap[key]) {
-                branchMap[key].placed += 1;
+                if (!branchMap[key].placedStudentIds.has(studentId)) {
+                    branchMap[key].placedStudentIds.add(studentId);
+                    branchMap[key].placed += 1;
+                }
             }
         }
     });
@@ -152,9 +175,10 @@ const getDashboardStats = asyncHandler(async (req, res) => {
         .sort((a, b) => b.offers - a.offers)
         .slice(0, 8);
 
-    // 4. Recruitment Funnel Conversion
+    // 4. Recruitment Funnel Conversion (active pipeline excluding withdrawn applications)
+    const activeApplications = totalApplications - withdrawnApplications;
     const funnel = [
-        { stage: "Applied", count: totalApplications },
+        { stage: "Applied", count: activeApplications },
         { stage: "Shortlisted", count: shortlistedApplications + interviewApplications + selectedApplications },
         { stage: "Interviews", count: interviewApplications + selectedApplications },
         { stage: "Selected", count: selectedApplications }

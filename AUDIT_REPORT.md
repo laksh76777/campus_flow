@@ -297,3 +297,34 @@ No write migration has been applied; therefore no legacy mappings have been perf
 - **Frontend Production Build**: `npm run build` compiled successfully in 880ms with 0 errors.
 
 - **Backend Syntax Check**: `node --check` passed for `major-backend/src/app.js`, `excelImportExport.service.js`, and `tests/phase6_excel_verification.mjs`.
+
+---
+
+## Final Safe Audit, Minimal Fixes & Release Verification (2026-10-16)
+
+### 1. Repository Audit & Baseline Integrity
+- **Non-Negotiable Guardrails**: Full adherence maintained. No architectural rewriting, UI redesigns, database cleans/reseeds, `.env` exposure, or unsolicited dependency installation. The existing working application is preserved.
+- **Audit Logging Architecture**: Inspected durable logging across the repository:
+  - `Application.statusHistory`: Stores authenticated transitions (`fromStatus`, `toStatus`, `remarks`, `updatedBy`, `updatedAt`).
+  - `Application.eligibilitySnapshot`: Records snapshot criteria evaluated at application time.
+  - `Application` override tracking: Durable records for `isOverridden`, `overrideReason`, `overriddenBy`, `overriddenAt`.
+  - `ImportBatch`: Comprehensive audit of spreadsheet imports (`importedBy`, `status`, `totalRows`, `insertedRows`, `updatedRows`, `skippedRows`, row errors).
+  - `ExportLog`: Traceable audit of all administrative report exports (`placementDrive`, `exportedBy`, `exportFormat`, `exportedFields`, `applicantCount`, `statusFilter`).
+  - `ReminderJob`: Durable audit of automated background notifications (`drive`, `scheduledTime`, `offsetHours`, `channels`, `status`, `deliverySummary`, `errorCategory`).
+- **Endpoint Inspection**:
+  - `POST /api/v1/notifications/smtp-test-email`: Verified as protected by `verifyAdmin` and required by operational diagnostics and regression test #23 (`Subtest 12`). Retained safely.
+  - `POST /api/v1/notifications/reminders/trigger`: Retained safely behind `verifyAdmin` for test verification and operational manual trigger.
+  - Removed orphaned `handleTriggerWorker` definition from `ManageAnnouncements.jsx` which resolved 3 ESLint `no-undef` errors.
+
+### 2. Analytics & Session Consistency Minimal Corrections
+- **Unique Student Placement Count**: Fixed branch placement calculation in `dashboard.controller.js` and `PlacementAnalytics.jsx` by tracking unique placed `studentId` per branch via `Set`. Prevents students with multiple selected offers from artificially inflating branch placement counts or exceeding 100%.
+- **Withdrawn Application Filtering**: Adjusted recruitment funnel `Applied` stage to count active applications (`totalApplications - withdrawnApplications`), preventing withdrawn applications from distorting the pipeline.
+- **Placement Session Scoping**: Added optional `sessionId` / `placementSession` query filtering to `getDashboardStats`, constraining students, drives, and applications when a session filter is provided while preserving full backward compatibility when omitted.
+
+### 3. Verification & Safety Summary
+- **Backend Test Suite**: `npm test` passed 25/25 tests with 0 failures in 12.4s.
+- **Frontend Production Build**: `npm run build` completed in 872ms with 0 errors.
+- **Frontend Lint**: `npm run lint` reported 0 errors (69 pre-existing unused variable warnings).
+- **Backend Syntax Check**: `node --check src/controllers/dashboard.controller.js` passed with 0 errors.
+- **Git Status**: 3 targeted files modified; zero modifications to `.env` or database data. No automatic git commit or push performed (per Rule 11).
+

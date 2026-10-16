@@ -35,11 +35,17 @@ export default function PlacementAnalytics({
       map[b].registered += 1;
     });
 
-    applications.forEach((a) => {
+    const placedPerBranch = {};
+    applications.forEach((a, idx) => {
       if (a.status === "selected") {
         const b = (a.student?.branch || a.student?.department || "Unassigned");
+        const sId = String(a.student?._id || a.student || a._id || idx);
         if (!map[b]) map[b] = { branch: b, registered: 1, placed: 0 };
-        map[b].placed += 1;
+        if (!placedPerBranch[b]) placedPerBranch[b] = new Set();
+        if (!placedPerBranch[b].has(sId)) {
+          placedPerBranch[b].add(sId);
+          map[b].placed += 1;
+        }
       }
     });
 
@@ -99,7 +105,8 @@ export default function PlacementAnalytics({
   const funnel = useMemo(() => {
     if (stats?.funnel && stats.funnel.length > 0) return stats.funnel;
 
-    const total = applications.length;
+    const activeApps = applications.filter((a) => a.status !== "withdrawn");
+    const total = activeApps.length;
     const shortlisted = applications.filter((a) => ["shortlisted", "interview", "selected"].includes(a.status)).length;
     const interview = applications.filter((a) => ["interview", "selected"].includes(a.status)).length;
     const selected = applications.filter((a) => a.status === "selected").length;
