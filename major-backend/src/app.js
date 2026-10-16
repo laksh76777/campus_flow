@@ -1,6 +1,8 @@
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import mongoose from "mongoose";
+import { ApiError } from "./utils/ApiError.js";
 
 const app = express();
 
@@ -25,41 +27,16 @@ const isOriginAllowed = (origin) => {
 
     const normalizedOrigin = origin.replace(/\/$/, "");
 
-    // Allow all if CORS_ORIGIN is '*'
-    if (process.env.CORS_ORIGIN === "*" || configuredOrigins.includes("*")) {
+    if (configuredOrigins.includes(normalizedOrigin)) {
         return true;
     }
 
-    // Explicit origins from env or default local dev
     if (
-        defaultAllowedOrigins.includes(normalizedOrigin) ||
-        configuredOrigins.includes(normalizedOrigin)
+        process.env.NODE_ENV !== "production" &&
+        (defaultAllowedOrigins.includes(normalizedOrigin) ||
+            /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalizedOrigin))
     ) {
         return true;
-    }
-
-    // Allow any localhost / 127.0.0.1 port for development
-    if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalizedOrigin)) {
-        return true;
-    }
-
-    // Allow all Vercel deployments (preview domains like *-msgcyqj4h.vercel.app and production domains)
-    try {
-        const parsed = new URL(normalizedOrigin);
-        if (
-            parsed.protocol === "https:" &&
-            (parsed.hostname === "vercel.app" || parsed.hostname.endsWith(".vercel.app"))
-        ) {
-            return true;
-        }
-        if (
-            parsed.protocol === "https:" &&
-            (parsed.hostname === "onrender.com" || parsed.hostname.endsWith(".onrender.com"))
-        ) {
-            return true;
-        }
-    } catch {
-        // invalid URL format
     }
 
     return false;
@@ -103,7 +80,18 @@ app.use(cookieParser());
 app.use("/api", generalApiLimiter);
 
 app.get("/", (req, res) => {
-    res.send("backend is running");
+    const databaseReady = mongoose.connection.readyState === 1;
+    return res
+        .status(databaseReady ? 200 : 503)
+        .send(databaseReady ? "backend is running" : "backend database unavailable");
+});
+
+app.get("/health", (req, res) => {
+    const databaseReady = mongoose.connection.readyState === 1;
+    return res.status(databaseReady ? 200 : 503).json({
+        status: databaseReady ? "ok" : "unavailable",
+        database: databaseReady ? "connected" : "disconnected"
+    });
 });
 
 import userRouter from "./routes/user.routes.js";
@@ -130,18 +118,35 @@ app.use("/api/v1/sessions", sessionRouter);
 app.use("/api/v1/departments", departmentRouter);
 app.use("/api/v1/excel", excelRouter);
 
+app.use((req, res, next) => {
+    next(new ApiError(404, `Route not found: ${req.method} ${req.path}`));
+});
+
 // Global Error Handler
 app.use((err, req, res, next) => {
-    console.error(err);
+    if (res.headersSent) {
+        return next(err);
+    }
 
-    const statusCode = err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+    const statusCode =
+        Number.isInteger(err.statusCode) && err.statusCode >= 400
+            ? err.statusCode
+            : 500;
+    const isServerError = statusCode >= 500;
+    if (isServerError) {
+        console.error("Unhandled API error", {
+            method: req.method,
+            path: req.path,
+            statusCode,
+            errorName: err.name
+        });
+    }
 
     return res.status(statusCode).json({
         statusCode,
         success: false,
-        message,
-        errors: err.errors || []
+        message: isServerError ? "Internal Server Error" : err.message,
+        errors: isServerError || !Array.isArray(err.errors) ? [] : err.errors
     });
 });
 

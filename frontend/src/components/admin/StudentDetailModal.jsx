@@ -5,19 +5,15 @@ import {
   Phone,
   GraduationCap,
   Award,
+  Clock,
   CheckCircle2,
   AlertCircle,
   FileText,
   ExternalLink,
   BookOpen,
-  Calendar,
   Layers,
   Sparkles,
-  ShieldCheck,
-  Building,
-  AlertTriangle,
   Users,
-  Home,
   Check,
   RotateCcw
 } from "lucide-react";
@@ -58,27 +54,34 @@ export default function StudentDetailModal({ student, isOpen, onClose, onStudent
   const phone = user.phone || student.phone || "";
   const avatarUrl = user.avatar?.url || student.avatarUrl || null;
   const enrollmentNo = student.enrollmentNumber || student.usn || "Not Assigned";
-  const branch = student.branch || student.department || "Computer Science";
-  const course = student.course || "B.Tech";
-  const semester = student.semester ?? student.currentSemester ?? 6;
-  const graduationYear = student.graduationYear ?? 2026;
-  const cgpa = student.verifiedCGPA ?? student.cgpa ?? 8.0;
-  const activeBacklogs = student.activeBacklogs ?? student.backlogs ?? 0;
-  const clearedBacklogs = student.clearedBacklogsCount ?? 0;
+  const branch = student.branch || student.department || "Not provided";
+  const course = student.course || "Not provided";
+  const semester = student.semester ?? student.currentSemester;
+  const graduationYear = student.graduationYear;
+  const cgpa = student.verifiedCGPA ?? student.cgpa;
+  const activeBacklogs = student.activeBacklogs ?? student.backlogs;
+  const clearedBacklogs = student.clearedBacklogsCount;
   const tenth = student.tenthDetails?.percentage ?? student.tenthPercentage;
   const twelfth = student.twelfthOrDiplomaDetails?.percentage ?? student.twelfthPercentage;
-  const isPlaced = Boolean(student.isPlaced);
+  const isPlaced = student.isPlaced;
   const placedCompany = student.placedCompany || "";
   const placedPackage = student.placedPackage;
   const placedJobTitle = student.placedJobTitle || "";
   const placedAt = student.placedAt;
   const skills = Array.isArray(student.skills) ? student.skills : [];
   const certificates = Array.isArray(student.certificates) ? student.certificates : [];
-  const about = student.about || "";
   const rawResumeUrl = student.resume?.url || student.resumeUrl;
   const resumeUrl = getResumeViewUrl(rawResumeUrl);
-  const semesterResults = student.semesterResults || [];
-  const backlogDetails = student.backlogDetails || [];
+  const semesterResults = Array.isArray(student.semesterResults)
+    ? student.semesterResults
+    : [];
+  const backlogDetails = Array.isArray(student.backlogDetails)
+    ? student.backlogDetails
+    : [];
+  const educationGaps = Array.isArray(student.educationGaps)
+    ? student.educationGaps
+    : [];
+  const about = student.about || "";
 
   const handleVerify = async (status, remarks = "") => {
     setVerifying(true);
@@ -154,7 +157,7 @@ export default function StudentDetailModal({ student, isOpen, onClose, onStudent
                 <span>•</span>
                 <span>{course} - {branch}</span>
                 <span>•</span>
-                <span>Class of {graduationYear}</span>
+                <span>Class of {graduationYear ?? "Not provided"}</span>
               </div>
             </div>
           </div>
@@ -200,24 +203,30 @@ export default function StudentDetailModal({ student, isOpen, onClose, onStudent
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               <div className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50">
                 <span className="text-[11px] font-bold text-slate-500 uppercase">Verified CGPA</span>
-                <p className="text-2xl font-black text-blue-600 mt-1">{cgpa} / 10</p>
+                <p className="text-2xl font-black text-blue-600 mt-1">
+                  {cgpa != null ? `${cgpa} / 10` : "N/A"}
+                </p>
               </div>
 
               <div className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50">
                 <span className="text-[11px] font-bold text-slate-500 uppercase">Current Sem</span>
-                <p className="text-2xl font-black text-slate-900 mt-1">{semester}th Sem</p>
+                <p className="text-2xl font-black text-slate-900 mt-1">
+                  {semester != null ? `${semester}th Sem` : "N/A"}
+                </p>
               </div>
 
               <div className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50">
                 <span className="text-[11px] font-bold text-slate-500 uppercase">Active Backlogs</span>
                 <p className={`text-2xl font-black mt-1 ${activeBacklogs === 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                  {activeBacklogs}
+                  {activeBacklogs ?? "N/A"}
                 </p>
               </div>
 
               <div className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50">
                 <span className="text-[11px] font-bold text-slate-500 uppercase">Cleared Backlogs</span>
-                <p className="text-2xl font-black text-emerald-600 mt-1">{clearedBacklogs}</p>
+                <p className="text-2xl font-black text-emerald-600 mt-1">
+                  {clearedBacklogs ?? "N/A"}
+                </p>
               </div>
             </div>
           </div>
@@ -233,7 +242,7 @@ export default function StudentDetailModal({ student, isOpen, onClose, onStudent
                 <div>
                   <span className="text-[11px] font-black text-slate-700 uppercase">10th Standard (SSC)</span>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    {student.tenthDetails?.schoolName || "School"} ({student.tenthDetails?.passingYear || "N/A"})
+                    {student.tenthDetails?.schoolName || "Not provided"} ({student.tenthDetails?.passingYear ?? "N/A"})
                   </p>
                 </div>
                 <span className="text-base font-black text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100">
@@ -247,7 +256,7 @@ export default function StudentDetailModal({ student, isOpen, onClose, onStudent
                     {student.twelfthOrDiplomaDetails?.qualificationType || "12th Standard"}
                   </span>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    {student.twelfthOrDiplomaDetails?.institutionName || "College"} ({student.twelfthOrDiplomaDetails?.passingYear || "N/A"})
+                    {student.twelfthOrDiplomaDetails?.institutionName || "Not provided"} ({student.twelfthOrDiplomaDetails?.passingYear ?? "N/A"})
                   </p>
                 </div>
                 <span className="text-base font-black text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100">
@@ -278,11 +287,15 @@ export default function StudentDetailModal({ student, isOpen, onClose, onStudent
                     {semesterResults.map((s, idx) => (
                       <tr key={idx}>
                         <td className="py-2 px-3 font-bold">Sem {s.semester}</td>
-                        <td className="py-2 px-3 text-slate-500">{s.credits || 20}</td>
+                        <td className="py-2 px-3 text-slate-500">{s.credits ?? "N/A"}</td>
                         <td className="py-2 px-3 font-mono font-bold text-blue-600">{s.sgpa != null ? s.sgpa : "Not entered"}</td>
                         <td className="py-2 px-3 text-right">
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            Passed
+                            {s.isVerified === true
+                              ? "Verified"
+                              : s.isVerified === false
+                              ? "Pending"
+                              : "Unknown"}
                           </span>
                         </td>
                       </tr>
@@ -299,23 +312,33 @@ export default function StudentDetailModal({ student, isOpen, onClose, onStudent
               <Clock className="h-4 w-4 text-amber-500" />
               <span>Education & Year Gaps</span>
             </h4>
-            {student.hasEducationGap && student.educationGaps?.length > 0 ? (
-              <div className="space-y-2">
-                {student.educationGaps.map((gap, idx) => (
-                  <div key={idx} className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 text-xs">
-                    <div className="flex items-center justify-between font-bold text-slate-900">
-                      <span>{gap.reason}</span>
-                      <span className="text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded-md text-[10px]">
-                        {gap.startYear} - {gap.endYear} ({gap.durationMonths || 12} Mos)
-                      </span>
+            {student.hasEducationGap === true ? (
+              educationGaps.length > 0 ? (
+                <div className="space-y-2">
+                  {educationGaps.map((gap, idx) => (
+                    <div key={gap._id || idx} className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 text-xs">
+                      <div className="flex items-center justify-between font-bold text-slate-900">
+                        <span>{gap.reason || "Reason not provided"}</span>
+                        <span className="text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded-md text-[10px]">
+                          {gap.startYear ?? "N/A"} - {gap.endYear ?? "N/A"} ({gap.durationMonths ?? "N/A"} Mos)
+                        </span>
+                      </div>
+                      {gap.explanation && <p className="text-slate-600 mt-1 text-[11px]">{gap.explanation}</p>}
                     </div>
-                    {gap.explanation && <p className="text-slate-600 mt-1 text-[11px]">{gap.explanation}</p>}
-                  </div>
-                ))}
+                  ))}
+                </div>
+              ) : (
+                <div className="p-3 rounded-xl border border-amber-200 bg-amber-50 text-xs text-amber-800 font-semibold">
+                  An education gap is declared, but its details are not available.
+                </div>
+              )
+            ) : student.hasEducationGap === false ? (
+              <div className="p-3 rounded-xl border border-slate-200 bg-slate-50 text-xs text-slate-500 font-semibold">
+                No education gaps declared.
               </div>
             ) : (
               <div className="p-3 rounded-xl border border-slate-200 bg-slate-50 text-xs text-slate-500 font-semibold">
-                No education gaps declared. Continuous academic progression.
+                Education gap details not provided.
               </div>
             )}
           </div>
@@ -337,11 +360,80 @@ export default function StudentDetailModal({ student, isOpen, onClose, onStudent
 
               <div className="p-3.5 rounded-2xl border border-slate-200 bg-white">
                 <span className="text-slate-400 font-bold block mb-1">Address Details</span>
-                <p className="text-slate-700 font-semibold">Current: {student.currentAddress?.street || ""}, {student.currentAddress?.city || "Not entered"}</p>
-                <p className="text-slate-700 font-semibold mt-2">Permanent: {student.sameAsCurrent ? "(Same as current)" : `${student.permanentAddress?.street || ""}, ${student.permanentAddress?.city || "Not entered"}`}</p>
+                <p className="text-slate-700 font-semibold">Current: {[student.currentAddress?.street, student.currentAddress?.city].filter(Boolean).join(", ") || "Not entered"}</p>
+                <p className="text-slate-700 font-semibold mt-2">Permanent: {student.sameAsCurrent ? "(Same as current)" : [student.permanentAddress?.street, student.permanentAddress?.city].filter(Boolean).join(", ") || "Not entered"}</p>
               </div>
             </div>
           </div>
+
+          {(backlogDetails.length > 0 || skills.length > 0 || certificates.length > 0 || about) && (
+            <div className="space-y-4">
+              {backlogDetails.length > 0 && (
+                <section>
+                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <BookOpen className="h-4 w-4 text-rose-500" />
+                    <span>Backlog Records</span>
+                  </h4>
+                  <div className="space-y-2">
+                    {backlogDetails.map((backlog, idx) => {
+                      const isCleared = backlog.status === "CLEARED";
+                      return (
+                        <div key={backlog._id || idx} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 text-xs">
+                          <div>
+                            <p className="font-bold text-slate-800">
+                              {backlog.subjectCode || "Subject code not provided"}
+                              {backlog.subjectName ? ` - ${backlog.subjectName}` : ""}
+                            </p>
+                            <p className="text-slate-500">
+                              Semester {backlog.semester ?? "N/A"} · Attempts {backlog.attempts ?? "N/A"}
+                            </p>
+                          </div>
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 font-bold ${isCleared ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
+                            {isCleared ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+                            {isCleared ? "Cleared" : "Active"}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
+
+              {(skills.length > 0 || certificates.length > 0 || about) && (
+                <section>
+                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <Sparkles className="h-4 w-4 text-indigo-500" />
+                    <span>Profile & Credentials</span>
+                  </h4>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-3.5 space-y-3 text-xs">
+                    {about && <p className="text-slate-600">{about}</p>}
+                    {skills.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {skills.map((skill, idx) => (
+                          <span key={`${skill}-${idx}`} className="rounded-md bg-indigo-50 px-2 py-1 font-semibold text-indigo-700">
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {certificates.map((certificate, idx) => (
+                      <div key={certificate._id || idx} className="border-t border-slate-100 pt-2">
+                        <p className="font-bold text-slate-800">{certificate.title || "Certificate"}</p>
+                        <p className="text-slate-500">
+                          {[certificate.issuer, certificate.issueDate].filter(Boolean).join(" · ") || "Issuer/date not provided"}
+                        </p>
+                        {certificate.certificateUrl && (
+                          <a href={certificate.certificateUrl} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 font-semibold text-blue-600 hover:underline">
+                            View certificate <ExternalLink className="h-3 w-3" />
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Footer with One-Click TPO Verification Controls */}

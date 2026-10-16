@@ -8,7 +8,7 @@ import { Admin } from "../models/admin.model.js";
 const registerAdmin = asyncHandler(async (req, res) => {
     const { fullName, email, password, phone, employeeId, designation, department, adminSecretKey } = req.body;
 
-    const expectedSecret = process.env.ADMIN_SECRET_KEY || "TPO_ADMIN_2026";
+    const expectedSecret = process.env.ADMIN_SECRET_KEY;
     if (!adminSecretKey || adminSecretKey.trim() !== expectedSecret.trim()) {
         throw new ApiError(
             403,

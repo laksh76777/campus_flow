@@ -300,12 +300,18 @@ const archivePlacementSession = asyncHandler(async (req, res) => {
 // @route   POST /api/v1/sessions/seed-defaults
 // @access  Admin
 const seedDefaultSessions = asyncHandler(async (req, res) => {
-    const currentYear = new Date().getFullYear();
     const targetYears = [2025, 2026, 2027, 2028, 2029];
     const created = [];
+    let updatedCount = 0;
 
     for (const year of targetYears) {
         const existing = await PlacementSession.findOne({ sessionYear: year });
+        const admissionYearMapping = [
+            { course: "B.Tech", courseDurationYears: 4, admissionYear: year - 4 },
+            { course: "MCA", courseDurationYears: 2, admissionYear: year - 2 },
+            { course: "M.Tech", courseDurationYears: 2, admissionYear: year - 2 }
+        ];
+
         if (!existing) {
             const isCurrent = year === 2026;
             const doc = await PlacementSession.create({
@@ -315,22 +321,22 @@ const seedDefaultSessions = asyncHandler(async (req, res) => {
                 description: `Official campus placement cohort for students graduating in ${year}.`,
                 isActive: isCurrent,
                 status: year < 2026 ? "CLOSED" : isCurrent ? "ACTIVE" : "UPCOMING",
-                admissionYearMapping: [
-                    { course: "B.Tech", courseDurationYears: 4, admissionYear: year - 4 },
-                    { course: "MCA", courseDurationYears: 2, admissionYear: year - 2 },
-                    { course: "M.Tech", courseDurationYears: 2, admissionYear: year - 2 }
-                ],
+                admissionYearMapping,
                 createdBy: req.user._id
             });
             created.push(doc);
+        } else if (!existing.admissionYearMapping?.length) {
+            existing.admissionYearMapping = admissionYearMapping;
+            await existing.save();
+            updatedCount++;
         }
     }
 
     return res.status(200).json(
         new ApiResponse(
             200,
-            { createdCount: created.length, sessions: created },
-            `Default placement sessions initialized (${created.length} new)`
+            { createdCount: created.length, updatedCount, sessions: created },
+            `Default placement sessions initialized (${created.length} new, ${updatedCount} mappings added)`
         )
     );
 });
@@ -512,4 +518,3 @@ export {
     executeSessionBackfill,
     transferStudentsSession
 };
-

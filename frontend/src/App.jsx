@@ -1,13 +1,15 @@
+import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 
 import { AuthProvider } from "./context/AuthContext";
-import IndexHome from "./components/HomePageDashboard/IndexHome";
-import Login from "./pages/auth/Login";
-import Signup from "./pages/auth/Signup";
-import StudentDashboard from "./pages/student/StudentDashboard";
-import AdminDashboard from "./pages/admin/AdminDashboard";
 import ProtectedRoute from "./components/common/ProtectedRoute";
+
+const IndexHome = lazy(() => import("./components/HomePageDashboard/IndexHome"));
+const Login = lazy(() => import("./pages/auth/Login"));
+const Signup = lazy(() => import("./pages/auth/Signup"));
+const StudentDashboard = lazy(() => import("./pages/student/StudentDashboard"));
+const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
 
 function App() {
   return (
@@ -24,10 +26,20 @@ function App() {
           },
         }}
       />
-      <Routes>
-        <Route path="/" element={<IndexHome />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
+      <Suspense
+        fallback={
+          <div
+            className="flex min-h-screen items-center justify-center text-sm font-semibold text-slate-500"
+            role="status"
+          >
+            Loading CampusFlow…
+          </div>
+        }
+      >
+        <Routes>
+          <Route path="/" element={<IndexHome />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
 
         {/* Protected Student Portal Routes */}
         <Route
@@ -97,8 +109,9 @@ function App() {
           }
         />
 
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
     </AuthProvider>
   );
 }
