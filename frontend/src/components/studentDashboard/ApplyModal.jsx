@@ -10,6 +10,11 @@ import {
   AlertTriangle,
   Loader2,
   ShieldCheck,
+  ExternalLink,
+  MapPin,
+  Calendar,
+  Clock,
+  Briefcase,
 } from "lucide-react";
 import { getResumeViewUrl } from "../../utils/resumeHelper";
 import { checkDriveEligibility } from "../../services/studentService";
@@ -21,6 +26,7 @@ export default function ApplyModal({
   studentProfile,
   isReapply = false,
   onConfirmApply,
+  onOpenProfileSettings,
 }) {
   const [submitting, setSubmitting] = useState(false);
   const [eligibilityData, setEligibilityData] = useState(null);
@@ -86,7 +92,7 @@ export default function ApplyModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="relative w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 shadow-2xl animate-in zoom-in-95 duration-150">
+      <div className="relative w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-3xl border border-slate-200 bg-white p-6 sm:p-7 shadow-2xl animate-in zoom-in-95 duration-150">
         {/* Close Button */}
         <button
           onClick={onClose}
@@ -97,16 +103,94 @@ export default function ApplyModal({
 
         {/* Header */}
         <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 border border-blue-100">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 border border-blue-100 shrink-0">
             <Building2 className="h-6 w-6" />
           </div>
-          <div>
-            <h3 className="text-xl font-bold text-slate-900">{companyName}</h3>
+          <div className="min-w-0 pr-8">
+            <h3 className="text-xl font-bold text-slate-900 truncate">{companyName}</h3>
             <p className="text-xs text-slate-500 font-medium">
               {drive.jobTitle} • ₹{drive.package} LPA
             </p>
           </div>
         </div>
+
+        {/* Drive Overview Details Card */}
+        <div className="mt-4 rounded-2xl bg-slate-50 p-3.5 border border-slate-200/80 space-y-2.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1 text-xs font-bold text-slate-700 border border-slate-200 capitalize">
+              <Briefcase className="h-3.5 w-3.5 text-slate-400" />
+              {drive.jobType?.replace(/-/g, " ") || "Full Time"}
+            </span>
+
+            {/* Paid / Unpaid Internship Badge */}
+            {drive.internshipType === "paid" && (
+              <span className="inline-flex items-center gap-1 rounded-lg bg-amber-100/80 px-2.5 py-1 text-xs font-extrabold text-amber-900 border border-amber-300">
+                Paid Internship {drive.stipend ? `• Stipend: ${drive.stipend}` : ""}
+              </span>
+            )}
+            {drive.internshipType === "unpaid" && (
+              <span className="inline-flex items-center gap-1 rounded-lg bg-slate-200 px-2.5 py-1 text-xs font-bold text-slate-800 border border-slate-300">
+                Unpaid Internship
+              </span>
+            )}
+            {drive.internshipDuration && (
+              <span className="inline-flex items-center gap-1 rounded-lg bg-white px-2 py-1 text-xs font-semibold text-slate-600 border border-slate-200">
+                Duration: {drive.internshipDuration}
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-600 pt-1 border-t border-slate-200/60">
+            {drive.location && (
+              <div className="flex items-center gap-1.5">
+                <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                <span className="truncate">{drive.location} {drive.venue ? `• ${drive.venue}` : ""}</span>
+              </div>
+            )}
+            {drive.applicationDeadline && (
+              <div className="flex items-center gap-1.5">
+                <Clock className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                <span>Deadline: {new Date(drive.applicationDeadline).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Official Job Description (JD) PDF Attachment Card */}
+        {drive.jdPdf?.url && (
+          <div className="mt-3.5 flex items-center justify-between rounded-2xl bg-blue-50/70 border border-blue-200/80 p-3.5">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shrink-0">
+                <FileText className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 pr-2">
+                <h5 className="font-bold text-xs text-blue-950 truncate">
+                  {drive.jdPdf.fileName || "Job Description Document (PDF)"}
+                </h5>
+                <p className="text-[11px] text-blue-700">Official syllabus, eligibility criteria & job duties</p>
+              </div>
+            </div>
+            <a
+              href={drive.jdPdf.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-xs font-bold shadow-xs transition shrink-0"
+            >
+              <span>View JD</span>
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          </div>
+        )}
+
+        {/* Job Description Text Excerpt */}
+        {drive.jobDescription && (
+          <div className="mt-3.5 rounded-2xl bg-white p-3.5 border border-slate-200 text-xs">
+            <h5 className="font-bold text-slate-900 mb-1">Job Description & Candidate Responsibilities:</h5>
+            <p className="text-slate-600 whitespace-pre-line max-h-32 overflow-y-auto leading-relaxed">
+              {drive.jobDescription}
+            </p>
+          </div>
+        )}
 
         {/* Eligibility Verification Card */}
         <div className="mt-5 rounded-2xl bg-slate-50 p-4 border border-slate-200/80 space-y-3">
@@ -215,12 +299,39 @@ export default function ApplyModal({
 
           {/* Engine Reason Callout if Ineligible */}
           {eligibilityData && !eligibilityData.isEligible && (
-            <div className="rounded-xl bg-rose-50 border border-rose-200 p-2.5 text-xs text-rose-800 flex items-start gap-2 mt-2">
-              <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-bold">Ineligibility Reason:</p>
-                <p className="mt-0.5 text-[11px]">{eligibilityData.summary}</p>
+            <div className="rounded-2xl bg-rose-50 border border-rose-200 p-3 text-xs text-rose-900 space-y-2 mt-2">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+                <div className="space-y-1 flex-1">
+                  <p className="font-bold text-rose-950">Why You Are Not Eligible:</p>
+                  <p className="text-[11px] leading-relaxed text-rose-800">{eligibilityData.summary}</p>
+                  {eligibilityData.reasons?.length > 0 && (
+                    <ul className="list-disc list-inside space-y-0.5 text-[11px] text-rose-700 pl-1 pt-0.5">
+                      {eligibilityData.reasons.map((r, i) => (
+                        <li key={i}>{r}</li>
+                      ))}
+                    </ul>
+                  )}
+                  <p className="text-[10px] text-slate-500 pt-1 italic">
+                    If your academic records or settings have changed (such as cleared backlogs or updated marks), update your academic profile settings. Once updated, your eligibility will refresh automatically and unlock application submission.
+                  </p>
+                </div>
               </div>
+              {onOpenProfileSettings && (
+                <div className="pt-1 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenProfileSettings();
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-xs font-bold transition shadow-xs"
+                  >
+                    <span>Update Academic Profile Settings</span>
+                    <ArrowRight className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

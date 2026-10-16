@@ -11,6 +11,8 @@ import {
   Clock,
   X,
   Bell,
+  FileText,
+  Paperclip,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { getPublicDepartments } from "../../services/authService";
@@ -46,6 +48,10 @@ const getDefaultFormData = () => {
     company: "",
     jobTitle: "",
     jobType: "full-time",
+    internshipType: "not_applicable",
+    stipend: "",
+    internshipDuration: "",
+    jdUrl: "",
     package: "",
     location: "Bengaluru",
     minimumCGPA: "7.0",
@@ -83,6 +89,7 @@ export default function ManageDrives({
   const [submitting, setSubmitting] = useState(false);
   const [programs, setPrograms] = useState([]);
   const [sessions, setSessions] = useState([]);
+  const [jdFile, setJdFile] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -168,9 +175,26 @@ export default function ManageDrives({
         graduationYear: Number(formData.graduationYear),
       };
 
-      await onCreateDrive(payload);
+      if (jdFile) {
+        const multipartData = new FormData();
+        Object.entries(payload).forEach(([key, val]) => {
+          if (val !== undefined && val !== null) {
+            if (typeof val === "object" && !(val instanceof File)) {
+              multipartData.append(key, JSON.stringify(val));
+            } else {
+              multipartData.append(key, val);
+            }
+          }
+        });
+        multipartData.append("jdPdf", jdFile);
+        await onCreateDrive(multipartData);
+      } else {
+        await onCreateDrive(payload);
+      }
+
       setModalVisible(false);
       setFormData(getDefaultFormData());
+      setJdFile(null);
       toast.success("Placement drive published successfully!");
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to create placement drive");
@@ -364,8 +388,38 @@ export default function ManageDrives({
                     </div>
                   </div>
 
+                  {/* Internship and JD PDF Badges */}
+                  <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                    {d.internshipType === "paid" && (
+                      <span className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-800 border border-amber-200">
+                        Paid Internship {d.stipend ? `• ${d.stipend}` : ""}
+                      </span>
+                    )}
+                    {d.internshipType === "unpaid" && (
+                      <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-700 border border-slate-200">
+                        Unpaid Internship
+                      </span>
+                    )}
+                    {d.internshipDuration && (
+                      <span className="inline-flex items-center gap-1 rounded-lg bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600 border border-slate-200">
+                        Duration: {d.internshipDuration}
+                      </span>
+                    )}
+                    {d.jdPdf?.url && (
+                      <a
+                        href={d.jdPdf.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100 border border-blue-200 transition"
+                      >
+                        <FileText className="h-3 w-3" />
+                        <span>JD PDF</span>
+                      </a>
+                    )}
+                  </div>
+
                   {/* Eligibility Branches */}
-                  <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                  <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
                     <span className="text-[11px] font-semibold text-slate-400 mr-1">
                       Branches:
                     </span>
@@ -494,7 +548,16 @@ export default function ManageDrives({
                   </label>
                   <select
                     value={formData.jobType}
-                    onChange={(e) => setFormData({ ...formData, jobType: e.target.value })}
+                    onChange={(e) => {
+                      const newType = e.target.value;
+                      setFormData({
+                        ...formData,
+                        jobType: newType,
+                        internshipType: newType.includes("internship")
+                          ? (formData.internshipType === "not_applicable" ? "paid" : formData.internshipType)
+                          : "not_applicable"
+                      });
+                    }}
                     className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs focus:border-blue-500 focus:outline-none"
                   >
                     <option value="full-time">Full-Time (FTE)</option>
@@ -532,6 +595,64 @@ export default function ManageDrives({
                   />
                 </div>
               </div>
+
+              {/* Paid / Unpaid Internship Details (shown when Internship or Intern-to-FTE is selected) */}
+              {(formData.jobType === "internship" || formData.jobType === "internship-to-full-time") && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-3.5 space-y-3 animate-in fade-in duration-200">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-amber-100 text-amber-700 text-xs font-bold">
+                      ₹
+                    </span>
+                    <h4 className="text-xs font-bold text-slate-800">
+                      Internship Compensation & Duration Settings
+                    </h4>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Internship Category
+                      </label>
+                      <select
+                        value={formData.internshipType}
+                        onChange={(e) => setFormData({ ...formData, internshipType: e.target.value })}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 focus:border-blue-500 focus:outline-none"
+                      >
+                        <option value="paid">Paid Internship</option>
+                        <option value="unpaid">Unpaid Internship</option>
+                      </select>
+                    </div>
+
+                    {formData.internshipType === "paid" && (
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Monthly Stipend
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. ₹25,000 / month"
+                          value={formData.stipend}
+                          onChange={(e) => setFormData({ ...formData, stipend: e.target.value })}
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
+                        />
+                      </div>
+                    )}
+
+                    <div className={formData.internshipType === "paid" ? "" : "sm:col-span-2"}>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Internship Duration
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 6 Months (Jan - Jun)"
+                        value={formData.internshipDuration}
+                        onChange={(e) => setFormData({ ...formData, internshipDuration: e.target.value })}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Eligibility: cohort and academic thresholds */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
@@ -684,6 +805,82 @@ export default function ManageDrives({
                   onChange={(e) => setFormData({ ...formData, jobDescription: e.target.value })}
                   className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs focus:border-blue-500 focus:outline-none resize-none"
                 />
+              </div>
+
+              {/* Job Description (JD) PDF Document Attachment */}
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-blue-100 text-blue-700">
+                      <FileText className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900">
+                        Attach Official Job Description (JD) PDF
+                      </h4>
+                      <p className="text-[11px] text-slate-500">
+                        Upload company JD PDF so candidates can inspect full roles, syllabus, and benefits before applying.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  {/* PDF File Upload */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Upload PDF Document
+                    </label>
+                    {jdFile ? (
+                      <div className="flex items-center justify-between gap-2 rounded-xl border border-blue-200 bg-blue-50/80 p-2 text-xs">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Paperclip className="h-4 w-4 text-blue-600 shrink-0" />
+                          <span className="truncate font-semibold text-blue-900">{jdFile.name}</span>
+                          <span className="text-[10px] text-blue-600 shrink-0">
+                            ({(jdFile.size / 1024).toFixed(0)} KB)
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setJdFile(null)}
+                          className="flex h-6 w-6 items-center justify-center rounded-lg text-rose-500 hover:bg-rose-100 transition"
+                          title="Remove attached PDF"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:border-blue-500 hover:bg-blue-50/30 transition">
+                        <FileText className="h-4 w-4 text-slate-400" />
+                        <span>Choose JD (.pdf)</span>
+                        <input
+                          type="file"
+                          accept=".pdf,application/pdf"
+                          onChange={(e) => {
+                            if (e.target.files?.[0]) {
+                              setJdFile(e.target.files[0]);
+                            }
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                    )}
+                  </div>
+
+                  {/* Or External JD URL */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Or Online JD URL Link
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://drive.google.com/... or company JD URL"
+                      value={formData.jdUrl}
+                      onChange={(e) => setFormData({ ...formData, jdUrl: e.target.value })}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Application Deadline Reminder Settings */}

@@ -10,6 +10,7 @@ import { EligibilityService } from "../services/eligibility.service.js";
 import { getCatalogProgram, PROGRAM_CATALOG, resolveProgram } from "../constants/programCatalog.js";
 import { studentMatchesDriveProgram } from "../services/programTargeting.service.js";
 import { syncDriveReminders } from "../services/reminderScheduler.service.js";
+import { uploadOnCloudinary } from "../utils/cloudinary.js";
 
 const normalizeEligiblePrograms = (programCodes, branches) => {
     let programs;
@@ -41,10 +42,51 @@ const normalizeEligiblePrograms = (programCodes, branches) => {
     };
 };
 
+const processJdPdfUpload = async (req) => {
+    let jdAttachment = { url: "", fileName: "" };
+    if (req.file) {
+        try {
+            const uploadRes = await uploadOnCloudinary(req.file.path, { resource_type: "raw" });
+            if (uploadRes?.secure_url) {
+                jdAttachment = {
+                    url: uploadRes.secure_url,
+                    fileName: req.file.originalname || "Job_Description.pdf"
+                };
+            }
+        } catch (uploadErr) {
+            console.warn("Cloudinary upload failed, using fallback:", uploadErr.message);
+            jdAttachment = {
+                url: `/uploads/${req.file.filename}`,
+                fileName: req.file.originalname || "Job_Description.pdf"
+            };
+        }
+    } else if (req.body.jdPdf) {
+        if (typeof req.body.jdPdf === "string") {
+            try {
+                jdAttachment = JSON.parse(req.body.jdPdf);
+            } catch {
+                jdAttachment = { url: req.body.jdPdf, fileName: "Job_Description.pdf" };
+            }
+        } else if (typeof req.body.jdPdf === "object") {
+            jdAttachment = {
+                url: req.body.jdPdf.url || "",
+                fileName: req.body.jdPdf.fileName || "Job_Description.pdf"
+            };
+        }
+    } else if (req.body.jdUrl || req.body.jdPdfUrl) {
+        jdAttachment = {
+            url: req.body.jdUrl || req.body.jdPdfUrl,
+            fileName: req.body.jdFileName || req.body.jdPdfName || "Job_Description.pdf"
+        };
+    }
+    return jdAttachment;
+};
+
 const createPlacementDrive = asyncHandler(async (req, res) => {
     const {
         company,jobTitle,jobDescription,jobType,package: salaryPackage,location,eligibleBranches,eligibleProgramCodes,minimumCGPA,maximumBacklogs,graduationYear,placementSession,applicationStartDate,applicationDeadline,driveDate,venue,applicationLink,
-        minimumTenthPercentage,minimumTwelfthPercentage,maximumHistoricalBacklogs
+        minimumTenthPercentage,minimumTwelfthPercentage,maximumHistoricalBacklogs,
+        internshipType, stipend, internshipDuration
     } = req.body;
     if ( !company || !jobTitle || !jobType || salaryPackage === undefined || (!eligibleBranches && !eligibleProgramCodes) || minimumCGPA === undefined || graduationYear === undefined || !placementSession || !applicationStartDate || !applicationDeadline || !driveDate ) {
         throw new ApiError(
@@ -108,11 +150,22 @@ const createPlacementDrive = asyncHandler(async (req, res) => {
         );
     }
 
+    const jdAttachment = await processJdPdfUpload(req);
+
+    const normalizedJobType = (jobType || "").toLowerCase().trim();
+    const resolvedInternshipType = internshipType && ["paid", "unpaid", "not_applicable"].includes(internshipType)
+        ? internshipType
+        : (normalizedJobType.includes("internship") ? "paid" : "not_applicable");
+
     const placementDrive = await PlacementDrive.create({
         company,
         jobTitle: jobTitle.trim(),
         jobDescription: jobDescription || "",
-        jobType,
+        jobType: normalizedJobType,
+        internshipType: resolvedInternshipType,
+        stipend: stipend ? String(stipend).trim() : "",
+        internshipDuration: internshipDuration ? String(internshipDuration).trim() : "",
+        jdPdf: jdAttachment,
         package: salaryPackage,
         location: location || "",
         ...programTargeting,
@@ -206,10 +259,24 @@ const getPlacementDriveById = asyncHandler(async (req, res) => {
             "Placement drive not found"
         );
     }
+
+    let responseData = placementDrive.toObject ? placementDrive.toObject() : placementDrive;
+    if (req.user?.role === "student") {
+        const studentProfile = await StudentProfile.findOne({ user: req.user._id });
+        if (studentProfile) {
+            const evaluation = EligibilityService.evaluate(studentProfile, placementDrive);
+            responseData.isEligible = Boolean(evaluation.isEligible);
+            responseData.eligibilityStatus = evaluation.status;
+            responseData.eligibilityReasons = evaluation.reasons || [];
+            responseData.eligibilitySummary = evaluation.summary || "";
+            responseData.criteriaBreakdown = evaluation.criteriaBreakdown || [];
+        }
+    }
+
     return res.status(200).json(
         new ApiResponse(
             200,
-            placementDrive,
+            responseData,
             "Placement drive fetched successfully"
         )
     );
@@ -257,7 +324,7 @@ const updatePlacementDrive = asyncHandler(async (req, res) => {
         placementDrive.jobDescription = jobDescription;
     }
     if (jobType !== undefined) {
-        placementDrive.jobType = jobType;
+        placementDrive.jobType = jobType.toLowerCase().trim();
     }
     if (salaryPackage !== undefined) {
         if (salaryPackage < 0) {
@@ -388,6 +455,23 @@ const updatePlacementDrive = asyncHandler(async (req, res) => {
                 : placementDrive.reminderSettings?.channels || ["in_app", "email"]
         };
     }
+
+    if (req.body.internshipType !== undefined) {
+        placementDrive.internshipType = req.body.internshipType;
+    }
+    if (req.body.stipend !== undefined) {
+        placementDrive.stipend = String(req.body.stipend).trim();
+    }
+    if (req.body.internshipDuration !== undefined) {
+        placementDrive.internshipDuration = String(req.body.internshipDuration).trim();
+    }
+    if (req.file || req.body.jdPdf !== undefined || req.body.jdUrl !== undefined) {
+        const jdAttachment = await processJdPdfUpload(req);
+        if (jdAttachment.url) {
+            placementDrive.jdPdf = jdAttachment;
+        }
+    }
+
     await placementDrive.save();
 
     // Sync reminders on deadline/settings update
@@ -505,7 +589,7 @@ const getMyEligibleDrives = asyncHandler(async (req, res) => {
     if (req.user?.role !== "student") {
         throw new ApiError(
             403,
-            "Only students can access eligible placement drives"
+            "Only students can access placement drives"
         );
     }
     // 2. Find student profile
@@ -519,40 +603,41 @@ const getMyEligibleDrives = asyncHandler(async (req, res) => {
             "Student profile not found"
         );
     }
-    // 3. Get current date
-    const currentDate = new Date();
-    // 4. Find all drives for which student is eligible
-    const candidateDrives = await PlacementDrive.find({
-        isActive: true,
-        minimumCGPA: {
-            $lte: studentProfile.cgpa
-        },
-        maximumBacklogs: {
-            $gte: studentProfile.backlogs
-        },
-        graduationYear: studentProfile.graduationYear,
 
-        applicationStartDate: {
-            $lte: currentDate
-        },
-        applicationDeadline: {
-            $gte: currentDate
-        }
+    // 3. Fetch all active drives so all drives are visible to every student
+    const candidateDrives = await PlacementDrive.find({
+        isActive: true
+    }).populate({
+        path: "company",
+        select: "companyName companyDescription companyWebsite companyLogo industry location"
     });
-    const eligibleDrives = await PlacementDrive.populate(
-        candidateDrives.filter((drive) => studentMatchesDriveProgram(studentProfile, drive)),
-        {
-            path: "company",
-            select: "companyName companyDescription companyWebsite companyLogo industry location"
+
+    // 4. Deterministically evaluate student eligibility for EACH drive
+    const drivesWithEligibility = candidateDrives.map((drive) => {
+        const driveObj = drive.toObject();
+        const evaluation = EligibilityService.evaluate(studentProfile, drive);
+        driveObj.isEligible = Boolean(evaluation.isEligible);
+        driveObj.eligibilityStatus = evaluation.status;
+        driveObj.eligibilityReasons = evaluation.reasons || [];
+        driveObj.eligibilitySummary = evaluation.summary || "";
+        driveObj.criteriaBreakdown = evaluation.criteriaBreakdown || [];
+        return driveObj;
+    });
+
+    // Sort: Eligible drives first, then by nearest application deadline
+    drivesWithEligibility.sort((a, b) => {
+        if (a.isEligible !== b.isEligible) {
+            return a.isEligible ? -1 : 1;
         }
-    );
-    eligibleDrives.sort((a, b) => new Date(a.applicationDeadline) - new Date(b.applicationDeadline));
-    // 5. Return eligible drives
+        return new Date(a.applicationDeadline) - new Date(b.applicationDeadline);
+    });
+
+    // 5. Return all drives with eligibility evaluation and detailed reasons
     return res.status(200).json(
         new ApiResponse(
             200,
-            eligibleDrives,
-            "Eligible placement drives fetched successfully"
+            drivesWithEligibility,
+            "Placement drives fetched successfully with eligibility evaluation"
         )
     );
 });

@@ -23,12 +23,20 @@ export default function StudentNavbar({
   studentProfile,
   onOpenProfile,
   onSelectTab,
+  unreadCount: externalUnreadCount,
+  onRefreshNotifications,
 }) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadCount, setUnreadCount] = useState(externalUnreadCount ?? 0);
   const [loadingNotifs, setLoadingNotifs] = useState(false);
   const notificationRef = useRef(null);
+
+  useEffect(() => {
+    if (typeof externalUnreadCount === "number") {
+      setUnreadCount(externalUnreadCount);
+    }
+  }, [externalUnreadCount]);
 
   const displayName = user?.fullName || studentProfile?.user?.fullName || "Student User";
   const avatarLetter = displayName.charAt(0).toUpperCase();
@@ -74,6 +82,7 @@ export default function StudentNavbar({
       await markAllNotificationsAsRead();
       setUnreadCount(0);
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      onRefreshNotifications?.();
     } catch (err) {
       console.error("Failed to mark all as read:", err);
     }
@@ -87,6 +96,7 @@ export default function StudentNavbar({
       setNotifications((prev) =>
         prev.map((n) => (n._id === id ? { ...n, isRead: true } : n))
       );
+      onRefreshNotifications?.();
     } catch (err) {
       console.error("Failed to mark notification read:", err);
     }
@@ -296,13 +306,22 @@ export default function StudentNavbar({
                 )}
               </div>
 
-              {notifications.length > 0 && (
-                <div className="mt-3 pt-2 border-t border-slate-100 text-center">
-                  <p className="text-[10px] text-slate-400">
-                    Live synced with Placement Admin Portal
-                  </p>
-                </div>
-              )}
+              <div className="mt-3 pt-2 border-t border-slate-100 flex flex-col gap-1.5 text-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowNotifications(false);
+                    onSelectTab?.("notifications");
+                  }}
+                  className="w-full text-center text-xs font-semibold text-blue-600 hover:text-blue-700 py-1 hover:underline cursor-pointer flex items-center justify-center gap-1"
+                >
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  View All Messages & Notifications Center
+                </button>
+                <p className="text-[10px] text-slate-400">
+                  Live synced with Placement Admin Portal
+                </p>
+              </div>
             </div>
           )}
         </div>

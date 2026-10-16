@@ -8,6 +8,7 @@ import {
   GraduationCap,
   ExternalLink,
   ChevronRight,
+  Bell,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -19,6 +20,7 @@ export default function StudentSidebar({
   user,
   studentProfile,
   onLogout,
+  unreadCount = 0,
 }) {
   const navigate = useNavigate();
 
@@ -37,6 +39,12 @@ export default function StudentSidebar({
       id: "applications",
       label: "My Applications",
       icon: FileCheck2,
+    },
+    {
+      id: "notifications",
+      label: "Notifications",
+      icon: Bell,
+      badge: unreadCount,
     },
     {
       id: "profile",
@@ -145,7 +153,18 @@ export default function StudentSidebar({
                   <span>{item.label}</span>
                 </div>
 
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1.5">
+                  {item.badge > 0 && (
+                    <span
+                      className={`inline-flex items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none ${
+                        isActive
+                          ? "bg-white text-blue-600 shadow-xs"
+                          : "bg-rose-500 text-white shadow-xs"
+                      }`}
+                    >
+                      {item.badge > 99 ? "99+" : item.badge}
+                    </span>
+                  )}
                   {isActive && <ChevronRight className="h-3.5 w-3.5 text-blue-200" />}
                 </div>
               </button>

@@ -29,6 +29,40 @@ const placementDriveSchema = new mongoose.Schema(
             required: true,
         },
 
+        internshipType: {
+            type: String,
+            enum: {
+                values: ["paid", "unpaid", "not_applicable"],
+                message: "Invalid internship type",
+            },
+            default: "not_applicable",
+        },
+
+        stipend: {
+            type: String,
+            trim: true,
+            default: "",
+        },
+
+        internshipDuration: {
+            type: String,
+            trim: true,
+            default: "",
+        },
+
+        jdPdf: {
+            url: {
+                type: String,
+                trim: true,
+                default: "",
+            },
+            fileName: {
+                type: String,
+                trim: true,
+                default: "",
+            },
+        },
+
         package: {
             type: Number,
             required: [true, "Package is required"],

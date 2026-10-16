@@ -233,9 +233,12 @@ const applyForPlacement = asyncHandler(async (req, res) => {
     // 1. Strict Centralized Eligibility Revalidation Immediately Before Submission
     const evalResult = EligibilityService.evaluate(studentProfile, placementDrive);
     if (!evalResult.isEligible) {
+        const detailMessage = evalResult.reasons?.length
+            ? `Not eligible: ${evalResult.reasons.join("; ")}. Please update your academic profile settings to meet the eligibility criteria.`
+            : (evalResult.summary || "Ineligible for this placement drive");
         throw new ApiError(
             403,
-            evalResult.summary,
+            detailMessage,
             evalResult.reasons
         );
     }

@@ -67,6 +67,14 @@ function App() {
           }
         />
         <Route
+          path="/notifications"
+          element={
+            <ProtectedRoute requiredRole="student">
+              <StudentDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/student-profile"
           element={
             <ProtectedRoute requiredRole="student">

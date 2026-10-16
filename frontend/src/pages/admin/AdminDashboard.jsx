@@ -236,10 +236,22 @@ export default function AdminDashboard({ initialTab = "overview" }) {
   const handleCreateDrive = async (newDriveData) => {
     try {
       // Auto-assign active placement session if selected
-      const payload = { ...newDriveData };
-      if (activeSessionObj) {
-        payload.placementSession = activeSessionObj._id;
-        payload.graduationYear = activeSessionObj.sessionYear;
+      let payload = newDriveData;
+      if (newDriveData instanceof FormData) {
+        if (activeSessionObj) {
+          if (!newDriveData.get("placementSession")) {
+            newDriveData.append("placementSession", activeSessionObj._id);
+          }
+          if (!newDriveData.get("graduationYear")) {
+            newDriveData.append("graduationYear", activeSessionObj.sessionYear);
+          }
+        }
+      } else {
+        payload = { ...newDriveData };
+        if (activeSessionObj) {
+          payload.placementSession = activeSessionObj._id;
+          payload.graduationYear = activeSessionObj.sessionYear;
+        }
       }
       const res = await createPlacementDrive(payload);
       const created = res?.data;

@@ -16,6 +16,13 @@ import {
   Clock,
   MapPin,
   Trophy,
+  Bell,
+  MessageSquare,
+  AlertCircle,
+  X,
+  Mail,
+  Check,
+  Building2,
 } from "lucide-react";
 
 import StudentSidebar from "../../components/studentDashboard/StudentSidebar";
@@ -34,12 +41,18 @@ import {
   applyForDrive,
   withdrawApplication,
 } from "../../services/studentService";
+import {
+  getMyNotifications,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+} from "../../services/notificationService";
 import { useAuth } from "../../context/authContextDef";
 
 const STUDENT_ROUTE_TABS = {
   "/student-dashboard": "overview",
   "/placement-drives": "drives",
   "/my-applications": "applications",
+  "/notifications": "notifications",
   "/student-profile": "profile",
 };
 
@@ -106,6 +119,160 @@ export default function StudentDashboard() {
   const [eligibleDrives, setEligibleDrives] = useState([]);
   const [applications, setApplications] = useState([]);
   const [user, setUser] = useState(null);
+
+  // Notification / Message Center States
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loadingNotifs, setLoadingNotifs] = useState(false);
+  const [notifFilter, setNotifFilter] = useState("all");
+  const [selectedNotification, setSelectedNotification] = useState(null);
+
+  // Notifications loader & auto-poll
+  const fetchNotifications = useCallback(async () => {
+    try {
+      setLoadingNotifs(true);
+      const res = await getMyNotifications();
+      if (res?.data) {
+        setNotifications(res.data.notifications || []);
+        setUnreadCount(res.data.unreadCount || 0);
+      }
+    } catch (err) {
+      console.warn("Notifications sync notice:", err.message);
+    } finally {
+      setLoadingNotifs(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 25000);
+    return () => clearInterval(interval);
+  }, [fetchNotifications]);
+
+  // Full Day, Date, Time formatting helper
+  const formatNotificationFullDate = (dateStr) => {
+    if (!dateStr) return "Just now";
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString("en-IN", {
+        weekday: "long",
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const formatRelativeTime = (dateStr) => {
+    if (!dateStr) return "";
+    try {
+      const diffSec = Math.floor((new Date() - new Date(dateStr)) / 1000);
+      if (diffSec < 60) return "Just now";
+      const diffMin = Math.floor(diffSec / 60);
+      if (diffMin < 60) return `${diffMin}m ago`;
+      const diffHrs = Math.floor(diffMin / 60);
+      if (diffHrs < 24) return `${diffHrs}h ago`;
+      const diffDays = Math.floor(diffHrs / 24);
+      if (diffDays === 1) return "Yesterday";
+      if (diffDays < 7) return `${diffDays}d ago`;
+      return new Date(dateStr).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+    } catch {
+      return "";
+    }
+  };
+
+  const getNotificationTypeConfig = (type = "") => {
+    switch (type) {
+      case "urgent":
+        return {
+          label: "Urgent Alert",
+          badgeColor: "bg-rose-100 text-rose-800 border-rose-200",
+          icon: AlertCircle,
+          iconBg: "bg-rose-50 text-rose-600",
+        };
+      case "interview":
+        return {
+          label: "Interview Schedule",
+          badgeColor: "bg-purple-100 text-purple-800 border-purple-200",
+          icon: Calendar,
+          iconBg: "bg-purple-50 text-purple-600",
+        };
+      case "selection":
+      case "offer":
+        return {
+          label: "Offer / Selection",
+          badgeColor: "bg-emerald-100 text-emerald-800 border-emerald-200",
+          icon: Trophy,
+          iconBg: "bg-emerald-50 text-emerald-600",
+        };
+      case "deadline_reminder":
+        return {
+          label: "Deadline Reminder",
+          badgeColor: "bg-amber-100 text-amber-800 border-amber-200",
+          icon: Clock,
+          iconBg: "bg-amber-50 text-amber-600",
+        };
+      case "announcement":
+        return {
+          label: "TPO Announcement",
+          badgeColor: "bg-blue-100 text-blue-800 border-blue-200",
+          icon: Bell,
+          iconBg: "bg-blue-50 text-blue-600",
+        };
+      case "rejection":
+        return {
+          label: "Status Update",
+          badgeColor: "bg-slate-100 text-slate-700 border-slate-200",
+          icon: MessageSquare,
+          iconBg: "bg-slate-50 text-slate-500",
+        };
+      default:
+        return {
+          label: "Recruitment Update",
+          badgeColor: "bg-blue-100 text-blue-800 border-blue-200",
+          icon: MessageSquare,
+          iconBg: "bg-blue-50 text-blue-600",
+        };
+    }
+  };
+
+  const handleOpenNotificationModal = async (notification) => {
+    setSelectedNotification(notification);
+    if (!notification.isRead) {
+      try {
+        await markNotificationAsRead(notification._id);
+        setUnreadCount((prev) => Math.max(0, prev - 1));
+        setNotifications((prev) =>
+          prev.map((n) => (n._id === notification._id ? { ...n, isRead: true } : n))
+        );
+      } catch (err) {
+        console.warn("Mark read notice:", err.message);
+      }
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      await markAllNotificationsAsRead();
+      setUnreadCount(0);
+      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      toast.success("All notifications marked as read");
+    } catch (err) {
+      toast.error("Could not mark notifications read");
+    }
+  };
+
+  const displayedNotifications = useMemo(() => {
+    if (notifFilter === "unread") {
+      return notifications.filter((n) => !n.isRead);
+    }
+    return notifications;
+  }, [notifications, notifFilter]);
 
   // Load all dashboard data
   const loadDashboardData = useCallback(async (isRefresh = false) => {
@@ -376,6 +543,7 @@ export default function StudentDashboard() {
         user={user}
         studentProfile={studentProfile}
         onLogout={handleLogout}
+        unreadCount={unreadCount}
       />
 
       {/* Main Layout Area: Fills 100% of remaining width */}
@@ -388,6 +556,8 @@ export default function StudentDashboard() {
           studentProfile={studentProfile}
           onOpenProfile={() => setIsProfileDrawerOpen(true)}
           onSelectTab={handleTabChange}
+          unreadCount={unreadCount}
+          onRefreshNotifications={fetchNotifications}
         />
 
         {/* Page Content Body */}
@@ -871,6 +1041,192 @@ export default function StudentDashboard() {
               </div>
             </div>
           )}
+
+          {/* TAB 5: NOTIFICATIONS & MESSAGES */}
+          {activeTab === "notifications" && (
+            <div className="space-y-6">
+              {/* Header card */}
+              <div className="rounded-2xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xl font-bold text-slate-900 tracking-tight">
+                      Message & Notification Center
+                    </h3>
+                    {unreadCount > 0 && (
+                      <span className="rounded-full bg-rose-50 border border-rose-200 px-2.5 py-0.5 text-xs font-bold text-rose-700">
+                        {unreadCount} Unread
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Official announcements, placement interview schedules, and drive status alerts with full timestamps
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center rounded-xl bg-slate-100 p-1 border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setNotifFilter("all")}
+                      className={`rounded-lg px-3 py-1 text-xs font-bold transition ${
+                        notifFilter === "all"
+                          ? "bg-white text-slate-900 shadow-xs"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      All ({notifications.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNotifFilter("unread")}
+                      className={`rounded-lg px-3 py-1 text-xs font-bold transition ${
+                        notifFilter === "unread"
+                          ? "bg-white text-slate-900 shadow-xs"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      Unread ({unreadCount})
+                    </button>
+                  </div>
+
+                  {unreadCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleMarkAllRead}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition"
+                    >
+                      <Check className="h-3.5 w-3.5 text-slate-500" />
+                      <span>Mark all read</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={fetchNotifications}
+                    disabled={loadingNotifs}
+                    className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition"
+                    title="Refresh messages"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${loadingNotifs ? "animate-spin" : ""}`} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Message List */}
+              {displayedNotifications.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-12 text-center">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 mx-auto mb-3">
+                    <Bell className="h-6 w-6" />
+                  </div>
+                  <h4 className="text-sm font-bold text-slate-800">No notifications found</h4>
+                  <p className="mt-1 text-xs text-slate-500 max-w-sm mx-auto">
+                    {notifFilter === "unread"
+                      ? "You're all caught up! No unread placement alerts or announcements."
+                      : "Official recruitment updates and TPO notices will appear here."}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {displayedNotifications.map((notif) => {
+                    const typeConfig = getNotificationTypeConfig(notif.type);
+                    const TypeIcon = typeConfig.icon;
+                    return (
+                      <div
+                        key={notif._id}
+                        onClick={() => handleOpenNotificationModal(notif)}
+                        className={`group relative flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 rounded-2xl border p-4 sm:p-5 transition-all cursor-pointer ${
+                          !notif.isRead
+                            ? "bg-blue-50/40 border-blue-200/90 shadow-xs hover:border-blue-400 hover:bg-blue-50/70"
+                            : "bg-white border-slate-200/90 hover:border-slate-300 hover:shadow-xs"
+                        }`}
+                      >
+                        <div className="flex items-start gap-3.5 min-w-0">
+                          <div
+                            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${typeConfig.iconBg} border border-slate-100 shadow-2xs group-hover:scale-105 transition-transform`}
+                          >
+                            <TypeIcon className="h-5 w-5" />
+                          </div>
+
+                          <div className="space-y-1 min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span
+                                className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-bold ${typeConfig.badgeColor}`}
+                              >
+                                {typeConfig.label}
+                              </span>
+                              {notif.companyName && (
+                                <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700">
+                                  <Building2 className="h-3 w-3 text-slate-400" />
+                                  {notif.companyName}
+                                </span>
+                              )}
+                              {!notif.isRead && (
+                                <span className="h-2 w-2 rounded-full bg-blue-600 animate-pulse" />
+                              )}
+                            </div>
+
+                            <h4
+                              className={`text-sm font-bold tracking-tight truncate ${
+                                !notif.isRead ? "text-slate-900 font-extrabold" : "text-slate-800"
+                              }`}
+                            >
+                              {notif.title}
+                            </h4>
+
+                            <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
+                              {notif.message}
+                            </p>
+
+                            {/* Interview details preview */}
+                            {(notif.interviewDate || notif.interviewRound || notif.interviewLocation) && (
+                              <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-purple-700 font-semibold">
+                                {notif.interviewDate && (
+                                  <span className="flex items-center gap-1">
+                                    <Clock className="h-3 w-3" />
+                                    <span>
+                                      {new Date(notif.interviewDate).toLocaleDateString("en-IN", {
+                                        weekday: "short",
+                                        day: "numeric",
+                                        month: "short",
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      })}
+                                    </span>
+                                  </span>
+                                )}
+                                {notif.interviewRound && (
+                                  <span>• Round: {notif.interviewRound}</span>
+                                )}
+                                {notif.interviewLocation && (
+                                  <span>• 📍 {notif.interviewLocation}</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Right: Full Day, Date, Time Stamp & Action */}
+                        <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                          <div className="text-left sm:text-right space-y-0.5">
+                            <p className="text-[11px] font-bold text-slate-700 whitespace-nowrap">
+                              {formatNotificationFullDate(notif.createdAt)}
+                            </p>
+                            <p className="text-[10px] text-slate-400 font-medium">
+                              {formatRelativeTime(notif.createdAt)}
+                            </p>
+                          </div>
+                          <span className="text-xs font-bold text-blue-600 sm:mt-2 group-hover:translate-x-0.5 transition-transform inline-flex items-center gap-1">
+                            <span>Read message</span>
+                            <ArrowRight className="h-3 w-3" />
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </main>
       </div>
 
@@ -909,7 +1265,137 @@ export default function StudentDashboard() {
             : false
         }
         onConfirmApply={handleConfirmApply}
+        onOpenProfileSettings={() => handleOpenProfileToSection("academic", true)}
       />
+
+      {/* Selected Notification Reading Modal with Full Day, Date, Time */}
+      {selectedNotification && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="relative w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 sm:p-7 shadow-2xl animate-in zoom-in-95 duration-150">
+            {/* Close Button */}
+            <button
+              onClick={() => setSelectedNotification(null)}
+              className="absolute top-5 right-5 flex h-8 w-8 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            {/* Notification Header */}
+            {(() => {
+              const cfg = getNotificationTypeConfig(selectedNotification.type);
+              const Icon = cfg.icon;
+              return (
+                <div className="flex items-start gap-3.5 pr-8">
+                  <div
+                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${cfg.iconBg} border border-slate-100 shadow-xs`}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                      <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-bold ${cfg.badgeColor}`}>
+                        {cfg.label}
+                      </span>
+                      {selectedNotification.companyName && (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700">
+                          <Building2 className="h-3 w-3 text-slate-400" />
+                          {selectedNotification.companyName}
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="text-base sm:text-lg font-bold text-slate-900 leading-snug">
+                      {selectedNotification.title}
+                    </h3>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Timestamp Bar (Day, Date, Time) */}
+            <div className="mt-4 rounded-xl bg-slate-50 p-2.5 px-3 border border-slate-200/80 flex items-center justify-between text-xs text-slate-600">
+              <span className="flex items-center gap-1.5 font-bold text-slate-800">
+                <Clock className="h-3.5 w-3.5 text-blue-600" />
+                <span>{formatNotificationFullDate(selectedNotification.createdAt)}</span>
+              </span>
+              <span className="text-[11px] text-slate-400 font-medium">
+                {formatRelativeTime(selectedNotification.createdAt)}
+              </span>
+            </div>
+
+            {/* Message Body */}
+            <div className="mt-4 rounded-2xl bg-white border border-slate-100 p-4 shadow-2xs">
+              <p className="text-xs sm:text-sm text-slate-700 whitespace-pre-line leading-relaxed">
+                {selectedNotification.message}
+              </p>
+            </div>
+
+            {/* Interview Specific Details Card */}
+            {(selectedNotification.interviewDate || selectedNotification.interviewLocation || selectedNotification.interviewRound) && (
+              <div className="mt-3.5 rounded-2xl bg-purple-50/70 border border-purple-200/80 p-3.5 space-y-2 text-xs">
+                <h5 className="font-bold text-purple-950 flex items-center gap-1.5">
+                  <Calendar className="h-4 w-4 text-purple-600" />
+                  <span>Interview Evaluation Logistics</span>
+                </h5>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-purple-900">
+                  {selectedNotification.interviewRound && (
+                    <div>
+                      <span className="text-purple-600 font-medium">Evaluation Round: </span>
+                      <strong>{selectedNotification.interviewRound}</strong>
+                    </div>
+                  )}
+                  {selectedNotification.interviewDate && (
+                    <div>
+                      <span className="text-purple-600 font-medium">Date & Time: </span>
+                      <strong>{formatNotificationFullDate(selectedNotification.interviewDate)}</strong>
+                    </div>
+                  )}
+                  {selectedNotification.interviewLocation && (
+                    <div className="sm:col-span-2">
+                      <span className="text-purple-600 font-medium">Venue / Link: </span>
+                      <strong>{selectedNotification.interviewLocation}</strong>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Offer Specific Details Card */}
+            {selectedNotification.offeredPackage && (
+              <div className="mt-3.5 rounded-2xl bg-emerald-50/80 border border-emerald-200 p-3.5 flex items-center justify-between text-xs">
+                <div>
+                  <h5 className="font-bold text-emerald-950">Confirmed CTC Package</h5>
+                  <p className="text-[11px] text-emerald-700">Extended offer for {selectedNotification.jobTitle || "Role"}</p>
+                </div>
+                <span className="text-sm font-extrabold text-emerald-700 bg-white px-3 py-1 rounded-xl border border-emerald-300">
+                  ₹{selectedNotification.offeredPackage} LPA
+                </span>
+              </div>
+            )}
+
+            {/* Modal Actions */}
+            <div className="mt-6 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setSelectedNotification(null)}
+                className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedNotification(null);
+                  handleTabChange("drives");
+                }}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-xs font-bold transition shadow-xs"
+              >
+                <span>Explore Drives</span>
+                <ArrowRight className="h-3 w-3" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

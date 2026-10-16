@@ -7,6 +7,9 @@ import {
   Briefcase,
   GraduationCap,
   RotateCcw,
+  AlertTriangle,
+  FileText,
+  XCircle,
 } from "lucide-react";
 
 export default function RecentDrives({
@@ -14,8 +17,8 @@ export default function RecentDrives({
   appliedDriveIds = new Set(),
   withdrawnDriveIds = new Set(),
   onApplyClick,
-  title = "Eligible Placement Drives",
-  description = "Opportunities matching your academic criteria and branch",
+  title = "Campus Placement Drives",
+  description = "Active campus recruitment drives with your live eligibility status",
   showSearch = true,
   maxItems = null,
 }) {
@@ -129,7 +132,7 @@ export default function RecentDrives({
           <p className="mt-1 text-xs text-slate-500 max-w-xs">
             {searchTerm
               ? "No drives match your filters."
-              : "No active drives matching your criteria right now."}
+              : "No active drives available right now."}
           </p>
           {searchTerm && (
             <button
@@ -152,6 +155,7 @@ export default function RecentDrives({
             const isWithdrawn = !isApplied && (withdrawnDriveIds.has(drive._id) || (driveIdStr && withdrawnDriveIds.has(driveIdStr)));
             const deadlineInfo = formatDeadline(drive.applicationDeadline);
             const isEnded = deadlineInfo?.label === "Ended";
+            const isEligible = drive.isEligible !== false;
 
             return (
               <div
@@ -179,9 +183,32 @@ export default function RecentDrives({
                       </div>
                     </div>
 
-                    <span className="shrink-0 rounded-xl bg-emerald-50 px-2.5 py-1 text-xs font-extrabold text-emerald-700 border border-emerald-200/80 whitespace-nowrap">
-                      ₹{drive.package} LPA
-                    </span>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <span className="rounded-xl bg-emerald-50 px-2.5 py-1 text-xs font-extrabold text-emerald-700 border border-emerald-200/80 whitespace-nowrap">
+                        ₹{drive.package} LPA
+                      </span>
+                      {drive.isEligible !== undefined && (
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold border ${
+                            isEligible
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              : "bg-rose-50 text-rose-700 border-rose-200"
+                          }`}
+                        >
+                          {isEligible ? (
+                            <>
+                              <CheckCircle className="h-3 w-3" />
+                              <span>Eligible</span>
+                            </>
+                          ) : (
+                            <>
+                              <XCircle className="h-3 w-3" />
+                              <span>Not Eligible</span>
+                            </>
+                          )}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Metadata Tags */}
@@ -190,6 +217,24 @@ export default function RecentDrives({
                       <Briefcase className="h-3 w-3 text-slate-400" />
                       {drive.jobType?.replace(/-/g, " ") || "Full Time"}
                     </span>
+
+                    {/* Paid / Unpaid Internship Badge */}
+                    {drive.internshipType === "paid" && (
+                      <span className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-800 border border-amber-200">
+                        Paid Internship {drive.stipend ? `• ${drive.stipend}` : ""}
+                      </span>
+                    )}
+                    {drive.internshipType === "unpaid" && (
+                      <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-700 border border-slate-200">
+                        Unpaid Internship
+                      </span>
+                    )}
+
+                    {drive.internshipDuration && (
+                      <span className="inline-flex items-center gap-1 rounded-lg bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600 border border-slate-200">
+                        {drive.internshipDuration}
+                      </span>
+                    )}
 
                     {drive.location && (
                       <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600 font-semibold">
@@ -202,10 +247,40 @@ export default function RecentDrives({
                       <GraduationCap className="h-3 w-3 text-blue-500" />
                       Min {drive.minimumCGPA} CGPA
                     </span>
+
+                    {/* JD PDF Attachment Link */}
+                    {drive.jdPdf?.url && (
+                      <a
+                        href={drive.jdPdf.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100 border border-blue-200 transition"
+                        title="View Official Job Description PDF"
+                      >
+                        <FileText className="h-3 w-3" />
+                        <span>JD (PDF)</span>
+                      </a>
+                    )}
                   </div>
 
+                  {/* Ineligible Explanation Note Banner */}
+                  {!isEligible && (
+                    <div className="mt-2.5 rounded-xl bg-amber-50/80 border border-amber-200 p-2 text-xs text-amber-900 space-y-0.5">
+                      <div className="flex items-center gap-1 font-bold text-amber-800 text-[11px]">
+                        <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                        <span>Not Eligible to Apply:</span>
+                      </div>
+                      <p className="text-[11px] text-amber-800">
+                        {drive.eligibilityReasons?.[0] || drive.eligibilitySummary || "Academic criteria thresholds not satisfied."}
+                      </p>
+                      <p className="text-[10px] text-slate-500 italic">
+                        Update your academic profile settings if your records have changed to unlock eligibility.
+                      </p>
+                    </div>
+                  )}
+
                   {/* Branches Pill */}
-                  <div className="mt-3 rounded-xl bg-slate-50 p-2 text-[11px] text-slate-600 border border-slate-100">
+                  <div className="mt-2.5 rounded-xl bg-slate-50 p-2 text-[11px] text-slate-600 border border-slate-100">
                     <span className="font-medium text-slate-400">Branches: </span>
                     <span className="font-semibold text-slate-800">
                       {Array.isArray(drive.eligibleBranches)
@@ -248,6 +323,15 @@ export default function RecentDrives({
                         </button>
                       )}
                     </div>
+                  ) : !isEligible ? (
+                    <button
+                      onClick={() => onApplyClick(drive)}
+                      className="inline-flex items-center gap-1 rounded-xl bg-slate-100 hover:bg-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700 transition active:scale-95"
+                      title="Inspect eligibility criteria and job details"
+                    >
+                      <span>View Details</span>
+                      <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
+                    </button>
                   ) : (
                     <button
                       onClick={() => onApplyClick(drive)}
