@@ -9,6 +9,7 @@ import { PlacementSession } from "../models/placementSession.model.js";
 import { EligibilityService } from "../services/eligibility.service.js";
 import { getCatalogProgram, PROGRAM_CATALOG, resolveProgram } from "../constants/programCatalog.js";
 import { studentMatchesDriveProgram } from "../services/programTargeting.service.js";
+import { syncDriveReminders } from "../services/reminderScheduler.service.js";
 
 const normalizeEligiblePrograms = (programCodes, branches) => {
     let programs;
@@ -134,8 +135,23 @@ const createPlacementDrive = asyncHandler(async (req, res) => {
         requirementsVersion: 1,
         studentRequirements: Array.isArray(req.body.studentRequirements) && req.body.studentRequirements.length > 0
             ? req.body.studentRequirements
-            : DEFAULT_STUDENT_REQUIREMENTS
+            : DEFAULT_STUDENT_REQUIREMENTS,
+        reminderSettings: {
+            remindersEnabled: req.body.reminderSettings?.remindersEnabled !== undefined
+                ? Boolean(req.body.reminderSettings.remindersEnabled)
+                : true,
+            reminderOffsetsHours: Array.isArray(req.body.reminderSettings?.reminderOffsetsHours) && req.body.reminderSettings.reminderOffsetsHours.length > 0
+                ? req.body.reminderSettings.reminderOffsetsHours.map(Number).filter((n) => !isNaN(n) && n > 0)
+                : [6],
+            channels: Array.isArray(req.body.reminderSettings?.channels) && req.body.reminderSettings.channels.length > 0
+                ? req.body.reminderSettings.channels
+                : ["in_app", "email"]
+        }
     });
+
+    // Schedule deadline reminders persistently
+    await syncDriveReminders(placementDrive._id);
+
     return res.status(201).json(
         new ApiResponse(
             201,
@@ -359,7 +375,24 @@ const updatePlacementDrive = asyncHandler(async (req, res) => {
         placementDrive.studentRequirements = req.body.studentRequirements;
         placementDrive.requirementsVersion = (placementDrive.requirementsVersion || 1) + 1;
     }
+    if (req.body.reminderSettings !== undefined) {
+        placementDrive.reminderSettings = {
+            remindersEnabled: req.body.reminderSettings.remindersEnabled !== undefined
+                ? Boolean(req.body.reminderSettings.remindersEnabled)
+                : placementDrive.reminderSettings?.remindersEnabled ?? true,
+            reminderOffsetsHours: Array.isArray(req.body.reminderSettings.reminderOffsetsHours) && req.body.reminderSettings.reminderOffsetsHours.length > 0
+                ? req.body.reminderSettings.reminderOffsetsHours.map(Number).filter((n) => !isNaN(n) && n > 0)
+                : placementDrive.reminderSettings?.reminderOffsetsHours || [6],
+            channels: Array.isArray(req.body.reminderSettings.channels) && req.body.reminderSettings.channels.length > 0
+                ? req.body.reminderSettings.channels
+                : placementDrive.reminderSettings?.channels || ["in_app", "email"]
+        };
+    }
     await placementDrive.save();
+
+    // Sync reminders on deadline/settings update
+    await syncDriveReminders(placementDrive._id);
+
     return res.status(200).json(
         new ApiResponse(
             200,
@@ -392,6 +425,8 @@ const deactivatePlacementDrive = asyncHandler(async (req, res) => {
     }
     placementDrive.isActive = false;
     await placementDrive.save();
+    await syncDriveReminders(placementDrive._id);
+
     return res.status(200).json(
         new ApiResponse(
             200,
@@ -424,6 +459,8 @@ const reactivatePlacementDrive = asyncHandler(async (req, res) => {
     }
     placementDrive.isActive = true;
     await placementDrive.save();
+    await syncDriveReminders(placementDrive._id);
+
     return res.status(200).json(
         new ApiResponse(
             200,

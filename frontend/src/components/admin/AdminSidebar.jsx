@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Calendar,
   FileSpreadsheet,
+  Bell,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -65,6 +66,11 @@ export default function AdminSidebar({
       id: "excel_hub",
       label: "Excel Import & Exports",
       icon: FileSpreadsheet,
+    },
+    {
+      id: "announcements",
+      label: "Broadcasts & Alerts",
+      icon: Bell,
     },
   ];
 

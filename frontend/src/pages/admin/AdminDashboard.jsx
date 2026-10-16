@@ -13,6 +13,7 @@ import ManageApplications from "../../components/admin/ManageApplications";
 import ManageStudents from "../../components/admin/ManageStudents";
 import ManageSessions from "../../components/admin/ManageSessions";
 import ExcelMigrationHub from "../../components/admin/ExcelMigrationHub";
+import ManageAnnouncements from "../../components/admin/ManageAnnouncements";
 
 import { useAuth } from "../../context/authContextDef";
 import {
@@ -37,6 +38,7 @@ const ADMIN_TABS = [
   "applications",
   "sessions",
   "excel_hub",
+  "announcements",
 ];
 
 export default function AdminDashboard({ initialTab = "overview" }) {
@@ -472,6 +474,12 @@ export default function AdminDashboard({ initialTab = "overview" }) {
               sessions={sessions}
               drives={scopedDrives}
               onRefresh={() => loadDashboardData(true)}
+            />
+          )}
+
+          {activeTab === "announcements" && (
+            <ManageAnnouncements
+              drives={scopedDrives}
             />
           )}
         </main>
