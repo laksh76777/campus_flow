@@ -10,6 +10,7 @@ import { PlacementDrive, DEFAULT_STUDENT_REQUIREMENTS } from "../models/placemen
 import { Application } from "../models/application.model.js";
 import { Notification } from "../models/notification.model.js";
 import { ExportLog } from "../models/exportLog.model.js";
+import { PROGRAM_CATALOG } from "../constants/programCatalog.js";
 
 async function seedCleanDatabase() {
     console.log("==================================================================");
@@ -44,46 +45,56 @@ async function seedCleanDatabase() {
         isCurrent: false,
         isClosed: true,
         isArchived: false,
-        description: "Placement session for graduating Class of 2026."
+        description: "Placement session for graduating Class of 2026.",
+        admissionYearMapping: [
+            { course: "B.E.", courseDurationYears: 4, admissionYear: 2022 },
+            { course: "MBA", courseDurationYears: 2, admissionYear: 2024 },
+            { course: "MCA", courseDurationYears: 2, admissionYear: 2024 },
+            { course: "M.Tech", courseDurationYears: 2, admissionYear: 2024 }
+        ]
     });
 
     const session2027 = await PlacementSession.create({
         sessionYear: 2027,
         name: "Placement Session 2026-2027 (Current)",
         academicYear: "2026-2027",
-        course: "B.Tech",
         courseDurationYears: 4,
         status: "ACTIVE",
         isCurrent: true,
         isClosed: false,
         isArchived: false,
-        description: "Official active placement session for graduating Class of 2027."
+        description: "Official active placement session for graduating Class of 2027.",
+        admissionYearMapping: [
+            { course: "B.E.", courseDurationYears: 4, admissionYear: 2023 },
+            { course: "MBA", courseDurationYears: 2, admissionYear: 2025 },
+            { course: "MCA", courseDurationYears: 2, admissionYear: 2025 },
+            { course: "M.Tech", courseDurationYears: 2, admissionYear: 2025 }
+        ]
     });
 
     const session2028 = await PlacementSession.create({
         sessionYear: 2028,
         name: "Placement Session 2027-2028 (Upcoming)",
         academicYear: "2027-2028",
-        course: "B.Tech",
         courseDurationYears: 4,
         status: "UPCOMING",
         isCurrent: false,
         isClosed: false,
         isArchived: false,
-        description: "Future placement session for Class of 2028."
+        description: "Future placement session for Class of 2028.",
+        admissionYearMapping: [
+            { course: "B.E.", courseDurationYears: 4, admissionYear: 2024 },
+            { course: "MBA", courseDurationYears: 2, admissionYear: 2026 },
+            { course: "MCA", courseDurationYears: 2, admissionYear: 2026 },
+            { course: "M.Tech", courseDurationYears: 2, admissionYear: 2026 }
+        ]
     });
     console.log("  ✓ Placement Sessions created (2026, 2027 [ACTIVE], 2028)");
 
     console.log("\n[3/7] Seeding official Academic Departments...");
-    const departmentsData = [
-        { name: "Computer Science and Engineering", code: "CSE", applicableCourses: ["B.Tech", "M.Tech"], isActive: true },
-        { name: "Information Science and Engineering", code: "ISE", applicableCourses: ["B.Tech"], isActive: true },
-        { name: "Electronics and Communication Engineering", code: "ECE", applicableCourses: ["B.Tech", "M.Tech"], isActive: true },
-        { name: "Electrical and Electronics Engineering", code: "EEE", applicableCourses: ["B.Tech"], isActive: true },
-        { name: "Mechanical Engineering", code: "ME", applicableCourses: ["B.Tech", "M.Tech"], isActive: true },
-        { name: "Civil Engineering", code: "CE", applicableCourses: ["B.Tech"], isActive: true },
-        { name: "Artificial Intelligence and Data Science", code: "AIDS", applicableCourses: ["B.Tech"], isActive: true }
-    ];
+    const departmentsData = PROGRAM_CATALOG.map(({ code, name, degreeType, programLevel }) => ({
+        code, name, course: degreeType, degreeType, programLevel, isActive: true
+    }));
     await Department.insertMany(departmentsData);
     console.log(`  ✓ ${departmentsData.length} standard college departments configured`);
 
@@ -122,9 +133,12 @@ async function seedCleanDatabase() {
         user: demoStudentUser._id,
         enrollmentNumber: "1MS23CS001",
         usn: "1MS23CS001",
-        course: "B.Tech",
-        branch: "Computer Science and Engineering",
-        department: "Computer Science and Engineering",
+        course: "B.E.",
+        programCode: "CSE",
+        programLevel: "Undergraduate",
+        degreeType: "B.E.",
+        branch: PROGRAM_CATALOG[0].name,
+        department: PROGRAM_CATALOG[0].name,
         admissionYear: 2023,
         graduationYear: 2027,
         currentSemester: 6,
@@ -227,7 +241,8 @@ async function seedCleanDatabase() {
         jobType: "full-time",
         package: 1400000,
         location: "Bengaluru / Hyderabad (Hybrid)",
-        eligibleBranches: ["Computer Science and Engineering", "Information Science and Engineering", "Electronics and Communication Engineering"],
+        eligibleProgramCodes: ["CSE", "ISE", "ECE"],
+        eligibleBranches: PROGRAM_CATALOG.filter((program) => ["CSE", "ISE", "ECE"].includes(program.code)).map((program) => program.name),
         minimumCGPA: 7.5,
         maximumBacklogs: 0,
         maximumHistoricalBacklogs: 1,

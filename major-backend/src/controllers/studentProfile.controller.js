@@ -6,6 +6,7 @@ import { User } from "../models/user.models.js";
 import { PlacementSession } from "../models/placementSession.model.js";
 import { v2 as cloudinary } from "cloudinary";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import { resolveStudentProgram } from "../constants/programCatalog.js";
 
 // @desc    Create student profile
 // @route   POST /api/v1/studentprofile/create-student-profile
@@ -14,6 +15,9 @@ const createStudentProfile = asyncHandler(async (req, res) => {
     const {
         enrollmentNumber,
         usn,
+        programCode,
+        programLevel,
+        degreeType,
         course,
         branch,
         department,
@@ -42,14 +46,14 @@ const createStudentProfile = asyncHandler(async (req, res) => {
     } = req.body;
 
     const enrNum = enrollmentNumber?.trim() || usn?.trim();
-    const branchName = branch?.trim() || department?.trim();
+    let branchName = branch?.trim() || department?.trim();
     const semNum = Number(semester || currentSemester);
     const gradYear = Number(graduationYear);
 
-    if (!enrNum || !branchName || !semNum || !gradYear || cgpa === undefined) {
+    if (!enrNum || !semNum || !gradYear || cgpa === undefined) {
         throw new ApiError(
             400,
-            "Enrollment number/USN, branch/department, semester, graduation year and CGPA are required"
+            "Enrollment number/USN, semester, graduation year and CGPA are required"
         );
     }
 
@@ -62,9 +66,35 @@ const createStudentProfile = asyncHandler(async (req, res) => {
     }
 
     let profile = await StudentProfile.findOne({ user: req.user._id });
+    const programFieldsProvided = [programCode, programLevel, degreeType, course, branch, department]
+        .some((value) => value !== undefined);
+    const selectedProgram = resolveStudentProgram({ programCode, programLevel, degreeType, course, branch: branchName, department });
+    if (programFieldsProvided && !selectedProgram) {
+        throw new ApiError(400, "Select an approved academic program; legacy or unknown values require review");
+    }
+    if (!profile && !selectedProgram) {
+        throw new ApiError(400, "A valid approved academic program is required to create a student profile");
+    }
+    if (selectedProgram && programLevel && programLevel !== selectedProgram.programLevel) {
+        throw new ApiError(400, "Program level does not match the selected academic program");
+    }
+    if (selectedProgram) branchName = selectedProgram.name;
+
     if (profile) {
         if (enrNum) { profile.enrollmentNumber = enrNum; profile.usn = enrNum; }
-        if (branchName) { profile.branch = branchName; profile.department = branchName; }
+        if (selectedProgram) {
+            profile.programCode = selectedProgram.code;
+            profile.programLevel = selectedProgram.programLevel;
+            profile.degreeType = selectedProgram.degreeType;
+            profile.course = selectedProgram.degreeType;
+            profile.branch = selectedProgram.name;
+            profile.department = selectedProgram.name;
+            const nextAdmissionYear = Number(admissionYear ?? profile.admissionYear);
+            const nextGraduationYear = Number(graduationYear ?? profile.graduationYear);
+            if (nextAdmissionYear + selectedProgram.durationYears !== nextGraduationYear) {
+                throw new ApiError(400, "Selected program duration does not match the student's admission and graduation years");
+            }
+        }
         if (semNum) { profile.semester = semNum; profile.currentSemester = semNum; }
         if (gradYear) profile.graduationYear = gradYear;
         if (admissionYear) profile.admissionYear = Number(admissionYear);
@@ -130,17 +160,27 @@ const createStudentProfile = asyncHandler(async (req, res) => {
             resolvedSessionId = foundSession._id;
         }
     }
+    if (!admissionYear || Number(admissionYear) + selectedProgram.durationYears !== gradYear) {
+        throw new ApiError(400, "Admission and graduation years must match the selected program duration");
+    }
+    const assignedSession = resolvedSessionId ? await PlacementSession.findById(resolvedSessionId) : null;
+    if (!assignedSession || assignedSession.sessionYear !== gradYear) {
+        throw new ApiError(400, "A placement session matching the student's graduation cohort is required");
+    }
 
     profile = new StudentProfile({
         user: req.user._id,
         enrollmentNumber: enrNum,
         usn: enrNum,
-        course: course || "B.Tech",
+        course: selectedProgram.degreeType,
+        programCode: selectedProgram.code,
+        programLevel: selectedProgram.programLevel,
+        degreeType: selectedProgram.degreeType,
         branch: branchName,
         department: branchName,
         semester: semNum,
         currentSemester: semNum,
-        admissionYear: admissionYear ? Number(admissionYear) : gradYear - 4,
+        admissionYear: admissionYear ? Number(admissionYear) : null,
         graduationYear: gradYear,
         placementSession: resolvedSessionId,
         cgpa: Number(cgpa),
@@ -191,39 +231,6 @@ const getCurrentStudentProfile = asyncHandler(async (req, res) => {
         .populate("user", "-password -refreshToken")
         .populate("placementSession", "sessionYear name academicYear isActive");
 
-    if (!studentProfile && req.user?.role === "student") {
-        const generatedEnrollment = `ENR-${req.user._id.toString().slice(-6).toUpperCase()}`;
-        const activeSession = await PlacementSession.findOne({ isActive: true });
-
-        const newProfile = new StudentProfile({
-            user: req.user._id,
-            enrollmentNumber: generatedEnrollment,
-            usn: generatedEnrollment,
-            course: "B.Tech",
-            branch: "CSE",
-            department: "CSE",
-            semester: 6,
-            currentSemester: 6,
-            graduationYear: activeSession?.sessionYear || 2026,
-            admissionYear: (activeSession?.sessionYear || 2026) - 4,
-            placementSession: activeSession?._id,
-            cgpa: 8.0,
-            backlogs: 0,
-            skills: ["JavaScript", "React", "Python"],
-            about: "",
-            tenthPercentage: null,
-            twelfthPercentage: null,
-            certificates: [],
-            verificationStatus: "PENDING"
-        });
-
-        await newProfile.save();
-
-        studentProfile = await StudentProfile.findById(newProfile._id)
-            .populate("user", "-password -refreshToken")
-            .populate("placementSession", "sessionYear name academicYear isActive");
-    }
-
     if (!studentProfile) {
         throw new ApiError(404, "Student profile not found");
     }
@@ -248,6 +255,9 @@ const updateStudentProfile = asyncHandler(async (req, res) => {
     const {
         enrollmentNumber,
         usn,
+        programCode,
+        programLevel,
+        degreeType,
         course,
         branch,
         department,
@@ -280,6 +290,23 @@ const updateStudentProfile = asyncHandler(async (req, res) => {
         section
     } = req.body;
 
+    const programFieldsProvided = [programCode, programLevel, degreeType, course, branch, department]
+        .some((value) => value !== undefined);
+    const selectedProgram = resolveStudentProgram({ programCode, degreeType, course, branch, department });
+    if (programFieldsProvided && !selectedProgram) {
+        throw new ApiError(400, "Select an approved academic program; legacy or unknown values require review");
+    }
+    if (selectedProgram && programLevel && programLevel !== selectedProgram.programLevel) {
+        throw new ApiError(400, "Program level does not match the selected academic program");
+    }
+    if (selectedProgram) {
+        const nextAdmissionYear = Number(admissionYear ?? studentProfile.admissionYear);
+        const nextGraduationYear = Number(graduationYear ?? studentProfile.graduationYear);
+        if (nextAdmissionYear + selectedProgram.durationYears !== nextGraduationYear) {
+            throw new ApiError(400, "Selected program duration does not match the student's admission and graduation years");
+        }
+    }
+
     const enrNum = enrollmentNumber?.trim() || usn?.trim();
     if (enrNum && enrNum !== studentProfile.enrollmentNumber) {
         const existingEnrollment = await StudentProfile.findOne({
@@ -293,14 +320,13 @@ const updateStudentProfile = asyncHandler(async (req, res) => {
         studentProfile.usn = enrNum;
     }
 
-    if (course !== undefined) studentProfile.course = course;
-    if (branch !== undefined) {
-        studentProfile.branch = branch;
-        studentProfile.department = branch;
-    }
-    if (department !== undefined) {
-        studentProfile.department = department;
-        studentProfile.branch = department;
+    if (selectedProgram) {
+        studentProfile.programCode = selectedProgram.code;
+        studentProfile.programLevel = selectedProgram.programLevel;
+        studentProfile.degreeType = selectedProgram.degreeType;
+        studentProfile.course = selectedProgram.degreeType;
+        studentProfile.branch = selectedProgram.name;
+        studentProfile.department = selectedProgram.name;
     }
     if (semester !== undefined) {
         studentProfile.semester = Number(semester);
@@ -313,6 +339,10 @@ const updateStudentProfile = asyncHandler(async (req, res) => {
     if (graduationYear !== undefined) studentProfile.graduationYear = Number(graduationYear);
     if (admissionYear !== undefined) studentProfile.admissionYear = Number(admissionYear);
     if (placementSession !== undefined && req.user.role === "admin") {
+        const session = await PlacementSession.findById(placementSession);
+        if (!session || session.sessionYear !== Number(graduationYear ?? studentProfile.graduationYear)) {
+            throw new ApiError(400, "Placement session must match the student's graduation cohort");
+        }
         studentProfile.placementSession = placementSession;
     }
     if (section !== undefined) studentProfile.section = section;
@@ -618,30 +648,7 @@ const updateStudentResume = asyncHandler(async (req, res) => {
     });
 
     if (!studentProfile) {
-        studentProfile = new StudentProfile({
-            user: req.user?._id,
-            enrollmentNumber: `ENR-${req.user?._id.toString().slice(-6).toUpperCase()}`,
-            branch: "Computer Science",
-            semester: 6,
-            graduationYear: 2026,
-            cgpa: 8.5,
-            backlogs: 0,
-            skills: [],
-            about: "",
-            resume: {
-                url: resume.url,
-                publicId: resume.public_id
-            }
-        });
-        await studentProfile.save();
-
-        return res.status(200).json(
-            new ApiResponse(
-                200,
-                studentProfile,
-                "Resume uploaded successfully and profile initialized"
-            )
-        );
+        throw new ApiError(404, "Student profile not found. Complete an approved academic profile before uploading a resume.");
     }
 
     // Delete old resume from Cloudinary if existed

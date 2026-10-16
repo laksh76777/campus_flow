@@ -109,11 +109,11 @@ export default function Login() {
 
       navigate(targetDestination, { replace: true });
     } catch (err) {
-      console.error("Login failed:", err);
       const msg =
         err.response?.data?.message ||
         err.message ||
         "Invalid credentials. Please verify your email and password.";
+      console.warn("Login attempt failed.", err.response?.status ?? "network error");
       setError(msg);
       toast.error(msg);
     } finally {

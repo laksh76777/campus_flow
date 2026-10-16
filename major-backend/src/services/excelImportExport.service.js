@@ -2,12 +2,12 @@ import ExcelJS from "exceljs";
 import { User } from "../models/user.models.js";
 import { StudentProfile } from "../models/studentProfile.model.js";
 import { PlacementSession } from "../models/placementSession.model.js";
-import { Department } from "../models/department.model.js";
 import { Company } from "../models/company.model.js";
 import { PlacementDrive, DEFAULT_STUDENT_REQUIREMENTS } from "../models/placementDrive.model.js";
 import { Application } from "../models/application.model.js";
 import { ImportBatch } from "../models/importBatch.model.js";
 import { EligibilityService } from "./eligibility.service.js";
+import { PROGRAM_CATALOG, resolveStudentProgram } from "../constants/programCatalog.js";
 
 /**
  * Formula Injection Sanitization
@@ -88,27 +88,13 @@ export const generateImportTemplate = async (importType) => {
             { header: "Phone Number", key: "phone", width: 18 },
             { header: "Course *", key: "course", width: 14 },
             { header: "Department *", key: "department", width: 32 },
+            { header: "Program Code", key: "programCode", width: 18 },
             { header: "Admission Year *", key: "admissionYear", width: 16 },
             { header: "Graduation Year *", key: "graduationYear", width: 16 },
             { header: "Current Semester", key: "semester", width: 16 },
             { header: "Gender", key: "gender", width: 14 }
         ];
         styleHeaderRow(sheet.getRow(1), "1E3A8A");
-
-        // Add valid illustrative non-student sample row
-        const sampleRow = sheet.addRow({
-            usn: "1MS23CS099",
-            fullName: "Sample Student",
-            email: "sample.student@college.edu",
-            phone: "9876543210",
-            course: "B.Tech",
-            department: "Computer Science and Engineering",
-            admissionYear: 2023,
-            graduationYear: 2027,
-            semester: 6,
-            gender: "Female"
-        });
-        styleDataRow(sampleRow, true);
 
         // Add Instructions Sheet
         const infoSheet = workbook.addWorksheet("Instructions & Guide");
@@ -121,15 +107,16 @@ export const generateImportTemplate = async (importType) => {
         styleHeaderRow(infoSheet.getRow(1), "0F172A");
 
         const instructions = [
-            { field: "USN", required: "YES", rules: "Unique Student Number (alphanumeric, 6-20 chars)", examples: "1MS23CS001, 1RV22IS045" },
-            { field: "Full Name", required: "YES", rules: "Official student name as per records", examples: "Aarav Sharma, Neha Kulkarni" },
-            { field: "College Email", required: "YES", rules: "Must be a valid unique institutional email", examples: "student@college.edu" },
-            { field: "Phone Number", required: "NO", rules: "10-digit mobile number", examples: "9876543210" },
-            { field: "Course", required: "YES", rules: "Standard college degree program", examples: "B.Tech, M.Tech, MCA, MBA" },
-            { field: "Department", required: "YES", rules: "Official branch or department name", examples: "Computer Science and Engineering, ISE, ECE, ME" },
-            { field: "Admission Year", required: "YES", rules: "4-digit year of college entry", examples: "2023" },
-            { field: "Graduation Year", required: "YES", rules: "4-digit expected graduation year (determines Placement Session)", examples: "2027" },
-            { field: "Current Semester", required: "NO", rules: "Numeric semester (1 to 8)", examples: "1, 2, ..., 8" },
+            { field: "USN", required: "YES", rules: "Unique Student Number (alphanumeric, 6-20 chars)", examples: "Use the student's official USN" },
+            { field: "Full Name", required: "YES", rules: "Official student name as per records", examples: "Enter the verified institutional record" },
+            { field: "College Email", required: "YES", rules: "Must be a valid unique institutional email", examples: "Use the student's institutional address" },
+            { field: "Phone Number", required: "NO", rules: "10-digit mobile number", examples: "Enter the recorded number" },
+            { field: "Course", required: "NO when Program Code is provided", rules: "Approved degree type; checked against the selected program", examples: "B.E., MBA, MCA, M.Tech" },
+            { field: "Department", required: "NO when Program Code is provided", rules: "Approved exact program label or an unambiguous legacy label", examples: "Computer Science & Engineering (CSE), M.Tech in Data Science" },
+            { field: "Program Code", required: "YES unless Department contains an approved program label", rules: "Stable code from the CampusFlow academic program catalogue", examples: "CSE, CSE-AIML, MBA, MTECH-DS" },
+            { field: "Admission Year", required: "YES", rules: "4-digit year of college entry", examples: "Use the verified admission year" },
+            { field: "Graduation Year", required: "YES", rules: "Admission Year plus the selected program duration; must match a configured placement session", examples: "Calculate from the approved program catalogue" },
+            { field: "Current Semester", required: "NO", rules: "Numeric semester (1 to 8)", examples: "Use the student's current semester" },
             { field: "Gender", required: "NO", rules: "Optional demographic field", examples: "Male, Female, Other, Prefer not to say" }
         ];
         instructions.forEach((item) => styleDataRow(infoSheet.addRow(item)));
@@ -163,33 +150,6 @@ export const generateImportTemplate = async (importType) => {
         ];
         styleHeaderRow(sheet.getRow(1), "047857");
 
-        const sampleRow = sheet.addRow({
-            usn: "1MS23CS099",
-            cgpa: 8.65,
-            sem1: 8.4,
-            sem2: 8.7,
-            sem3: 8.5,
-            sem4: 8.9,
-            sem5: 8.7,
-            sem6: 8.8,
-            sem7: "",
-            sem8: "",
-            activeBacklogs: 0,
-            clearedBacklogs: 0,
-            tenthBoard: "CBSE",
-            tenthSchool: "DPS Bengaluru",
-            tenthYear: 2021,
-            tenthPct: 91.5,
-            twelfthType: "12th",
-            twelfthInst: "DPS Bengaluru",
-            twelfthYear: 2023,
-            twelfthPct: 88.0,
-            hasGap: "NO",
-            gapReason: "",
-            gapDuration: ""
-        });
-        styleDataRow(sampleRow, true);
-
         const infoSheet = workbook.addWorksheet("Instructions & Guide");
         infoSheet.columns = [
             { header: "Field Name", key: "field", width: 22 },
@@ -200,11 +160,11 @@ export const generateImportTemplate = async (importType) => {
         styleHeaderRow(infoSheet.getRow(1), "064E3B");
 
         const instructions = [
-            { field: "USN", required: "YES", rules: "Must match an existing student in CampusFlow", examples: "1MS23CS001" },
+            { field: "USN", required: "YES", rules: "Must match an existing student in CampusFlow", examples: "Use the student's official USN" },
             { field: "Overall CGPA", required: "YES", rules: "Official CGPA (0.00 to 10.00). NEVER averaged from SGPA", examples: "8.75, 9.20" },
-            { field: "Sem 1 to 8 SGPA", required: "NO", rules: "Independent semester SGPA (0.00 to 10.00). Uncompleted remain empty", examples: "8.5, 8.9 (Leave blank for future sems)" },
-            { field: "Active Backlogs", required: "NO", rules: "Non-negative integer (defaults to 0)", examples: "0, 1, 2" },
-            { field: "Cleared Backlogs", required: "NO", rules: "Historical cleared backlogs count", examples: "0, 1" },
+            { field: "Sem 1 to 8 SGPA", required: "NO", rules: "Independent semester SGPA (0.00 to 10.00). Uncompleted remain empty", examples: "Leave uncompleted semesters empty" },
+            { field: "Active Backlogs", required: "NO", rules: "Non-negative integer (defaults to 0)", examples: "Enter the verified count" },
+            { field: "Cleared Backlogs", required: "NO", rules: "Historical cleared backlogs count", examples: "Enter the verified count" },
             { field: "10th Board", required: "NO", rules: "Education board for Class 10", examples: "CBSE, ICSE, State Board, Other" },
             { field: "10th %", required: "NO", rules: "Class 10 final percentage (0.0 to 100.0)", examples: "92.4, 85.0" },
             { field: "12th/Diploma Type", required: "NO", rules: "Qualification category switch", examples: "12th, Diploma, Equivalent" },
@@ -230,20 +190,6 @@ export const generateImportTemplate = async (importType) => {
         ];
         styleHeaderRow(sheet.getRow(1), "6B21A8");
 
-        const sampleRow = sheet.addRow({
-            usn: "1MS23CS099",
-            sessionYear: 2027,
-            companyName: "Infosys Technologies",
-            jobTitle: "Systems Engineer",
-            jobType: "full-time",
-            package: 9.5,
-            status: "offer_accepted",
-            offerDate: "2026-09-15",
-            round: "Final HR Interview",
-            remarks: "Campus selection verified"
-        });
-        styleDataRow(sampleRow, true);
-
         const infoSheet = workbook.addWorksheet("Instructions & Guide");
         infoSheet.columns = [
             { header: "Field Name", key: "field", width: 22 },
@@ -255,13 +201,13 @@ export const generateImportTemplate = async (importType) => {
 
         const instructions = [
             { field: "USN", required: "YES", rules: "Must match an existing registered student", examples: "1MS23CS001" },
-            { field: "Placement Session Year", required: "YES", rules: "4-digit session graduation year", examples: "2026, 2027, 2028" },
-            { field: "Company Name", required: "YES", rules: "Corporate recruiter name", examples: "Google, Microsoft, Infosys" },
-            { field: "Job Title / Role", required: "YES", rules: "Designation / Position title", examples: "Software Development Engineer" },
-            { field: "Job Type", required: "NO", rules: "Standard placement category", examples: "full-time, internship, internship-to-full-time" },
+            { field: "Placement Session Year", required: "YES", rules: "Must match an existing configured placement session", examples: "Use a year shown in Placement Sessions" },
+            { field: "Company Name", required: "YES", rules: "Existing company record; unmatched companies are created from the supplied name only", examples: "Use the exact company name from CampusFlow" },
+            { field: "Job Title / Role", required: "YES", rules: "Role as recorded in the source placement history", examples: "Enter the recorded role" },
+            { field: "Job Type", required: "YES", rules: "Must be one of the supported placement categories", examples: "full-time, internship, internship-to-full-time" },
             { field: "Offer Package (LPA)", required: "YES", rules: "Annual CTC package in Lakhs Per Annum (or total INR)", examples: "12.5, 1400000" },
-            { field: "Placement Status", required: "YES", rules: "Recruitment lifecycle milestone", examples: "shortlisted, interview, selected, offer_received, offer_accepted, rejected" },
-            { field: "Offer Date", required: "NO", rules: "ISO Date format (YYYY-MM-DD)", examples: "2026-10-15" }
+            { field: "Placement Status", required: "YES", rules: "Recruitment lifecycle milestone from the source record", examples: "shortlisted, interview, selected, offer_received, offer_accepted, rejected" },
+            { field: "Offer Date", required: "YES", rules: "Actual historical date; no date is generated when missing", examples: "YYYY-MM-DD" }
         ];
         instructions.forEach((item) => styleDataRow(infoSheet.addRow(item)));
     }
@@ -324,6 +270,9 @@ export const previewImport = async ({
             if (headerMap[normalized]) {
                 const cell = row.getCell(headerMap[normalized]);
                 let val = cell.value;
+                if (val instanceof Date) {
+                    return val.toISOString().slice(0, 10);
+                }
                 if (val && typeof val === "object") {
                     val = val.text || val.result || val.richText?.map((r) => r.text).join("") || "";
                 }
@@ -333,6 +282,9 @@ export const previewImport = async ({
         if (fallbackColIndex) {
             const cell = row.getCell(fallbackColIndex);
             let val = cell.value;
+            if (val instanceof Date) {
+                return val.toISOString().slice(0, 10);
+            }
             if (val && typeof val === "object") {
                 val = val.text || val.result || "";
             }
@@ -350,6 +302,9 @@ export const previewImport = async ({
     let targetSession = null;
     if (placementSessionId) {
         targetSession = await PlacementSession.findById(placementSessionId);
+        if (!targetSession) {
+            throw new Error("Selected placement session does not exist.");
+        }
     }
 
     // Process rows starting from Row 2
@@ -378,16 +333,23 @@ export const previewImport = async ({
             const rawPhone = getCell(row, ["phonenumber", "phone", "mobile"], 4);
             const rawCourse = getCell(row, ["course", "degree", "program"], 5);
             const rawDept = getCell(row, ["department", "branch"], 6);
-            const rawAdmYear = getCell(row, ["admissionyear", "admyear"], 7);
-            const rawGradYear = getCell(row, ["graduationyear", "gradyear", "batch"], 8);
-            const rawSem = getCell(row, ["currentsemester", "semester", "sem"], 9);
-            const rawGender = getCell(row, ["gender", "sex"], 10);
+            const rawProgramCode = getCell(row, ["programcode", "programid", "academicprogram"]);
+            const rawAdmYear = getCell(row, ["admissionyear", "admyear"], 8);
+            const rawGradYear = getCell(row, ["graduationyear", "gradyear", "batch"], 9);
+            const rawSem = getCell(row, ["currentsemester", "semester", "sem"], 10);
+            const rawGender = getCell(row, ["gender", "sex"], 11);
 
             const usn = (rawUsn || "").toUpperCase().trim();
             const fullName = (rawName || "").trim();
             const email = (rawEmail || "").toLowerCase().trim();
             const department = (rawDept || "").trim();
-            const course = (rawCourse || "B.Tech").trim();
+            const program = resolveStudentProgram({
+                ...(rawProgramCode ? { programCode: rawProgramCode } : {}),
+                course: rawCourse,
+                branch: department,
+                department
+            });
+            const course = program?.degreeType || (rawCourse || "").trim();
             const admYear = Number(rawAdmYear);
             const gradYear = Number(rawGradYear);
             const sem = Number(rawSem || 1);
@@ -397,9 +359,11 @@ export const previewImport = async ({
             if (!usn) errors.push("USN is required");
             if (!fullName) errors.push("Full Name is required");
             if (!email || !/^\S+@\S+\.\S+$/.test(email)) errors.push("Valid College Email is required");
-            if (!department) errors.push("Department is required");
+            if (!program) errors.push("Program code or label is missing, unknown, ambiguous, or inconsistent with the degree type");
             if (!admYear || isNaN(admYear) || admYear < 2000 || admYear > 2050) errors.push("Valid 4-digit Admission Year is required");
-            if (!gradYear || isNaN(gradYear) || gradYear < admYear || gradYear > admYear + 6) errors.push("Graduation Year must be consistent with Admission Year");
+            if (!gradYear || isNaN(gradYear) || !program || gradYear !== admYear + program.durationYears) errors.push("Graduation Year must match the selected program duration and Admission Year");
+            const rowSession = targetSession || (gradYear ? await PlacementSession.findOne({ sessionYear: gradYear }) : null);
+            if (!rowSession || Number(rowSession.sessionYear) !== gradYear) errors.push("A placement session matching the Graduation Year must be configured");
 
             // In-sheet duplicate check
             if (usn) {
@@ -445,8 +409,27 @@ export const previewImport = async ({
 
             if (existingUser || existingProfile) {
                 status = "CONFLICT";
-                action = conflictStrategy === "update_unverified" ? "UPDATE" : "SKIP";
-                reason = `Student with USN '${usn}' or Email '${email}' already exists in database. (${action} strategy)`;
+                action = "SKIP";
+                reason = `Student with USN '${usn}' or Email '${email}' already exists in database.`;
+                const isSameAccount = existingProfile && existingUser && String(existingProfile.user) === String(existingUser._id);
+                const isVerified = existingProfile?.verificationStatus === "VERIFIED" ||
+                    existingProfile?.academicVerificationStatus === "VERIFIED";
+                const existingProgram = existingProfile ? resolveStudentProgram(existingProfile) : null;
+                const unchangedProgramAndCohort = Boolean(
+                    existingProgram?.code === program.code &&
+                    Number(existingProfile.admissionYear) === admYear &&
+                    Number(existingProfile.graduationYear) === gradYear &&
+                    (!existingProfile.placementSession || String(existingProfile.placementSession) === String(rowSession._id))
+                );
+
+                if (conflictStrategy === "update_unverified" && isSameAccount && !isVerified && unchangedProgramAndCohort) {
+                    action = "UPDATE";
+                    reason = "Existing unverified record has the same approved program and cohort; canonical program metadata may be refreshed.";
+                } else if (!unchangedProgramAndCohort) {
+                    reason = "Existing program or cohort differs or is unresolved; preserve the record and resolve the conflict through authorized profile review.";
+                } else if (isVerified) {
+                    reason = "Existing academic record is verified and will not be overwritten.";
+                }
                 conflictCount++;
             }
 
@@ -464,7 +447,11 @@ export const previewImport = async ({
                     email,
                     phone: rawPhone ? String(rawPhone).trim() : "",
                     course,
-                    department,
+                    programCode: program.code,
+                    programLevel: program.programLevel,
+                    degreeType: program.degreeType,
+                    department: program.name,
+                    placementSession: rowSession._id,
                     admissionYear: admYear,
                     graduationYear: gradYear,
                     currentSemester: sem,
@@ -650,14 +637,24 @@ export const previewImport = async ({
             const compName = (rawCompName || "").trim();
             const jobTitle = (rawJobTitle || "").trim();
             const pkg = Number(rawPkg);
-            const status = (rawStatus || "offer_accepted").toLowerCase().trim();
+            const status = (rawStatus || "").toLowerCase().trim();
+            const jobType = (rawJobType || "").toLowerCase().trim();
+            const offerDate = rawOfferDate ? new Date(rawOfferDate) : null;
 
             const errors = [];
             if (!usn) errors.push("USN is required");
-            if (!sessionYear || isNaN(sessionYear)) errors.push("Placement Session Year is required");
+            if (!Number.isInteger(sessionYear) || sessionYear < 1900 || sessionYear > 2200) errors.push("A valid Placement Session Year is required");
             if (!compName) errors.push("Company Name is required");
             if (!jobTitle) errors.push("Job Title is required");
             if (isNaN(pkg) || pkg <= 0) errors.push("Valid offer package is required");
+            if (!["full-time", "internship", "internship-to-full-time"].includes(jobType)) {
+                errors.push("Job Type must be full-time, internship, or internship-to-full-time");
+            }
+            if (!offerDate || Number.isNaN(offerDate.getTime())) errors.push("A valid historical Offer Date is required");
+            const configuredSession = Number.isInteger(sessionYear)
+                ? await PlacementSession.findOne({ sessionYear })
+                : null;
+            if (!configuredSession) errors.push(`No configured placement session exists for year ${sessionYear || "provided"}`);
 
             const allowedStatuses = ["applied", "shortlisted", "interview", "selected", "offer_received", "offer_accepted", "rejected"];
             if (!allowedStatuses.includes(status)) {
@@ -706,7 +703,34 @@ export const previewImport = async ({
                 continue;
             }
 
+            const profileSession = profile.placementSession
+                ? await PlacementSession.findById(profile.placementSession).select("sessionYear")
+                : null;
+            if (
+                Number(profile.graduationYear) !== sessionYear ||
+                (profile.placementSession && Number(profileSession?.sessionYear) !== sessionYear)
+            ) {
+                invalidCount++;
+                const reason = `Student cohort (${profile.graduationYear}) does not match placement session year ${sessionYear}.`;
+                previewResults.push({
+                    rowNumber,
+                    identifier: usn,
+                    name: profile.user?.fullName || usn,
+                    status: "ERROR",
+                    action: "ERROR",
+                    reason
+                });
+                errorReport.push({
+                    rowNumber,
+                    identifier: usn,
+                    failedField: "Placement Session",
+                    reason
+                });
+                continue;
+            }
+
             validCount++;
+            const program = resolveStudentProgram(profile);
             previewResults.push({
                 rowNumber,
                 identifier: usn,
@@ -720,12 +744,18 @@ export const previewImport = async ({
                     sessionYear,
                     companyName: compName,
                     jobTitle,
-                    jobType: rawJobType || "full-time",
+                    jobType,
                     package: pkg,
                     status,
-                    offerDate: rawOfferDate ? new Date(rawOfferDate) : new Date(),
-                    interviewRound: rawRound || "Final Round",
-                    remarks: rawRemarks || "Historical migration"
+                    offerDate,
+                    interviewRound: rawRound || "",
+                    remarks: rawRemarks || "",
+                    branch: profile.branch || profile.department || "",
+                    department: profile.department || profile.branch || "",
+                    course: profile.course || "",
+                    programCode: program?.code || "",
+                    programLevel: program?.programLevel || "",
+                    degreeType: program?.degreeType || ""
                 },
                 reason: `Placement outcome '${status}' with ${compName} ready to migrate`
             });
@@ -789,6 +819,9 @@ export const commitImportBatch = async (batchId, adminUser) => {
                 if (!session && d.graduationYear) {
                     session = await PlacementSession.findOne({ sessionYear: d.graduationYear });
                 }
+                if (!session || Number(session.sessionYear) !== Number(d.graduationYear)) {
+                    throw new Error("A matching placement session is no longer available for this student's graduation cohort.");
+                }
 
                 if (item.action === "INSERT") {
                     const tempPassword = `Student@${d.usn.slice(-4) || "1234"}`;
@@ -806,6 +839,9 @@ export const commitImportBatch = async (batchId, adminUser) => {
                         enrollmentNumber: d.usn,
                         usn: d.usn,
                         course: d.course,
+                        programCode: d.programCode,
+                        programLevel: d.programLevel,
+                        degreeType: d.degreeType,
                         department: d.department,
                         branch: d.department,
                         admissionYear: d.admissionYear,
@@ -821,16 +857,32 @@ export const commitImportBatch = async (batchId, adminUser) => {
                     });
                     inserted++;
                 } else if (item.action === "UPDATE") {
-                    await StudentProfile.findOneAndUpdate(
-                        { enrollmentNumber: d.usn },
+                    const updatedProfile = await StudentProfile.findOneAndUpdate(
+                        {
+                            enrollmentNumber: d.usn,
+                            verificationStatus: { $nin: ["VERIFIED"] },
+                            academicVerificationStatus: { $nin: ["VERIFIED"] }
+                        },
                         {
                             $set: {
+                                course: d.course,
+                                programCode: d.programCode,
+                                programLevel: d.programLevel,
+                                degreeType: d.degreeType,
                                 department: d.department,
                                 branch: d.department,
-                                currentSemester: d.currentSemester
+                                currentSemester: d.currentSemester,
+                                semester: d.currentSemester,
+                                admissionYear: d.admissionYear,
+                                graduationYear: d.graduationYear,
+                                placementSession: d.placementSession
                             }
-                        }
+                        },
+                        { new: true }
                     );
+                    if (!updatedProfile) {
+                        throw new Error("Student profile became verified or unavailable after preview; no record was updated.");
+                    }
                     updated++;
                 }
 
@@ -858,6 +910,19 @@ export const commitImportBatch = async (batchId, adminUser) => {
 
             } else if (batch.importType === "historical_placements") {
                 const d = item.details;
+                const session = await PlacementSession.findOne({ sessionYear: d.sessionYear });
+                if (!session) {
+                    throw new Error(`No configured placement session exists for year ${d.sessionYear}.`);
+                }
+                const profile = await StudentProfile.findById(d.profileId).select("graduationYear placementSession");
+                if (
+                    !profile ||
+                    Number(profile.graduationYear) !== d.sessionYear ||
+                    (profile.placementSession && String(profile.placementSession) !== String(session._id))
+                ) {
+                    throw new Error("The student's placement-session assignment no longer matches the imported historical outcome.");
+                }
+
                 // Find or create Company
                 let comp = await Company.findOne({
                     companyName: { $regex: new RegExp(`^${d.companyName}$`, "i") }
@@ -865,16 +930,8 @@ export const commitImportBatch = async (batchId, adminUser) => {
                 if (!comp) {
                     comp = await Company.create({
                         companyName: d.companyName,
-                        companyDescription: "Imported Placement Partner",
-                        industry: "Technology",
                         createdBy: adminUser._id
                     });
-                }
-
-                // Resolve Session
-                let session = await PlacementSession.findOne({ sessionYear: d.sessionYear });
-                if (!session) {
-                    session = await PlacementSession.findOne({ isActive: true });
                 }
 
                 // Find or create Placement Drive
@@ -888,7 +945,8 @@ export const commitImportBatch = async (batchId, adminUser) => {
                         jobTitle: d.jobTitle,
                         jobType: d.jobType,
                         package: d.package,
-                        eligibleBranches: ["All"],
+                        eligibleBranches: PROGRAM_CATALOG.map((program) => program.name),
+                        eligibleProgramCodes: PROGRAM_CATALOG.map((program) => program.code),
                         minimumCGPA: 0,
                         graduationYear: d.sessionYear,
                         placementSession: session?._id,
@@ -922,7 +980,13 @@ export const commitImportBatch = async (batchId, adminUser) => {
                         submittedSnapshot: {
                             studentProfileId: d.profileId,
                             usn: item.identifier,
-                            fullName: item.name
+                            fullName: item.name,
+                            branch: d.branch,
+                            department: d.department,
+                            course: d.course,
+                            programCode: d.programCode,
+                            programLevel: d.programLevel,
+                            degreeType: d.degreeType
                         }
                     });
                     inserted++;
@@ -1015,7 +1079,7 @@ export const generateEligibleStudentsExport = async (driveId) => {
                 usn: sanitizeFormula(student.enrollmentNumber || student.usn),
                 fullName: sanitizeFormula(student.user?.fullName || ""),
                 email: sanitizeFormula(student.user?.email || student.collegeEmail || ""),
-                branch: sanitizeFormula(student.branch || student.department || ""),
+                branch: sanitizeFormula(resolveStudentProgram(student)?.name || student.branch || student.department || ""),
                 cgpa: student.cgpa ?? "",
                 backlogs: student.activeBacklogs ?? 0,
                 tenth: student.tenthDetails?.percentage ?? student.tenthPercentage ?? "",
@@ -1085,7 +1149,7 @@ export const generateSessionReportExport = async (sessionId) => {
             slNo: idx + 1,
             usn: sanitizeFormula(s.enrollmentNumber || s.usn),
             name: sanitizeFormula(s.user?.fullName || ""),
-            dept: sanitizeFormula(s.branch || s.department || ""),
+            dept: sanitizeFormula(resolveStudentProgram(s)?.name || s.branch || s.department || ""),
             cgpa: s.cgpa ?? "",
             status: s.isPlaced ? "PLACED" : "UNPLACED",
             company: sanitizeFormula(s.placedCompany || "")
@@ -1178,6 +1242,7 @@ export const generateDriveApplicantsExport = async ({ driveId, status, isCompany
     }
     if (canShare("branch") || !isCompanyFacing) {
         columns.push({ header: "Department", key: "branch", width: 26 });
+        columns.push({ header: "Program Code", key: "programCode", width: 18 });
     }
     if (canShare("cgpa") || !isCompanyFacing) {
         columns.push({ header: "CGPA", key: "cgpa", width: 10 });
@@ -1218,7 +1283,11 @@ export const generateDriveApplicantsExport = async ({ driveId, status, isCompany
 
         if (canShare("email") || !isCompanyFacing) rowData.email = sanitizeFormula(user.email || student.collegeEmail || "");
         if (canShare("phone") || !isCompanyFacing) rowData.phone = sanitizeFormula(user.phone || student.phone || "");
-        if (canShare("branch") || !isCompanyFacing) rowData.branch = sanitizeFormula(student.branch || student.department || "");
+        if (canShare("branch") || !isCompanyFacing) {
+            const program = resolveStudentProgram(student);
+            rowData.branch = sanitizeFormula(program?.name || student.branch || student.department || "");
+            rowData.programCode = sanitizeFormula(program?.code || "");
+        }
         if (canShare("cgpa") || !isCompanyFacing) rowData.cgpa = student.cgpa ?? "";
         if (canShare("activeBacklogs") || !isCompanyFacing) rowData.backlogs = student.activeBacklogs ?? 0;
         if (canShare("tenthPercentage") || !isCompanyFacing) rowData.tenth = student.tenthDetails?.percentage ?? student.tenthPercentage ?? "";
@@ -1245,9 +1314,13 @@ export const generateDepartmentReportExport = async ({ sessionId }) => {
     // Group stats by branch
     const deptStats = {};
     for (const student of students) {
-        const dept = student.branch || student.department || "Unassigned";
-        if (!deptStats[dept]) {
-            deptStats[dept] = {
+        const program = resolveStudentProgram(student);
+        const originalValue = student.branch || student.department || "Unassigned";
+        const programKey = program?.code || `LEGACY:${originalValue}`;
+        const dept = program?.name || originalValue;
+        if (!deptStats[programKey]) {
+            deptStats[programKey] = {
+                programCode: program?.code || "UNRESOLVED",
                 department: dept,
                 total: 0,
                 placed: 0,
@@ -1255,12 +1328,12 @@ export const generateDepartmentReportExport = async ({ sessionId }) => {
                 placedCompanies: new Set()
             };
         }
-        deptStats[dept].total++;
+        deptStats[programKey].total++;
         if (student.isPlaced) {
-            deptStats[dept].placed++;
-            if (student.placedCompany) deptStats[dept].placedCompanies.add(student.placedCompany);
+            deptStats[programKey].placed++;
+            if (student.placedCompany) deptStats[programKey].placedCompanies.add(student.placedCompany);
         } else {
-            deptStats[dept].unplaced++;
+            deptStats[programKey].unplaced++;
         }
     }
 
@@ -1269,6 +1342,7 @@ export const generateDepartmentReportExport = async ({ sessionId }) => {
 
     sheet.columns = [
         { header: "Sl No", key: "slNo", width: 8 },
+        { header: "Program Code", key: "programCode", width: 18 },
         { header: "Department / Branch", key: "department", width: 32 },
         { header: "Total Students", key: "total", width: 16 },
         { header: "Placed Students", key: "placed", width: 16 },
@@ -1285,6 +1359,7 @@ export const generateDepartmentReportExport = async ({ sessionId }) => {
         const rate = stat.total > 0 ? ((stat.placed / stat.total) * 100).toFixed(1) : "0.0";
         const row = sheet.addRow({
             slNo: count,
+            programCode: sanitizeFormula(stat.programCode),
             department: sanitizeFormula(stat.department),
             total: stat.total,
             placed: stat.placed,
@@ -1336,7 +1411,8 @@ export const generateHistoricalPlacementSummaryExport = async ({ sessionId }) =>
         { header: "Sl No", key: "slNo", width: 8 },
         { header: "USN", key: "usn", width: 16 },
         { header: "Student Name", key: "studentName", width: 24 },
-        { header: "Department", key: "branch", width: 28 },
+        { header: "Academic Program", key: "branch", width: 42 },
+        { header: "Program Code", key: "programCode", width: 18 },
         { header: "Company Name", key: "companyName", width: 28 },
         { header: "Job Title", key: "jobTitle", width: 24 },
         { header: "Offered CTC (LPA)", key: "package", width: 18 },
@@ -1352,12 +1428,29 @@ export const generateHistoricalPlacementSummaryExport = async ({ sessionId }) =>
         const drive = app.placementDrive || {};
         const company = drive.company || {};
         const session = drive.placementSession || {};
+        const snapshot = app.submittedSnapshot || {};
+        const programSource = snapshot.programCode
+            ? {
+                  programCode: snapshot.programCode,
+                  course: snapshot.course,
+                  branch: snapshot.branch || snapshot.department
+              }
+            : snapshot.programCode === "" && (snapshot.branch || snapshot.department)
+                ? {
+                      course: snapshot.course,
+                      branch: snapshot.branch || snapshot.department
+                  }
+                : snapshot.programCode !== undefined
+                    ? { programCode: snapshot.programCode }
+                    : student;
+        const program = resolveStudentProgram(programSource);
 
         const row = sheet.addRow({
             slNo: idx + 1,
             usn: sanitizeFormula(student.enrollmentNumber || student.usn || app.submittedSnapshot?.usn || "N/A"),
             studentName: sanitizeFormula(user.fullName || app.submittedSnapshot?.fullName || "N/A"),
-            branch: sanitizeFormula(student.branch || student.department || "N/A"),
+            branch: sanitizeFormula(program?.name || snapshot.branch || snapshot.department || student.branch || student.department || "N/A"),
+            programCode: sanitizeFormula(program?.code || (snapshot.programCode !== undefined ? snapshot.programCode : student.programCode) || ""),
             companyName: sanitizeFormula(company.companyName || "N/A"),
             jobTitle: sanitizeFormula(drive.jobTitle || "Graduate Trainee"),
             package: app.offeredPackage ?? drive.package ?? "N/A",
@@ -1370,4 +1463,3 @@ export const generateHistoricalPlacementSummaryExport = async ({ sessionId }) =>
 
     return workbook;
 };
-

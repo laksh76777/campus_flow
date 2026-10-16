@@ -28,7 +28,6 @@ import {
   updatePlacementSession,
   closePlacementSession,
   archivePlacementSession,
-  seedDefaultSessions,
   previewSessionBackfill,
   executeSessionBackfill
 } from "../../services/sessionService";
@@ -49,7 +48,7 @@ export default function ManageSessions({ onSessionChanged }) {
   const [inspectedSession, setInspectedSession] = useState(null);
 
   // Form State
-  const [sessionYear, setSessionYear] = useState(new Date().getFullYear() + 1);
+  const [sessionYear, setSessionYear] = useState("");
   const [sessionName, setSessionName] = useState("");
   const [academicYear, setAcademicYear] = useState("");
   const [targetPercentage, setTargetPercentage] = useState(90);
@@ -93,7 +92,8 @@ export default function ManageSessions({ onSessionChanged }) {
         description,
         isActive: makeActive,
         admissionYearMapping: [
-          { course: "B.Tech", courseDurationYears: 4, admissionYear: yearNum - 4 },
+          { course: "B.E.", courseDurationYears: 4, admissionYear: yearNum - 4 },
+          { course: "MBA", courseDurationYears: 2, admissionYear: yearNum - 2 },
           { course: "MCA", courseDurationYears: 2, admissionYear: yearNum - 2 },
           { course: "M.Tech", courseDurationYears: 2, admissionYear: yearNum - 2 }
         ]
@@ -101,7 +101,7 @@ export default function ManageSessions({ onSessionChanged }) {
 
       toast.success(`Placement session for Class of ${yearNum} created!`);
       setIsCreateOpen(false);
-      setSessionYear(new Date().getFullYear() + 1);
+      setSessionYear("");
       setSessionName("");
       setAcademicYear("");
       setDescription("");
@@ -153,17 +153,6 @@ export default function ManageSessions({ onSessionChanged }) {
       if (onSessionChanged) onSessionChanged();
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to update session archive status");
-    }
-  };
-
-  const handleSeedDefaults = async () => {
-    try {
-      const res = await seedDefaultSessions();
-      toast.success(res.message || "Cohorts initialized for 2025-2029!");
-      fetchSessions();
-      if (onSessionChanged) onSessionChanged();
-    } catch (err) {
-      toast.error(err.response?.data?.message || "Failed to initialize default cohorts");
     }
   };
 
@@ -234,15 +223,6 @@ export default function ManageSessions({ onSessionChanged }) {
           </button>
 
           <button
-            onClick={handleSeedDefaults}
-            className="inline-flex items-center gap-1.5 rounded-2xl border border-indigo-200 bg-indigo-50 px-3.5 py-2.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100 transition active:scale-95 shadow-2xs"
-            title="Pre-provision standard sessions 2025-2029"
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            <span>Seed 2025-2029</span>
-          </button>
-
-          <button
             onClick={handleOpenBackfill}
             className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition active:scale-95 shadow-2xs"
             title="Safely audit and backfill unlinked students and drives"
@@ -278,17 +258,8 @@ export default function ManageSessions({ onSessionChanged }) {
           </div>
           <h3 className="text-base font-bold text-slate-800">No Placement Sessions Configured</h3>
           <p className="text-xs text-slate-500 max-w-sm mt-1">
-            Initialize standard academic cohorts (2025-2029) or create a custom placement session.
+            Create a placement session for the graduation cohort configured by your Placement Office.
           </p>
-          <div className="mt-4 flex items-center gap-3">
-            <button
-              onClick={handleSeedDefaults}
-              className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 shadow-xs"
-            >
-              <Sparkles className="h-4 w-4" />
-              <span>Initialize Standard Cohorts (2025-2029)</span>
-            </button>
-          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -450,17 +421,16 @@ export default function ManageSessions({ onSessionChanged }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
-                  {(inspectedSession.admissionYearMapping || [
-                    { course: "B.Tech", courseDurationYears: 4, admissionYear: inspectedSession.sessionYear - 4 },
-                    { course: "MCA", courseDurationYears: 2, admissionYear: inspectedSession.sessionYear - 2 },
-                    { course: "M.Tech", courseDurationYears: 2, admissionYear: inspectedSession.sessionYear - 2 }
-                  ]).map((m, idx) => (
+                  {(inspectedSession.admissionYearMapping || []).map((m, idx) => (
                     <tr key={idx}>
-                      <td className="py-2.5 px-3 font-bold">{m.course}</td>
+                      <td className="py-2.5 px-3 font-bold">{m.course === "B.Tech" ? "B.E. (legacy mapping)" : m.course}</td>
                       <td className="py-2.5 px-3 text-slate-500">{m.courseDurationYears} Years</td>
                       <td className="py-2.5 px-3 font-mono font-bold text-blue-600">{m.admissionYear}</td>
                     </tr>
                   ))}
+                  {!inspectedSession.admissionYearMapping?.length && (
+                    <tr><td colSpan="3" className="px-3 py-4 text-center text-slate-500">No admission-year mappings configured for this session.</td></tr>
+                  )}
                 </tbody>
               </table>
             </div>

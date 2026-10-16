@@ -9,7 +9,6 @@ import {
     setActivePlacementSession,
     closePlacementSession,
     archivePlacementSession,
-    seedDefaultSessions,
     previewSessionBackfill,
     executeSessionBackfill,
     transferStudentsSession
@@ -23,7 +22,6 @@ router.route("/active").get(getActivePlacementSession);
 
 // Specific static admin routes (MUST come before /:sessionId)
 router.route("/").post(verifyJWT, verifyAdmin, createPlacementSession);
-router.route("/seed-defaults").post(verifyJWT, verifyAdmin, seedDefaultSessions);
 router.route("/backfill/preview").get(verifyJWT, verifyAdmin, previewSessionBackfill);
 router.route("/backfill/execute").post(verifyJWT, verifyAdmin, executeSessionBackfill);
 router.route("/transfer-students").post(verifyJWT, verifyAdmin, transferStudentsSession);

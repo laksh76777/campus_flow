@@ -21,11 +21,10 @@ const createPlacementSession = asyncHandler(async (req, res) => {
         isActive
     } = req.body;
 
-    if (!sessionYear) {
-        throw new ApiError(400, "Placement session graduation year is required");
+    const yearNum = Number(sessionYear);
+    if (!Number.isInteger(yearNum) || yearNum < 1900 || yearNum > 2200) {
+        throw new ApiError(400, "A valid placement session graduation year is required");
     }
-
-    const yearNum = parseInt(sessionYear);
     const existing = await PlacementSession.findOne({ sessionYear: yearNum });
     if (existing) {
         throw new ApiError(409, `Placement session for year ${yearNum} already exists`);
@@ -39,11 +38,12 @@ const createPlacementSession = asyncHandler(async (req, res) => {
         await PlacementSession.updateMany({}, { isActive: false });
     }
 
-    // Default admission mapping if not provided (B.Tech 4yr, MCA 2yr, etc.)
+    // Cohort mappings use degree type; the session remains distinct from a student's program.
     const defaultMappings = admissionYearMapping?.length
         ? admissionYearMapping
         : [
-              { course: "B.Tech", courseDurationYears: 4, admissionYear: yearNum - 4 },
+              { course: "B.E.", courseDurationYears: 4, admissionYear: yearNum - 4 },
+              { course: "MBA", courseDurationYears: 2, admissionYear: yearNum - 2 },
               { course: "MCA", courseDurationYears: 2, admissionYear: yearNum - 2 },
               { course: "M.Tech", courseDurationYears: 2, admissionYear: yearNum - 2 }
           ];
@@ -296,51 +296,6 @@ const archivePlacementSession = asyncHandler(async (req, res) => {
     );
 });
 
-// @desc    Seed default placement sessions (2025, 2026, 2027, 2028, 2029)
-// @route   POST /api/v1/sessions/seed-defaults
-// @access  Admin
-const seedDefaultSessions = asyncHandler(async (req, res) => {
-    const targetYears = [2025, 2026, 2027, 2028, 2029];
-    const created = [];
-    let updatedCount = 0;
-
-    for (const year of targetYears) {
-        const existing = await PlacementSession.findOne({ sessionYear: year });
-        const admissionYearMapping = [
-            { course: "B.Tech", courseDurationYears: 4, admissionYear: year - 4 },
-            { course: "MCA", courseDurationYears: 2, admissionYear: year - 2 },
-            { course: "M.Tech", courseDurationYears: 2, admissionYear: year - 2 }
-        ];
-
-        if (!existing) {
-            const isCurrent = year === 2026;
-            const doc = await PlacementSession.create({
-                sessionYear: year,
-                name: `Class of ${year} Placement Session`,
-                academicYear: `${year - 1}-${year}`,
-                description: `Official campus placement cohort for students graduating in ${year}.`,
-                isActive: isCurrent,
-                status: year < 2026 ? "CLOSED" : isCurrent ? "ACTIVE" : "UPCOMING",
-                admissionYearMapping,
-                createdBy: req.user._id
-            });
-            created.push(doc);
-        } else if (!existing.admissionYearMapping?.length) {
-            existing.admissionYearMapping = admissionYearMapping;
-            await existing.save();
-            updatedCount++;
-        }
-    }
-
-    return res.status(200).json(
-        new ApiResponse(
-            200,
-            { createdCount: created.length, updatedCount, sessions: created },
-            `Default placement sessions initialized (${created.length} new, ${updatedCount} mappings added)`
-        )
-    );
-});
-
 // @desc    Preview migration / backfill mappings for existing unlinked students & drives
 // @route   GET /api/v1/sessions/backfill/preview
 // @access  Admin
@@ -513,7 +468,6 @@ export {
     setActivePlacementSession,
     closePlacementSession,
     archivePlacementSession,
-    seedDefaultSessions,
     previewSessionBackfill,
     executeSessionBackfill,
     transferStudentsSession

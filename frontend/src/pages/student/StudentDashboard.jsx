@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import {
   Sparkles,
@@ -36,8 +36,16 @@ import {
 } from "../../services/studentService";
 import { useAuth } from "../../context/authContextDef";
 
+const STUDENT_ROUTE_TABS = {
+  "/student-dashboard": "overview",
+  "/placement-drives": "drives",
+  "/my-applications": "applications",
+  "/student-profile": "profile",
+};
+
 export default function StudentDashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user: authUser, userRole, logout, studentProfile: authProfile } = useAuth();
 
   // If logged-in user is an admin, immediately redirect to Admin Console and avoid student calls
@@ -50,7 +58,9 @@ export default function StudentDashboard() {
 
   // Navigation and UI state
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("overview"); // overview | drives | applications | profile
+  const [activeTab, setActiveTab] = useState(
+    () => STUDENT_ROUTE_TABS[location.pathname] || "overview"
+  );
   const [isProfileDrawerOpen, setIsProfileDrawerOpen] = useState(false);
   const [drawerSection, setDrawerSection] = useState("academic");
   const [drawerEditing, setDrawerEditing] = useState(false);
@@ -186,6 +196,20 @@ export default function StudentDashboard() {
   useEffect(() => {
     loadDashboardData();
   }, [loadDashboardData]);
+
+  useEffect(() => {
+    setActiveTab(STUDENT_ROUTE_TABS[location.pathname] || "overview");
+  }, [location.pathname]);
+
+  const handleTabChange = (tab) => {
+    const destination = Object.entries(STUDENT_ROUTE_TABS).find(
+      ([, routeTab]) => routeTab === tab
+    )?.[0];
+
+    if (destination) {
+      navigate(destination);
+    }
+  };
 
   // Derived drive lists & applied drive IDs
   // ONLY non-withdrawn applications count as applied!
@@ -348,7 +372,7 @@ export default function StudentDashboard() {
         isOpen={isSidebarOpen}
         setIsOpen={setIsSidebarOpen}
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={handleTabChange}
         user={user}
         studentProfile={studentProfile}
         onLogout={handleLogout}
@@ -387,7 +411,7 @@ export default function StudentDashboard() {
                 Welcome back, {studentName} 👋
               </h2>
               <p className="mt-1 text-xs sm:text-sm font-medium text-slate-500">
-                {studentProfile?.course || "B.Tech"} {admissionYear ? `• Admitted: ${admissionYear}` : ""} • Expected Graduation: Class of {graduationYear} • Academic CGPA: {typeof studentCgpa === "number" ? studentCgpa.toFixed(2) : studentCgpa}
+                {studentProfile?.degreeType || studentProfile?.course || ""} {admissionYear ? `• Admitted: ${admissionYear}` : ""} • Expected Graduation: Class of {graduationYear} • Academic CGPA: {typeof studentCgpa === "number" ? studentCgpa.toFixed(2) : studentCgpa}
               </p>
             </div>
 
@@ -438,7 +462,7 @@ export default function StudentDashboard() {
                       </div>
                     </div>
                     <button
-                      onClick={() => setActiveTab("applications")}
+                      onClick={() => handleTabChange("applications")}
                       className="shrink-0 rounded-2xl bg-white px-5 py-2.5 text-xs sm:text-sm font-bold text-emerald-800 shadow-md hover:bg-emerald-50 transition active:scale-95"
                     >
                       View Offer Details
@@ -587,7 +611,7 @@ export default function StudentDashboard() {
               <DashboardStats
                 stats={aggregatedStats}
                 studentProfile={studentProfile}
-                onTabChange={setActiveTab}
+                onTabChange={handleTabChange}
                 loading={loading}
               />
 
@@ -607,7 +631,7 @@ export default function StudentDashboard() {
                   />
                   <div className="mt-4 pt-3 border-t border-slate-100 text-center">
                     <button
-                      onClick={() => setActiveTab("drives")}
+                      onClick={() => handleTabChange("drives")}
                       className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline"
                     >
                       <span>Explore all {activeDrivesList.length} placement drives</span>
@@ -628,7 +652,7 @@ export default function StudentDashboard() {
                   />
                   <div className="mt-4 pt-3 border-t border-slate-100 text-center">
                     <button
-                      onClick={() => setActiveTab("applications")}
+                      onClick={() => handleTabChange("applications")}
                       className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline"
                     >
                       <span>View complete application history</span>

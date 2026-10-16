@@ -45,6 +45,11 @@ const placementDriveSchema = new mongoose.Schema(
             type: [String],
             required: [true, "Eligible branches are required"],
         },
+        eligibleProgramCodes: {
+            type: [String],
+            default: undefined,
+            index: true
+        },
 
         minimumCGPA: {
             type: Number,

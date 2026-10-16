@@ -5,6 +5,8 @@ import { Company } from "../models/company.model.js";
 import { PlacementDrive } from "../models/placementDrive.model.js";
 import { StudentProfile } from "../models/studentProfile.model.js";
 import { Application } from "../models/application.model.js";
+import { resolveStudentProgram } from "../constants/programCatalog.js";
+import { studentMatchesDriveProgram } from "../services/programTargeting.service.js";
 
 /**
  * Enhanced Admin Dashboard Analytics
@@ -43,7 +45,7 @@ const getDashboardStats = asyncHandler(async (req, res) => {
         Application.countDocuments({ status: "withdrawn" }),
 
         // Profiles with branch info
-        StudentProfile.find().select("branch cgpa"),
+        StudentProfile.find().select("programCode programLevel degreeType course branch department cgpa"),
 
         // Selected applications with populated placement drive and company for salary/company analytics
         Application.find({ status: "selected" })
@@ -55,7 +57,7 @@ const getDashboardStats = asyncHandler(async (req, res) => {
                 },
                 select: "jobTitle package"
             })
-            .populate("student", "branch"),
+            .populate("student", "programCode programLevel degreeType course branch department"),
 
         // All placement drives with company info
         PlacementDrive.find()
@@ -66,25 +68,30 @@ const getDashboardStats = asyncHandler(async (req, res) => {
     // 1. Branch-Wise Placement Analysis
     const branchMap = {};
     allProfiles.forEach((profile) => {
-        const b = (profile.branch || "General").trim().toUpperCase();
-        if (!branchMap[b]) {
-            branchMap[b] = { branch: b, registered: 0, placed: 0 };
+        const program = resolveStudentProgram(profile);
+        const raw = profile.branch || profile.department || "Unassigned";
+        const key = program?.code || `LEGACY:${raw}`;
+        if (!branchMap[key]) {
+            branchMap[key] = { programCode: program?.code || null, branch: program?.name || raw, registered: 0, placed: 0 };
         }
-        branchMap[b].registered += 1;
+        branchMap[key].registered += 1;
     });
 
     const placedStudentIds = new Set();
     selectedApps.forEach((app) => {
         if (app.student && app.student._id) {
             placedStudentIds.add(app.student._id.toString());
-            const b = (app.student.branch || "General").trim().toUpperCase();
-            if (branchMap[b]) {
-                branchMap[b].placed += 1;
+            const program = resolveStudentProgram(app.student);
+            const raw = app.student.branch || app.student.department || "Unassigned";
+            const key = program?.code || `LEGACY:${raw}`;
+            if (branchMap[key]) {
+                branchMap[key].placed += 1;
             }
         }
     });
 
     const branchStats = Object.values(branchMap).map((item) => ({
+        programCode: item.programCode,
         branch: item.branch,
         registered: item.registered,
         placed: item.placed,
@@ -290,8 +297,7 @@ const getStudentDashboardStats = asyncHandler(async (req, res) => {
     const eligibleDrives = allPlacementDrives.filter((drive) => {
         if (!drive.company || !drive.company.isActive) return false;
 
-        const branchEligible = Array.isArray(drive.eligibleBranches) &&
-            drive.eligibleBranches.includes(student.branch);
+        const branchEligible = studentMatchesDriveProgram(student, drive);
 
         const cgpaEligible = Number(student.cgpa) >= Number(drive.minimumCGPA);
         const backlogEligible = Number(student.backlogs) <= Number(drive.maximumBacklogs);

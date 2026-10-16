@@ -148,7 +148,21 @@ const studentProfileSchema = new mongoose.Schema(
         course: {
             type: String,
             trim: true,
-            default: "B.Tech"
+            default: undefined
+        },
+        programCode: {
+            type: String,
+            trim: true,
+            uppercase: true,
+            index: true
+        },
+        programLevel: {
+            type: String,
+            enum: ["Undergraduate", "Postgraduate"]
+        },
+        degreeType: {
+            type: String,
+            enum: ["B.E.", "MBA", "MCA", "M.Tech"]
         },
         branch: {
             type: String,

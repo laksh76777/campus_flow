@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import {
   BarChart3,
   Download,
@@ -22,40 +22,26 @@ export default function PlacementAnalytics({
   drives = [],
   companies = [],
 }) {
-  const [selectedBranch, setSelectedBranch] = useState("all");
-
-  // Fallback branch stats if backend didn't compute yet
   const branchStats = useMemo(() => {
-    if (stats?.branchStats && stats.branchStats.length > 0) {
+    if (Array.isArray(stats?.branchStats)) {
       return stats.branchStats;
     }
 
     // Compute locally from applications and students
     const map = {};
     students.forEach((s) => {
-      const b = (s.branch || "CSE").toUpperCase();
+      const b = (s.branch || s.department || "Unassigned");
       if (!map[b]) map[b] = { branch: b, registered: 0, placed: 0 };
       map[b].registered += 1;
     });
 
     applications.forEach((a) => {
       if (a.status === "selected") {
-        const b = (a.student?.branch || "CSE").toUpperCase();
+        const b = (a.student?.branch || a.student?.department || "Unassigned");
         if (!map[b]) map[b] = { branch: b, registered: 1, placed: 0 };
         map[b].placed += 1;
       }
     });
-
-    // Provide representative branches if empty
-    if (Object.keys(map).length === 0) {
-      return [
-        { branch: "CSE", registered: 120, placed: 102, placementRate: 85 },
-        { branch: "IT", registered: 85, placed: 71, placementRate: 84 },
-        { branch: "ECE", registered: 95, placed: 68, placementRate: 72 },
-        { branch: "ME", registered: 60, placed: 36, placementRate: 60 },
-        { branch: "CE", registered: 45, placed: 24, placementRate: 53 },
-      ];
-    }
 
     return Object.values(map).map((item) => ({
       branch: item.branch,
@@ -67,7 +53,7 @@ export default function PlacementAnalytics({
 
   // Salary analytics
   const salaryStats = useMemo(() => {
-    if (stats?.salary?.highestCTC) {
+    if (stats?.salary) {
       return stats.salary;
     }
 
@@ -78,13 +64,13 @@ export default function PlacementAnalytics({
 
     if (packages.length === 0) {
       return {
-        highestCTC: 24.0,
-        averageCTC: 16.8,
+        highestCTC: 0,
+        averageCTC: 0,
         distribution: [
-          { tier: "< 5 LPA", count: 12 },
-          { tier: "5 - 10 LPA", count: 38 },
-          { tier: "10 - 20 LPA", count: 45 },
-          { tier: "> 20 LPA", count: 18 },
+          { tier: "< 5 LPA", count: 0 },
+          { tier: "5 - 10 LPA", count: 0 },
+          { tier: "10 - 20 LPA", count: 0 },
+          { tier: "> 20 LPA", count: 0 },
         ],
       };
     }
@@ -113,10 +99,10 @@ export default function PlacementAnalytics({
   const funnel = useMemo(() => {
     if (stats?.funnel && stats.funnel.length > 0) return stats.funnel;
 
-    const total = applications.length || 100;
-    const shortlisted = applications.filter((a) => ["shortlisted", "interview", "selected"].includes(a.status)).length || 45;
-    const interview = applications.filter((a) => ["interview", "selected"].includes(a.status)).length || 28;
-    const selected = applications.filter((a) => a.status === "selected").length || 15;
+    const total = applications.length;
+    const shortlisted = applications.filter((a) => ["shortlisted", "interview", "selected"].includes(a.status)).length;
+    const interview = applications.filter((a) => ["interview", "selected"].includes(a.status)).length;
+    const selected = applications.filter((a) => a.status === "selected").length;
 
     return [
       { stage: "Applied", count: total },
@@ -128,7 +114,7 @@ export default function PlacementAnalytics({
 
   // Top Recruiters
   const topRecruiters = useMemo(() => {
-    if (stats?.topRecruiters && stats.topRecruiters.length > 0) {
+    if (Array.isArray(stats?.topRecruiters)) {
       return stats.topRecruiters;
     }
 
@@ -143,15 +129,6 @@ export default function PlacementAnalytics({
         if (pkg > map[comp].maxPackage) map[comp].maxPackage = pkg;
       }
     });
-
-    if (Object.keys(map).length === 0) {
-      return [
-        { companyName: "Google", offers: 14, maxPackage: 24, avgPackage: 22.5 },
-        { companyName: "Microsoft", offers: 18, maxPackage: 21, avgPackage: 18.5 },
-        { companyName: "Amazon", offers: 22, maxPackage: 19.5, avgPackage: 16.0 },
-        { companyName: "Atlassian", offers: 8, maxPackage: 26, avgPackage: 24.0 },
-      ];
-    }
 
     return Object.values(map)
       .map((c) => ({
@@ -224,7 +201,7 @@ export default function PlacementAnalytics({
 
   const totalRegistered = branchStats.reduce((acc, b) => acc + b.registered, 0);
   const totalPlaced = branchStats.reduce((acc, b) => acc + b.placed, 0);
-  const overallRate = totalRegistered > 0 ? Math.round((totalPlaced / totalRegistered) * 100) : 78;
+  const overallRate = totalRegistered > 0 ? Math.round((totalPlaced / totalRegistered) * 100) : 0;
 
   return (
     <div className="space-y-6">

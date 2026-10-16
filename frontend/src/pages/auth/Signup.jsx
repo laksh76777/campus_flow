@@ -30,14 +30,6 @@ import {
 } from "../../services/authService";
 import { useAuth } from "../../context/authContextDef";
 
-const COURSE_OPTIONS = [
-  { value: "B.Tech", label: "B.Tech (Bachelor of Technology)", durationYears: 4 },
-  { value: "MCA", label: "MCA (Master of Computer Applications)", durationYears: 2 },
-  { value: "M.Tech", label: "M.Tech (Master of Technology)", durationYears: 2 },
-];
-
-const ADMISSION_YEARS = [2021, 2022, 2023, 2024, 2025, 2026];
-
 export default function Signup() {
   const navigate = useNavigate();
   const { login } = useAuth();
@@ -58,12 +50,14 @@ export default function Signup() {
     avatar: null,
 
     // Step 2: Academic Details
-    course: "B.Tech",
-    courseDurationYears: 4,
+    programLevel: "",
+    programCode: "",
+    course: "",
+    courseDurationYears: "",
     department: "",
     branch: "",
-    admissionYear: 2023,
-    currentSemester: 6,
+    admissionYear: "",
+    currentSemester: "",
 
     // Step 4: Basic Profile & Consent
     gender: "Prefer not to say",
@@ -95,13 +89,6 @@ export default function Signup() {
         if (isMounted) {
           if (deptRes.status === "fulfilled" && deptRes.value?.data) {
             setDepartments(deptRes.value.data);
-            if (deptRes.value.data.length > 0) {
-              setFormData((prev) => ({
-                ...prev,
-                department: prev.department || deptRes.value.data[0].name,
-                branch: prev.branch || deptRes.value.data[0].name,
-              }));
-            }
           }
           if (sessRes.status === "fulfilled" && sessRes.value?.data) {
             setSessions(sessRes.value.data);
@@ -121,19 +108,30 @@ export default function Signup() {
 
   // Compute Expected Graduation Year based on Course Duration and Admission Year
   const expectedGraduationYear = useMemo(() => {
-    const admissionYear = Number(formData.admissionYear) || 2023;
-    const duration =
-      formData.course === "MCA" || formData.course === "M.Tech"
-        ? 2
-        : Number(formData.courseDurationYears) || 4;
-    return admissionYear + duration;
-  }, [formData.admissionYear, formData.course, formData.courseDurationYears]);
+    const admissionYear = Number(formData.admissionYear);
+    if (!formData.programCode || !Number.isInteger(admissionYear)) return null;
+    return admissionYear + Number(formData.courseDurationYears);
+  }, [formData.admissionYear, formData.programCode, formData.courseDurationYears]);
+
+  const selectedProgram = departments.find((program) => program.code === formData.programCode);
+  const programsForLevel = departments.filter((program) => program.programLevel === formData.programLevel);
+  const admissionYearOptions = useMemo(() => {
+    if (!selectedProgram) return [];
+    const degreeAliases = selectedProgram.degreeType === "B.E." ? ["B.E.", "B.Tech"] : [selectedProgram.degreeType];
+    return [...new Set(sessions.flatMap((session) =>
+      (session.admissionYearMapping || [])
+        .filter((mapping) => degreeAliases.includes(mapping.course))
+        .map((mapping) => Number(mapping.admissionYear))
+        .filter(Number.isInteger)
+    ))].sort((a, b) => b - a);
+  }, [selectedProgram, sessions]);
 
   // Match corresponding Placement Session from fetched sessions
   const matchingSession = useMemo(() => {
     if (!sessions || sessions.length === 0) return null;
-    return sessions.find(
-      (s) => Number(s.sessionYear) === expectedGraduationYear && !s.isArchived
+    return sessions.find((session) =>
+      Number(session.sessionYear) === expectedGraduationYear &&
+      !session.isArchived && !session.isClosed
     );
   }, [sessions, expectedGraduationYear]);
 
@@ -145,18 +143,27 @@ export default function Signup() {
       setAvatarPreview(URL.createObjectURL(file));
     } else if (type === "checkbox") {
       setFormData((prev) => ({ ...prev, [name]: checked }));
-    } else if (name === "course") {
-      const courseObj = COURSE_OPTIONS.find((c) => c.value === value);
+    } else if (name === "programLevel") {
       setFormData((prev) => ({
         ...prev,
-        course: value,
-        courseDurationYears: courseObj ? courseObj.durationYears : 4,
+        programLevel: value,
+        programCode: "",
+        course: "",
+        courseDurationYears: "",
+        department: "",
+        branch: "",
+        admissionYear: "",
       }));
-    } else if (name === "department") {
+    } else if (name === "programCode") {
+      const program = departments.find((item) => item.code === value);
       setFormData((prev) => ({
         ...prev,
-        department: value,
-        branch: value,
+        programCode: value,
+        course: program?.degreeType || "",
+        courseDurationYears: program?.durationYears || "",
+        department: program?.name || "",
+        branch: program?.name || "",
+        admissionYear: "",
       }));
     } else {
       setFormData((prev) => ({ ...prev, [name]: value }));
@@ -179,14 +186,15 @@ export default function Signup() {
   };
 
   const validateStep2 = () => {
-    if (!formData.course) return "Please select your course / degree program.";
-    if (!formData.department) return "Please select your department / branch.";
+    if (!formData.programLevel) return "Please select your program level.";
+    if (!selectedProgram) return "Please select an approved academic program.";
     if (!formData.admissionYear) return "Please select your admission year.";
+    if (!admissionYearOptions.includes(Number(formData.admissionYear))) return "The selected admission year is not configured for this program.";
     return null;
   };
 
   const validateStep3 = () => {
-    if (!matchingSession) {
+    if (!expectedGraduationYear || !matchingSession) {
       return `No placement session is configured for Class of ${expectedGraduationYear}. Please contact your Training & Placement Office.`;
     }
     if (matchingSession.isClosed) {
@@ -243,6 +251,9 @@ export default function Signup() {
         phone: formData.phone.trim(),
         usn: formData.usn.trim().toUpperCase(),
         enrollmentNumber: formData.usn.trim().toUpperCase(),
+        programCode: formData.programCode,
+        programLevel: selectedProgram.programLevel,
+        degreeType: selectedProgram.degreeType,
         course: formData.course,
         courseDurationYears: formData.courseDurationYears,
         department: formData.department,
@@ -576,83 +587,56 @@ export default function Signup() {
             {/* ======================================================== */}
             {currentStep === 2 && (
               <div className="space-y-4 animate-in fade-in-50">
-                {/* Course Selection */}
+                {/* Program level and approved program */}
                 <div>
                   <label className="mb-1 block text-xs font-medium text-slate-300">
-                    College Program / Degree <span className="text-rose-400">*</span>
+                    Program Level <span className="text-rose-400">*</span>
                   </label>
                   <div className="relative">
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
                       <GraduationCap className="h-4 w-4" />
                     </div>
                     <select
-                      name="course"
-                      value={formData.course}
+                      name="programLevel"
+                      value={formData.programLevel}
                       onChange={handleChange}
                       className="w-full rounded-xl border border-slate-800 bg-slate-950/80 py-2.5 pr-4 pl-10 text-sm text-white transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
                     >
-                      {COURSE_OPTIONS.map((c) => (
-                        <option key={c.value} value={c.value}>
-                          {c.label}
-                        </option>
-                      ))}
+                      <option value="">Select program level</option>
+                      <option value="Undergraduate">Undergraduate (B.E.)</option>
+                      <option value="Postgraduate">Postgraduate</option>
                     </select>
                   </div>
                 </div>
 
-                {/* Department Dropdown */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-xs font-medium text-slate-300">
-                      Department / Branch <span className="text-rose-400">*</span>
+                      Academic Program <span className="text-rose-400">*</span>
                     </label>
-                    <span className="text-[10px] text-blue-400">
-                      Managed by TPO
-                    </span>
                   </div>
                   <div className="relative">
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
                       <Layers className="h-4 w-4" />
                     </div>
                     <select
-                      name="department"
-                      value={formData.department}
+                      name="programCode"
+                      value={formData.programCode}
                       onChange={handleChange}
+                      disabled={!formData.programLevel || loadingConfig || departments.length === 0}
                       className="w-full rounded-xl border border-slate-800 bg-slate-950/80 py-2.5 pr-4 pl-10 text-sm text-white transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
                     >
-                      {departments.length > 0 ? (
-                        departments.map((d) => (
-                          <option key={d._id} value={d.name}>
-                            {d.name} {d.code ? `(${d.code})` : ""}
-                          </option>
-                        ))
-                      ) : (
-                        <>
-                          <option value="Computer Science and Engineering (CSE)">
-                            Computer Science and Engineering (CSE)
-                          </option>
-                          <option value="Information Science and Engineering (ISE)">
-                            Information Science and Engineering (ISE)
-                          </option>
-                          <option value="Electronics and Communication Engineering (ECE)">
-                            Electronics and Communication Engineering (ECE)
-                          </option>
-                          <option value="Electrical and Electronics Engineering (EEE)">
-                            Electrical and Electronics Engineering (EEE)
-                          </option>
-                          <option value="Mechanical Engineering (ME)">
-                            Mechanical Engineering (ME)
-                          </option>
-                          <option value="Civil Engineering (CE)">
-                            Civil Engineering (CE)
-                          </option>
-                          <option value="Artificial Intelligence and Machine Learning (AIML)">
-                            Artificial Intelligence and Machine Learning (AIML)
-                          </option>
-                        </>
-                      )}
+                      <option value="">{loadingConfig ? "Loading approved programs..." : "Select academic program"}</option>
+                      {programsForLevel.map((program) => (
+                        <option key={program.code} value={program.code}>
+                          {program.name}
+                        </option>
+                      ))}
                     </select>
                   </div>
+                  {!loadingConfig && departments.length === 0 && (
+                    <p className="mt-1 text-xs text-rose-300">Approved programs could not be loaded. Refresh the page or contact the Placement Office.</p>
+                  )}
                 </div>
 
                 {/* Admission Year & Current Semester Grid */}
@@ -667,11 +651,12 @@ export default function Signup() {
                       </div>
                       <select
                         name="admissionYear"
-                        value={formData.admissionYear}
+                        value=                        {formData.admissionYear || "Not selected"}
                         onChange={handleChange}
                         className="w-full rounded-xl border border-slate-800 bg-slate-950/80 py-2.5 pr-4 pl-10 text-sm text-white transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
                       >
-                        {ADMISSION_YEARS.map((yr) => (
+                        <option value="">Select admission year</option>
+                        {admissionYearOptions.map((yr) => (
                           <option key={yr} value={yr}>
                             {yr} (Admission Cohort)
                           </option>
@@ -712,7 +697,7 @@ export default function Signup() {
                   </div>
                   <p className="mt-1 text-[11px] leading-relaxed text-blue-100/80">
                     Admission year <strong>{formData.admissionYear}</strong> in a{" "}
-                    <strong>{formData.courseDurationYears}-year {formData.course}</strong>{" "}
+                    <strong>{formData.courseDurationYears || "—"}-year {formData.course || "program"}</strong>{" "}
                     program maps deterministically to the{" "}
                     <strong>Class of {expectedGraduationYear}</strong> placement cohort.
                   </p>
@@ -732,7 +717,7 @@ export default function Signup() {
                   <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
                     <div>
                       <span className="text-slate-500">Program:</span>
-                      <p className="font-semibold text-white">{formData.course}</p>
+                      <p className="font-semibold text-white">{selectedProgram?.name || "Not selected"}</p>
                     </div>
                     <div>
                       <span className="text-slate-500">Department:</span>

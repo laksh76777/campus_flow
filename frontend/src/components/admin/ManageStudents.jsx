@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Users,
   Search,
@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { getResumeViewUrl } from "../../utils/resumeHelper";
+import { getPublicDepartments } from "../../services/authService";
 import StudentDetailModal from "./StudentDetailModal";
 
 export default function ManageStudents({
@@ -28,6 +29,16 @@ export default function ManageStudents({
   const [placedFilter, setPlacedFilter] = useState("all"); // all | placed | unplaced
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
+  const [programs, setPrograms] = useState([]);
+
+  useEffect(() => {
+    getPublicDepartments()
+      .then((response) => setPrograms(response.data || []))
+      .catch((error) => {
+        console.error("Could not load approved academic programs:", error);
+        toast.error("Could not load program filters");
+      });
+  }, []);
 
   const handleManualRefresh = async () => {
     if (onRefresh) {
@@ -46,7 +57,8 @@ export default function ManageStudents({
       const fullName = s.user?.fullName || s.fullName || "";
       const email = s.user?.email || s.email || "";
       const enrollment = s.enrollmentNumber || "";
-      const branch = s.branch || "";
+      const program = programs.find((item) => item.code === s.programCode);
+      const branch = program?.name || s.branch || s.department || "";
 
       const matchesSearch =
         fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -54,8 +66,11 @@ export default function ManageStudents({
         enrollment.toLowerCase().includes(searchQuery.toLowerCase()) ||
         branch.toLowerCase().includes(searchQuery.toLowerCase());
 
-      const matchesBranch =
-        branchFilter === "all" ? true : branch.toLowerCase().includes(branchFilter.toLowerCase());
+      const matchesBranch = branchFilter === "all"
+        ? true
+        : branchFilter === "unresolved"
+          ? !program
+          : s.programCode === branchFilter;
 
       const matchesBacklog =
         backlogFilter === "all"
@@ -73,16 +88,7 @@ export default function ManageStudents({
 
       return matchesSearch && matchesBranch && matchesBacklog && matchesPlaced;
     });
-  }, [students, searchQuery, branchFilter, backlogFilter, placedFilter]);
-
-  // Extract unique branches
-  const branches = useMemo(() => {
-    const set = new Set();
-    students.forEach((s) => {
-      if (s.branch) set.add(s.branch);
-    });
-    return Array.from(set);
-  }, [students]);
+  }, [students, programs, searchQuery, branchFilter, backlogFilter, placedFilter]);
 
   // Cohort statistics
   const stats = useMemo(() => {
@@ -254,11 +260,14 @@ export default function ManageStudents({
             className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 focus:border-blue-500 focus:outline-hidden"
           >
             <option value="all">All Departments</option>
-            {branches.map((b) => (
-              <option key={b} value={b}>
-                {b}
+            {programs.map((program) => (
+              <option key={program.code} value={program.code}>
+                {program.name}
               </option>
             ))}
+            {students.some((student) => !programs.some((program) => program.code === student.programCode)) && (
+              <option value="unresolved">Legacy / needs program review</option>
+            )}
           </select>
 
           {/* Backlogs Filter */}
@@ -380,7 +389,8 @@ export default function ManageStudents({
                       {/* Branch & Semester */}
                       <td className="py-3.5 px-3">
                         <div className="font-semibold text-slate-800">
-                          {student.branch || student.department || "Not provided"}
+                          {programs.find((program) => program.code === student.programCode)?.name
+                            || `Needs review: ${student.branch || student.department || "program not provided"}`}
                         </div>
                         <div className="text-[11px] text-slate-400">
                           Sem {student.semester ?? student.currentSemester ?? "—"} • Batch of{" "}

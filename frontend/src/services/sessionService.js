@@ -48,25 +48,19 @@ export const archivePlacementSession = async (sessionId) => {
   return response.data;
 };
 
-// 9. Seed default placement sessions (2025-2029)
-export const seedDefaultSessions = async () => {
-  const response = await api.post("/sessions/seed-defaults");
-  return response.data;
-};
-
-// 10. Preview migration / backfill mappings
+// 9. Preview migration / backfill mappings
 export const previewSessionBackfill = async () => {
   const response = await api.get("/sessions/backfill/preview");
   return response.data;
 };
 
-// 11. Execute migration / backfill
+// 10. Execute migration / backfill
 export const executeSessionBackfill = async (confirmedMappings) => {
   const response = await api.post("/sessions/backfill/execute", { confirmedMappings });
   return response.data;
 };
 
-// 12. Transfer students to another session
+// 11. Transfer students to another session
 export const transferStudentsSession = async ({ studentIds, targetSessionId, updateGraduationYear = true }) => {
   const response = await api.post("/sessions/transfer-students", {
     studentIds,

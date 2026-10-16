@@ -52,16 +52,11 @@ export default function AdminOverview({
       applications.filter((a) => a.status === "withdrawn").length,
   };
 
-  const placementRatio =
-    totalStudents > 0
-      ? Math.min(100, Math.round(((appStats.selected || 0) / totalStudents) * 100))
-      : 0;
-
   const kpis = [
     {
       title: "Registered Students",
       value: totalStudents,
-      sub: `${totalStudents} registered candidates`,
+      sub: `${totalStudents} registered ${totalStudents === 1 ? "candidate" : "candidates"}`,
       icon: Users,
       color: "bg-blue-600 text-white shadow-blue-500/25",
       targetTab: "students",
@@ -103,7 +98,7 @@ export default function AdminOverview({
               TPO Administrative Command
             </div>
             <h2 className="mt-3 text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Placement Season 2025–26 Overview
+              Placement Overview
             </h2>
             <p className="mt-1.5 text-xs sm:text-sm text-slate-300 max-w-xl">
               Track recruitment metrics, publish new corporate drives, evaluate applicant qualifications, and approve final student job offers.
@@ -131,11 +126,11 @@ export default function AdminOverview({
 
       {/* 4 Top KPI Cards - Clickable Navigators */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {kpis.map((kpi, idx) => {
+        {kpis.map((kpi) => {
           const Icon = kpi.icon;
           return (
             <div
-              key={idx}
+              key={kpi.title}
               onClick={() => onNavigateTab && onNavigateTab(kpi.targetTab)}
               role="button"
               tabIndex={0}
@@ -297,34 +292,34 @@ export default function AdminOverview({
         <div className="lg:col-span-5 rounded-2xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xs flex flex-col justify-between">
           <div>
             <h3 className="text-base font-bold text-slate-900">
-              Campus Placement Health
+              Recruitment Outcomes
             </h3>
             <p className="text-xs text-slate-500">
-              Real-time placement efficiency index
+              Current application statuses from the selected dataset
             </p>
 
             <div className="mt-6 flex items-center gap-4 rounded-2xl bg-slate-50 p-4 border border-slate-100">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-600 text-white font-black text-xl shadow-xs">
-                {placementRatio}%
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700 font-black text-xl shadow-xs">
+                {appStats.selected}
               </div>
               <div>
                 <h4 className="text-sm font-bold text-slate-900">
-                  Cohort Placement Conversion
+                  Selected applications
                 </h4>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Percentage of candidates holding at least 1 verified offer letter.
+                  Applications currently marked as selected.
                 </p>
               </div>
             </div>
 
             <div className="mt-4 space-y-2 text-xs text-slate-600">
               <div className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50">
-                <span className="text-slate-500">Active Companies:</span>
-                <span className="font-bold text-slate-800">{activeCompanies} verified</span>
+                <span className="text-slate-500">Active companies:</span>
+                <span className="font-bold text-slate-800">{activeCompanies}</span>
               </div>
               <div className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50">
-                <span className="text-slate-500">Upcoming Drive Dates:</span>
-                <span className="font-bold text-blue-600">{activeDrives} scheduled</span>
+                <span className="text-slate-500">Active drives:</span>
+                <span className="font-bold text-blue-600">{activeDrives}</span>
               </div>
             </div>
           </div>
