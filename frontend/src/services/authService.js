@@ -11,28 +11,8 @@ export const registerStudent = async (userData) => {
   ensureApiConfigured();
   const formData = new FormData();
 
-  const textFields = [
-    "fullName",
-    "email",
-    "personalEmail",
-    "password",
-    "confirmPassword",
-    "phone",
-    "usn",
-    "course",
-    "courseDurationYears",
-    "department",
-    "branch",
-    "admissionYear",
-    "graduationYear",
-    "currentSemester",
-    "semester",
-    "placementSession",
-    "gender",
-    "dob"
-  ];
-
-  textFields.forEach((key) => {
+  Object.keys(userData).forEach((key) => {
+    if (key === "avatar") return;
     if (userData[key] !== undefined && userData[key] !== null) {
       formData.append(key, userData[key]);
     }
