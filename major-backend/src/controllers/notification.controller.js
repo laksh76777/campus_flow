@@ -8,8 +8,15 @@ import { resolveProgram, resolveStudentProgram } from "../constants/programCatal
 import { Application } from "../models/application.model.js";
 import { PlacementDrive } from "../models/placementDrive.model.js";
 import { PlacementSession } from "../models/placementSession.model.js";
-import { ReminderJob } from "../models/reminderJob.model.js";
-import { isSmtpConfigured, getSenderAddress, sendBroadcastAnnouncementEmail } from "../utils/mailService.js";
+import {
+    isSmtpConfigured,
+    getSenderAddress,
+    sendBroadcastAnnouncementEmail,
+    getSmtpConfigStatus,
+    verifySmtpConnection,
+    sendTestEmail,
+    validateEmailAddress
+} from "../utils/mailService.js";
 import { processDueReminders } from "../services/reminderScheduler.service.js";
 
 export const getMyNotifications = asyncHandler(async (req, res) => {
@@ -372,6 +379,19 @@ export const broadcastAnnouncement = asyncHandler(async (req, res) => {
         }
     }
 
+    let outcomeMessage = `Announcement successfully processed: ${inAppCreated} in-app alerts created.`;
+    if (selectedChannels.includes("email")) {
+        if (emailStatus === "DELIVERED") {
+            outcomeMessage += ` ${emailsSent} emails sent.`;
+        } else if (emailStatus === "PARTIAL_FAILURE") {
+            outcomeMessage += ` ${emailsSent} emails sent, ${emailsFailed} failed.`;
+        } else if (emailStatus === "FAILED") {
+            outcomeMessage += ` Email dispatch failed for all ${emailsFailed} recipient(s).`;
+        } else if (emailStatus === "SMTP_NOT_CONFIGURED") {
+            outcomeMessage += ` Email dispatch skipped (SMTP is not configured).`;
+        }
+    }
+
     return res.status(201).json(
         new ApiResponse(
             201,
@@ -386,7 +406,7 @@ export const broadcastAnnouncement = asyncHandler(async (req, res) => {
                 channels: selectedChannels,
                 targetAudience
             },
-            `Announcement successfully processed: ${inAppCreated} in-app alerts created, ${emailsSent} emails sent.`
+            outcomeMessage
         )
     );
 });
@@ -423,6 +443,56 @@ export const triggerReminderWorker = asyncHandler(async (req, res) => {
             200,
             result,
             `Worker executed: ${result.processed} job(s) processed`
+        )
+    );
+});
+
+// @desc    Get safe SMTP server configuration & connection diagnostic status
+// @route   GET /api/v1/notifications/smtp-status
+// @access  Admin
+export const getSmtpStatus = asyncHandler(async (req, res) => {
+    const configStatus = getSmtpConfigStatus();
+    const verification = await verifySmtpConnection();
+
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            {
+                ...configStatus,
+                verification
+            },
+            "SMTP diagnostic status evaluated successfully"
+        )
+    );
+});
+
+// @desc    Send a single controlled test email to an explicitly verified recipient
+// @route   POST /api/v1/notifications/smtp-test-email
+// @access  Admin
+export const sendSmtpTestEmail = asyncHandler(async (req, res) => {
+    const { testEmail } = req.body;
+
+    if (!testEmail || !validateEmailAddress(testEmail)) {
+        throw new ApiError(400, "Please provide a valid recipient email address for testing.");
+    }
+
+    const result = await sendTestEmail(testEmail);
+
+    if (!result.accepted) {
+        return res.status(400).json(
+            new ApiResponse(
+                400,
+                result,
+                result.error || "Test email delivery failed"
+            )
+        );
+    }
+
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            result,
+            "Test email accepted by SMTP server for delivery"
         )
     );
 });

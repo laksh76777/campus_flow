@@ -38,6 +38,14 @@ const reminderJobSchema = new Schema(
             default: "PENDING",
             index: true,
         },
+        inAppCompleted: {
+            type: Boolean,
+            default: false,
+        },
+        emailCompleted: {
+            type: Boolean,
+            default: false,
+        },
         attempts: {
             type: Number,
             default: 0,

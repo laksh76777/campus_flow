@@ -2,12 +2,83 @@ import nodemailer from "nodemailer";
 
 let transporter = null;
 
-export const isSmtpConfigured = () => {
-    const emailUser = process.env.EMAIL_USER || process.env.SMTP_USER;
-    const emailPass = process.env.EMAIL_PASS || process.env.SMTP_PASS;
-    return Boolean(emailUser && emailUser.trim() && emailPass && emailPass.trim());
+/**
+ * Validates whether an email string follows RFC 5322 format.
+ */
+export const validateEmailAddress = (email) => {
+    if (!email || typeof email !== "string") return false;
+    const trimmed = email.trim();
+    return /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/.test(trimmed);
 };
 
+/**
+ * Detects whether a string contains an unconfigured placeholder or template value.
+ */
+export const isPlaceholderValue = (val) => {
+    if (!val || typeof val !== "string") return false;
+    const lower = val.trim().toLowerCase();
+    const placeholders = [
+        "your_email",
+        "your_app_password",
+        "your_password",
+        "your_cloudinary",
+        "placeholder",
+        "changeme",
+        "example.com",
+        "user@example.com",
+        "xxxx",
+        "****",
+        "dummy"
+    ];
+    return (
+        placeholders.some((p) => lower.includes(p)) ||
+        lower.startsWith("<") ||
+        lower.endsWith(">")
+    );
+};
+
+/**
+ * Safe SMTP configuration status (never leaks passwords or secrets).
+ */
+export const getSmtpConfigStatus = () => {
+    const emailUser = (process.env.EMAIL_USER || process.env.SMTP_USER || "").trim();
+    const emailPass = (process.env.EMAIL_PASS || process.env.SMTP_PASS || "").trim();
+    const smtpHost = (process.env.SMTP_HOST || "smtp.gmail.com").trim();
+    const smtpPort = Number(process.env.SMTP_PORT) || 587;
+    const isSecure = smtpPort === 465 || process.env.SMTP_SECURE === "true";
+
+    const hasUser = Boolean(emailUser);
+    const hasPass = Boolean(emailPass);
+    const isPlaceholder = isPlaceholderValue(emailUser) || isPlaceholderValue(emailPass);
+
+    const missing = [];
+    if (!hasUser) missing.push("EMAIL_USER/SMTP_USER");
+    if (!hasPass) missing.push("EMAIL_PASS/SMTP_PASS");
+
+    return {
+        configured: Boolean(hasUser && hasPass && !isPlaceholder),
+        hasUser,
+        hasPass,
+        isPlaceholder,
+        host: smtpHost,
+        port: smtpPort,
+        secure: isSecure,
+        sender: getSenderAddress(),
+        missing
+    };
+};
+
+/**
+ * Checks whether SMTP credentials are fully present and not placeholder values.
+ */
+export const isSmtpConfigured = () => {
+    const status = getSmtpConfigStatus();
+    return status.configured;
+};
+
+/**
+ * Returns safe sender identity adhering to RFC 5322 format.
+ */
 export const getSenderAddress = () => {
     if (process.env.EMAIL_FROM && process.env.EMAIL_FROM.trim()) {
         return process.env.EMAIL_FROM.trim();
@@ -16,32 +87,244 @@ export const getSenderAddress = () => {
     return `"Training & Placement Cell" <${user}>`;
 };
 
-const getTransporter = () => {
+/**
+ * Builds or returns cached Nodemailer transporter with connection timeouts.
+ */
+export const getTransporter = () => {
     if (transporter) return transporter;
 
-    const emailUser = process.env.EMAIL_USER || process.env.SMTP_USER;
-    const emailPass = process.env.EMAIL_PASS || process.env.SMTP_PASS;
-    const smtpHost = process.env.SMTP_HOST || "smtp.gmail.com";
-    const smtpPort = process.env.SMTP_PORT || 587;
+    const emailUser = (process.env.EMAIL_USER || process.env.SMTP_USER || "").trim();
+    const emailPass = (process.env.EMAIL_PASS || process.env.SMTP_PASS || "").trim();
+    const smtpHost = (process.env.SMTP_HOST || "smtp.gmail.com").trim();
+    const smtpPort = Number(process.env.SMTP_PORT) || 587;
+    const isSecure = smtpPort === 465 || process.env.SMTP_SECURE === "true";
 
     if (isSmtpConfigured()) {
         transporter = nodemailer.createTransport({
             host: smtpHost,
-            port: Number(smtpPort),
-            secure: Number(smtpPort) === 465,
+            port: smtpPort,
+            secure: isSecure,
             auth: {
                 user: emailUser,
                 pass: emailPass,
             },
+            connectionTimeout: 10000,
+            greetingTimeout: 10000,
+            socketTimeout: 15000,
         });
     }
 
     return transporter;
 };
 
-// Export reset for test suites
+/**
+ * Force reconfiguration of transporter (useful on configuration refresh or test cleanup).
+ */
+export const reconfigureTransporter = () => {
+    transporter = null;
+    return getTransporter();
+};
+
+/**
+ * Reset transporter for mock injection in test suites.
+ */
 export const resetTransporterForTesting = (mock = null) => {
     transporter = mock;
+};
+
+/**
+ * Sanitizes Nodemailer/Provider error messages to eliminate credentials, tokens or stack traces.
+ */
+export const sanitizeSmtpError = (err) => {
+    if (!err) return { category: "UNKNOWN_ERROR", message: "Unknown delivery error" };
+
+    const rawMessage = err.message || String(err);
+    const code = err.code || "";
+
+    if (code === "EAUTH" || rawMessage.includes("535") || rawMessage.toLowerCase().includes("badcredentials") || rawMessage.toLowerCase().includes("username and password not accepted")) {
+        return {
+            category: "AUTH_FAILED",
+            message: "SMTP authentication rejected by mail server (invalid username or app password)."
+        };
+    }
+    if (code === "ETIMEDOUT" || code === "ESOCKETTIMEDOUT") {
+        return {
+            category: "CONNECTION_TIMEOUT",
+            message: "Connection to SMTP server timed out (check host and port connectivity)."
+        };
+    }
+    if (code === "ECONNREFUSED") {
+        return {
+            category: "CONNECTION_REFUSED",
+            message: "Connection refused by SMTP host on the specified port."
+        };
+    }
+    if (code === "ENOTFOUND") {
+        return {
+            category: "INVALID_HOST",
+            message: "SMTP host address could not be resolved by DNS."
+        };
+    }
+    if (code === "EPROTOCOL" || rawMessage.includes("certificate") || rawMessage.includes("TLS") || rawMessage.includes("SSL")) {
+        return {
+            category: "TLS_ERROR",
+            message: "TLS / SSL handshake error occurred during secure SMTP connection."
+        };
+    }
+
+    return {
+        category: "DELIVERY_FAILED",
+        message: "Email provider rejected or failed to process the message."
+    };
+};
+
+/**
+ * Verifies live SMTP connection and authentication with provider without exposing credentials.
+ */
+export const verifySmtpConnection = async () => {
+    const configStatus = getSmtpConfigStatus();
+
+    if (!configStatus.hasUser || !configStatus.hasPass) {
+        return {
+            verified: false,
+            category: "NOT_CONFIGURED",
+            message: "SMTP server credentials (EMAIL_USER / EMAIL_PASS) are not configured."
+        };
+    }
+
+    if (configStatus.isPlaceholder) {
+        return {
+            verified: false,
+            category: "PLACEHOLDER_CREDENTIALS",
+            message: "SMTP server credentials contain default placeholder values. Real credentials are required."
+        };
+    }
+
+    const mailer = getTransporter();
+    if (!mailer) {
+        return {
+            verified: false,
+            category: "TRANSPORTER_CREATION_FAILED",
+            message: "Could not initialize SMTP transport with current settings."
+        };
+    }
+
+    try {
+        await mailer.verify();
+        return {
+            verified: true,
+            category: "VERIFIED",
+            message: "SMTP connection and authentication verified successfully with mail provider."
+        };
+    } catch (err) {
+        const sanitized = sanitizeSmtpError(err);
+        return {
+            verified: false,
+            category: sanitized.category,
+            message: sanitized.message
+        };
+    }
+};
+
+/**
+ * Sends a controlled test email to an explicitly verified recipient.
+ */
+export const sendTestEmail = async (testEmail) => {
+    if (!validateEmailAddress(testEmail)) {
+        return {
+            accepted: false,
+            category: "INVALID_RECIPIENT",
+            error: "The provided test recipient email address is invalid."
+        };
+    }
+
+    if (!isSmtpConfigured()) {
+        return {
+            accepted: false,
+            category: "NOT_CONFIGURED",
+            error: "SMTP server is not configured in system environment variables."
+        };
+    }
+
+    const mailer = getTransporter();
+    if (!mailer) {
+        return {
+            accepted: false,
+            category: "NOT_CONFIGURED",
+            error: "SMTP transporter is not initialized."
+        };
+    }
+
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const subject = `[CampusFlow Diagnostic] SMTP Email Delivery Test (${new Date().toLocaleTimeString()})`;
+
+    const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #1e293b; }
+        .container { max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; }
+        .header { background: #0f172a; color: #ffffff; padding: 24px; text-align: center; }
+        .header h1 { margin: 0; font-size: 18px; font-weight: 800; }
+        .content { padding: 24px; }
+        .box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 16px; margin: 16px 0; color: #166534; font-size: 14px; }
+        .footer { padding: 16px 24px; background: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8; text-align: center; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>CampusFlow SMTP Delivery Verification</h1>
+        </div>
+        <div class="content">
+          <p>Hello,</p>
+          <div class="box">
+            <strong>✅ Test Email Accepted by Mail Server</strong><br/>
+            This controlled diagnostic test email confirms that your placement portal's Nodemailer transporter successfully connected and authenticated with your configured SMTP server.
+          </div>
+          <p style="font-size: 13px; color: #64748b;">
+            <strong>Important note:</strong> Provider acceptance confirms that your credentials and connection settings were accepted by the mail server. It does not guarantee delivery to all student inboxes (which depends on recipient domain filters and reputation).
+          </p>
+          <p style="font-size: 13px; color: #64748b;">
+            Timestamp: ${new Date().toISOString()}<br/>
+            Sender: ${getSenderAddress()}<br/>
+            Recipient: ${testEmail}
+          </p>
+        </div>
+        <div class="footer">
+          Automated diagnostic notification from CampusFlow.
+        </div>
+      </div>
+    </body>
+    </html>
+    `;
+
+    try {
+        const info = await mailer.sendMail({
+            from: getSenderAddress(),
+            to: testEmail.trim(),
+            subject,
+            html: htmlContent,
+            text: `[CampusFlow Diagnostic] SMTP delivery test successful. Recipient: ${testEmail}. Provider acceptance does not guarantee inbox delivery.`
+        });
+
+        return {
+            accepted: true,
+            messageId: info.messageId,
+            recipient: testEmail.trim(),
+            category: "TEST_EMAIL_ACCEPTED",
+            note: "Provider accepted the test email for delivery. Provider acceptance does not guarantee inbox delivery."
+        };
+    } catch (err) {
+        const sanitized = sanitizeSmtpError(err);
+        return {
+            accepted: false,
+            category: sanitized.category,
+            error: sanitized.message
+        };
+    }
 };
 
 const getStatusBadgeColor = (status) => {
@@ -60,10 +343,11 @@ const getStatusBadgeColor = (status) => {
 };
 
 /**
- * 1. Application Status Transition Email
+ * 1. Application Status Transition Email (supports both studentEmail and to)
  */
 export const sendApplicationStatusEmail = async ({
     studentEmail,
+    to,
     studentName,
     companyName,
     jobTitle,
@@ -75,8 +359,9 @@ export const sendApplicationStatusEmail = async ({
     offeredPackage,
 }) => {
     try {
-        if (!studentEmail) {
-            return { accepted: false, error: "No recipient email provided" };
+        const recipient = (studentEmail || to || "").trim();
+        if (!validateEmailAddress(recipient)) {
+            return { accepted: false, error: "Invalid recipient email address" };
         }
 
         const badge = getStatusBadgeColor(status);
@@ -138,7 +423,7 @@ export const sendApplicationStatusEmail = async ({
 
         const info = await mailer.sendMail({
             from: getSenderAddress(),
-            to: studentEmail,
+            to: recipient,
             subject,
             html: htmlContent,
             text: `Hello ${studentName || "Student"}, your application with ${companyName} (${jobTitle}) status is updated to ${badge.label}. View details: ${frontendUrl}/student-dashboard?tab=applications`
@@ -146,8 +431,8 @@ export const sendApplicationStatusEmail = async ({
 
         return { accepted: true, messageId: info.messageId };
     } catch (err) {
-        console.error("[MailService Error] Failed to send status email:", err.message);
-        return { accepted: false, error: err.message };
+        const sanitized = sanitizeSmtpError(err);
+        return { accepted: false, category: sanitized.category, error: sanitized.message };
     }
 };
 
@@ -164,8 +449,8 @@ export const sendDeadlineReminderEmail = async ({
     packageLPA,
 }) => {
     try {
-        if (!studentEmail) {
-            return { accepted: false, error: "No recipient email provided" };
+        if (!validateEmailAddress(studentEmail)) {
+            return { accepted: false, error: "Invalid recipient email address" };
         }
 
         const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
@@ -246,7 +531,7 @@ export const sendDeadlineReminderEmail = async ({
 
         const info = await mailer.sendMail({
             from: getSenderAddress(),
-            to: studentEmail,
+            to: studentEmail.trim(),
             subject,
             html: htmlContent,
             text: `Dear ${studentName || "Candidate"}, the application deadline for ${companyName} (${jobTitle}) closes in ${offsetHours} hours (${formattedDeadline}). Submit your application before the deadline: ${frontendUrl}/placement-drives`
@@ -254,8 +539,8 @@ export const sendDeadlineReminderEmail = async ({
 
         return { accepted: true, messageId: info.messageId };
     } catch (err) {
-        console.error("[MailService Error] Failed to send reminder email:", err.message);
-        return { accepted: false, error: err.message };
+        const sanitized = sanitizeSmtpError(err);
+        return { accepted: false, category: sanitized.category, error: sanitized.message };
     }
 };
 
@@ -270,8 +555,8 @@ export const sendBroadcastAnnouncementEmail = async ({
     priority = "announcement",
 }) => {
     try {
-        if (!studentEmail) {
-            return { accepted: false, error: "No recipient email provided" };
+        if (!validateEmailAddress(studentEmail)) {
+            return { accepted: false, error: "Invalid recipient email address" };
         }
 
         const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
@@ -322,7 +607,7 @@ export const sendBroadcastAnnouncementEmail = async ({
 
         const info = await mailer.sendMail({
             from: getSenderAddress(),
-            to: studentEmail,
+            to: studentEmail.trim(),
             subject,
             html: htmlContent,
             text: `Dear ${studentName || "Student"},\n\n[${title}]\n\n${message}\n\nView portal: ${frontendUrl}/student-dashboard`
@@ -330,7 +615,7 @@ export const sendBroadcastAnnouncementEmail = async ({
 
         return { accepted: true, messageId: info.messageId };
     } catch (err) {
-        console.error("[MailService Error] Failed to send announcement email:", err.message);
-        return { accepted: false, error: err.message };
+        const sanitized = sanitizeSmtpError(err);
+        return { accepted: false, category: sanitized.category, error: sanitized.message };
     }
 };

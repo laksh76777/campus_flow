@@ -634,6 +634,7 @@ const updateApplicationStatus = asyncHandler(async (req, res) => {
         if (studentUser.email) {
             try {
                 await sendApplicationStatusEmail({
+                    studentEmail: studentUser.email,
                     to: studentUser.email,
                     studentName: studentUser.fullName,
                     companyName,

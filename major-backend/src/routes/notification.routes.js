@@ -7,7 +7,9 @@ import {
     broadcastAnnouncement,
     getAnnouncementPreview,
     getScheduledReminders,
-    triggerReminderWorker
+    triggerReminderWorker,
+    getSmtpStatus,
+    sendSmtpTestEmail
 } from "../controllers/notification.controller.js";
 
 const router = Router();
@@ -24,5 +26,9 @@ router.route("/announcement-preview").get(verifyAdmin, getAnnouncementPreview);
 router.route("/broadcast").post(verifyAdmin, broadcastAnnouncement);
 router.route("/scheduled-reminders").get(verifyAdmin, getScheduledReminders);
 router.route("/trigger-reminders").post(verifyAdmin, triggerReminderWorker);
+
+// Admin safe SMTP diagnostic & test-email endpoints
+router.route("/smtp-status").get(verifyAdmin, getSmtpStatus);
+router.route("/smtp-test-email").post(verifyAdmin, sendSmtpTestEmail);
 
 export default router;
