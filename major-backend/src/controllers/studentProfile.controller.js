@@ -933,7 +933,7 @@ const submitModificationRequest = asyncHandler(async (req, res) => {
             user: admin._id,
             title: "Profile Modification Request",
             message: `${studentName} requested permission to modify: ${changeNames}. Reason: ${reason || "Not specified"}.`,
-            type: "alert",
+            type: "urgent",
             isRead: false
         }));
         if (notifications.length > 0) {
@@ -1090,7 +1090,7 @@ const reviewModificationRequest = asyncHandler(async (req, res) => {
                 action === "APPROVE"
                     ? `Your requested update for [${changeNames}] was approved and applied to your profile records.`
                     : `Your requested update for [${changeNames}] was not approved. Remarks: ${reviewRemarks || "Contact TPO placement cell."}`,
-            type: action === "APPROVE" ? "offer" : "alert",
+            type: action === "APPROVE" ? "offer" : "status_update",
             isRead: false
         });
     } catch (e) {
