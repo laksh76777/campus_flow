@@ -11,6 +11,7 @@ import {
     getStudentProfileById,
     addSemesterResult,
     addBacklogRecord,
+    deleteBacklogRecord,
     verifyStudentProfile,
     safeMigrateExistingProfiles,
     lockStudentProfile,
@@ -39,6 +40,7 @@ router.route("/update-resume").patch(verifyJWT, upload.single("resume"), updateS
 router.route("/delete-resume").delete(verifyJWT, deleteStudentResume);
 router.route("/semester-result").post(verifyJWT, addSemesterResult);
 router.route("/backlog-record").post(verifyJWT, addBacklogRecord);
+router.route("/backlog-record/:backlogId").delete(verifyJWT, deleteBacklogRecord);
 
 // Profile Locking & Modification Requests
 router.route("/lock-profile").post(verifyJWT, lockStudentProfile);

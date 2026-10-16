@@ -545,6 +545,51 @@ const addBacklogRecord = asyncHandler(async (req, res) => {
     );
 });
 
+// @desc    Delete backlog record
+// @route   DELETE /api/v1/studentprofile/backlog-record/:backlogId
+// @access  Student & Admin
+const deleteBacklogRecord = asyncHandler(async (req, res) => {
+    const { backlogId } = req.params;
+    let filter = { user: req.user._id };
+    if (req.user.role === "admin" && (req.query.studentProfileId || req.body?.studentProfileId)) {
+        filter = { _id: req.query.studentProfileId || req.body?.studentProfileId };
+    }
+
+    const studentProfile = await StudentProfile.findOne(filter);
+    if (!studentProfile) {
+        throw new ApiError(404, "Student profile not found");
+    }
+
+    if (studentProfile.isProfileLocked && req.user.role !== "admin") {
+        throw new ApiError(403, "Profile is locked. Request TPO Modification or have TPO request re-verification to delete records.");
+    }
+
+    const initialLength = studentProfile.backlogDetails.length;
+    studentProfile.backlogDetails = studentProfile.backlogDetails.filter(
+        (b) => String(b._id) !== String(backlogId)
+    );
+
+    if (studentProfile.backlogDetails.length === initialLength) {
+        throw new ApiError(404, "Backlog record not found");
+    }
+
+    await studentProfile.save();
+
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            {
+                activeBacklogs: studentProfile.activeBacklogs,
+                historicalBacklogs: studentProfile.historicalBacklogs,
+                clearedBacklogsCount: studentProfile.clearedBacklogsCount,
+                backlogs: studentProfile.backlogs,
+                backlogDetails: studentProfile.backlogDetails
+            },
+            "Backlog record deleted successfully"
+        )
+    );
+});
+
 // @desc    Admin verification of student academic profile
 // @route   PATCH /api/v1/studentprofile/:studentId/verify
 // @access  Admin
@@ -567,6 +612,13 @@ const verifyStudentProfile = asyncHandler(async (req, res) => {
     studentProfile.verifiedAt = new Date();
     if (verificationRemarks !== undefined) studentProfile.verificationRemarks = verificationRemarks;
     if (verifiedCGPA !== undefined) studentProfile.verifiedCGPA = Number(verifiedCGPA);
+
+    // If Admin requests re-verification: UNLOCK ALL fields so student can update everything
+    if (verificationStatus === "REVERIFICATION_REQUESTED") {
+        studentProfile.isProfileLocked = false;
+    } else if (verificationStatus === "VERIFIED") {
+        studentProfile.isProfileLocked = true;
+    }
 
     await studentProfile.save();
 
@@ -1031,11 +1083,19 @@ const reviewModificationRequest = asyncHandler(async (req, res) => {
                 const newBacklogCount = Number(afterVal) || 0;
                 profile.backlogs = newBacklogCount;
                 profile.activeBacklogs = newBacklogCount;
-                if (newBacklogCount === 0 && Array.isArray(profile.backlogDetails)) {
-                    profile.backlogDetails.forEach((b) => {
-                        b.status = "CLEARED";
-                        b.clearedDate = new Date();
-                    });
+                if (newBacklogCount === 0) {
+                    profile.backlogDetails = [];
+                    profile.clearedBacklogsCount = 0;
+                    profile.historicalBacklogs = 0;
+                } else if (Array.isArray(profile.backlogDetails)) {
+                    const activeItems = profile.backlogDetails.filter(b => b.status === "ACTIVE");
+                    if (activeItems.length > newBacklogCount) {
+                        const toClear = activeItems.slice(newBacklogCount);
+                        toClear.forEach(b => {
+                            b.status = "CLEARED";
+                            b.clearedDate = new Date();
+                        });
+                    }
                 }
             } else if (field === "clearedBacklogsCount") {
                 profile.clearedBacklogsCount = Number(afterVal) || 0;
@@ -1119,6 +1179,7 @@ export {
     getStudentProfileById,
     addSemesterResult,
     addBacklogRecord,
+    deleteBacklogRecord,
     verifyStudentProfile,
     safeMigrateExistingProfiles,
     lockStudentProfile,

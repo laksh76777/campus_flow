@@ -98,6 +98,15 @@ export const addBacklogRecord = async (backlogData) => {
   return response.data;
 };
 
+// Delete backlog record (allowed when unlocked or for admin)
+export const deleteBacklogRecord = async (backlogId, studentProfileId = null) => {
+  const url = studentProfileId
+    ? `/studentprofile/backlog-record/${backlogId}?studentProfileId=${studentProfileId}`
+    : `/studentprofile/backlog-record/${backlogId}`;
+  const response = await api.delete(url);
+  return response.data;
+};
+
 // Admin verify student profile
 export const verifyStudentProfile = async (studentId, verificationData) => {
   const response = await api.patch(`/studentprofile/${studentId}/verify`, verificationData);

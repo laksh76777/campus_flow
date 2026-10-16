@@ -37,6 +37,7 @@ import {
   deleteUserAvatar,
   addSemesterResult,
   addBacklogRecord,
+  deleteBacklogRecord,
   lockProfile
 } from "../../services/studentService";
 import { getPublicDepartments } from "../../services/authService";
@@ -461,13 +462,6 @@ export default function ProfileDrawer({
 
     try {
       const res = await updateStudentProfile(payload);
-      if (!studentProfile?.isProfileLocked) {
-        try {
-          await lockProfile(studentProfile?.user?._id || user?._id);
-        } catch (lockErr) {
-          console.warn("Auto-lock after confirm & save:", lockErr);
-        }
-      }
       toast.success("Profile confirmed and saved successfully!");
       setIsEditing(false);
       if (onProfileUpdated && res?.data) {
@@ -633,6 +627,36 @@ export default function ProfileDrawer({
       }
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to add backlog record");
+    }
+  };
+
+  const handleDeleteBacklog = async (backlogId) => {
+    if (!window.confirm("Are you sure you want to delete this backlog record?")) return;
+    try {
+      const res = await deleteBacklogRecord(backlogId);
+      toast.success("Backlog record deleted successfully!");
+      if (res?.data) {
+        setBacklogDetails(res.data.backlogDetails || []);
+        setActiveBacklogsCount(res.data.activeBacklogs || 0);
+        setClearedBacklogsCount(res.data.clearedBacklogsCount || 0);
+        if (onProfileUpdated) {
+          onProfileUpdated({
+            backlogDetails: res.data.backlogDetails,
+            activeBacklogs: res.data.activeBacklogs,
+            clearedBacklogsCount: res.data.clearedBacklogsCount,
+            historicalBacklogs: res.data.historicalBacklogs,
+            backlogs: res.data.backlogs
+          });
+        }
+      } else {
+        const remaining = backlogDetails.filter((b) => b._id !== backlogId);
+        setBacklogDetails(remaining);
+        if (onProfileUpdated) {
+          onProfileUpdated({ backlogDetails: remaining });
+        }
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to delete backlog record");
     }
   };
 
@@ -1580,11 +1604,14 @@ export default function ProfileDrawer({
                             <th className="py-2.5 px-3.5">Subject</th>
                             <th className="py-2.5 px-3.5">Semester</th>
                             <th className="py-2.5 px-3.5 text-right">Status</th>
+                            {!studentProfile?.isProfileLocked && (
+                              <th className="py-2.5 px-3.5 text-right">Action</th>
+                            )}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
                           {backlogDetails.map((b, idx) => (
-                            <tr key={idx}>
+                            <tr key={b._id || idx}>
                               <td className="py-2.5 px-3.5">{b.subjectName || b.subjectCode || "Subject"}</td>
                               <td className="py-2.5 px-3.5">Sem {b.semester}</td>
                               <td className="py-2.5 px-3.5 text-right font-bold">
@@ -1592,6 +1619,18 @@ export default function ProfileDrawer({
                                   {b.status}
                                 </span>
                               </td>
+                              {!studentProfile?.isProfileLocked && (
+                                <td className="py-2.5 px-3.5 text-right">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteBacklog(b._id)}
+                                    className="p-1 rounded-md text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition"
+                                    title="Delete backlog record"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5 inline" />
+                                  </button>
+                                </td>
+                              )}
                             </tr>
                           ))}
                         </tbody>
