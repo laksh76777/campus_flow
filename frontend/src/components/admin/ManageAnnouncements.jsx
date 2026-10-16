@@ -240,22 +240,6 @@ export default function ManageAnnouncements({ drives = [] }) {
     }
   };
 
-  // Trigger manual worker run
-  const handleTriggerWorker = async () => {
-    try {
-      setTriggeringWorker(true);
-      const res = await triggerReminderWorker();
-      toast.success(
-        `Worker executed: ${res?.data?.processed || 0} reminder job(s) processed`
-      );
-      await loadReminders();
-    } catch (err) {
-      toast.error(err.response?.data?.message || "Failed to trigger reminder worker");
-    } finally {
-      setTriggeringWorker(false);
-    }
-  };
-
   const isSmtpConfigured = Boolean(smtpData?.configured);
   const isSmtpVerified = Boolean(smtpData?.verification?.verified);
   const isSmtpReady = isSmtpVerified || isSmtpConfigured || Boolean(previewData?.senderAddress);
