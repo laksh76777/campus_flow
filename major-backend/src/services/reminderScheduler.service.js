@@ -1,5 +1,7 @@
 import { ReminderJob } from "../models/reminderJob.model.js";
 import { PlacementDrive } from "../models/placementDrive.model.js";
+import { Company } from "../models/company.model.js";
+import { PlacementSession } from "../models/placementSession.model.js";
 import { StudentProfile } from "../models/studentProfile.model.js";
 import { Application } from "../models/application.model.js";
 import { Notification } from "../models/notification.model.js";
@@ -193,8 +195,9 @@ export const processDueReminders = async () => {
 
                     targetedCandidates++;
 
-                    // A. Dispatch in-app notification
-                    if (channels.includes("in_app") && student.user?._id) {
+                    // A. Dispatch in-app notification (only if in_app channel requested and not previously completed)
+                    const shouldDispatchInApp = channels.includes("in_app") && !job.inAppCompleted;
+                    if (shouldDispatchInApp && student.user?._id) {
                         await Notification.create({
                             user: student.user._id,
                             title: `⏰ Deadline Alert: ${drive.company?.companyName || "Drive"} (${drive.jobTitle})`,
@@ -207,8 +210,9 @@ export const processDueReminders = async () => {
                         inAppCreated++;
                     }
 
-                    // B. Dispatch institutional email notification
-                    if (channels.includes("email")) {
+                    // B. Dispatch institutional email notification (only if email channel requested and not previously completed)
+                    const shouldDispatchEmail = channels.includes("email") && !job.emailCompleted;
+                    if (shouldDispatchEmail) {
                         const recipientEmail = student.user?.email || student.collegeEmail;
                         if (!recipientEmail) {
                             skippedMissingEmail++;
@@ -232,17 +236,46 @@ export const processDueReminders = async () => {
                     }
                 }
 
-                // Mark job completed with complete delivery summary
-                job.status = "COMPLETED";
+                // Channel-isolated completion tracking
+                if (channels.includes("in_app") && !job.inAppCompleted) {
+                    job.inAppCompleted = true;
+                }
+
+                const totalInAppCreated = (job.deliverySummary?.inAppCreated || 0) + inAppCreated;
+                const totalEmailAccepted = (job.deliverySummary?.emailAccepted || 0) + emailAccepted;
+                const totalEmailFailed = (job.deliverySummary?.emailFailed || 0) + emailFailed;
+
                 job.deliverySummary = {
                     targetedCandidates,
-                    inAppCreated,
-                    emailAccepted,
-                    emailFailed,
+                    inAppCreated: totalInAppCreated,
+                    emailAccepted: totalEmailAccepted,
+                    emailFailed: totalEmailFailed,
                     skippedAlreadyApplied,
                     skippedIneligible,
                     skippedMissingEmail
                 };
+
+                // Delivery-state determination:
+                // If email dispatch had failures, do NOT silently mark COMPLETED!
+                if (channels.includes("email") && !job.emailCompleted) {
+                    if (emailFailed > 0) {
+                        job.emailCompleted = false;
+                        if (job.attempts < job.maxAttempts) {
+                            job.status = "PENDING";
+                            job.scheduledTime = new Date(Date.now() + Math.min(job.attempts * 5 * 60 * 1000, 30 * 60 * 1000));
+                            job.errorCategory = `EMAIL_DELIVERY_FAILED (${emailFailed} failed)`;
+                        } else {
+                            job.status = "FAILED";
+                            job.errorCategory = `EMAIL_DELIVERY_EXHAUSTED (${emailFailed} failed)`;
+                        }
+                    } else {
+                        job.emailCompleted = true;
+                        job.status = "COMPLETED";
+                    }
+                } else {
+                    job.status = "COMPLETED";
+                }
+
                 await job.save();
                 processedCount++;
 

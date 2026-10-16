@@ -41,3 +41,15 @@ export const triggerReminderWorker = async () => {
   const response = await api.post("/notifications/trigger-reminders");
   return response.data;
 };
+
+// Safe SMTP diagnostics status (Admin)
+export const getSmtpStatus = async () => {
+  const response = await api.get("/notifications/smtp-status");
+  return response.data;
+};
+
+// Send single controlled test email (Admin)
+export const sendSmtpTestEmail = async (testEmail) => {
+  const response = await api.post("/notifications/smtp-test-email", { testEmail });
+  return response.data;
+};
