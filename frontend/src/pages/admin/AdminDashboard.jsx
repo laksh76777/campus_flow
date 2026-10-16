@@ -28,12 +28,24 @@ import {
 } from "../../services/adminService";
 import { getAllPlacementSessions } from "../../services/sessionService";
 
+const ADMIN_TABS = [
+  "overview",
+  "analytics",
+  "students",
+  "drives",
+  "companies",
+  "applications",
+  "sessions",
+  "excel_hub",
+];
+
 export default function AdminDashboard({ initialTab = "overview" }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
 
-  const tabParam = searchParams.get("tab") || initialTab;
+  const requestedTab = searchParams.get("tab") || initialTab;
+  const tabParam = ADMIN_TABS.includes(requestedTab) ? requestedTab : "overview";
   const [activeTab, setActiveTab] = useState(tabParam);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -62,7 +74,12 @@ export default function AdminDashboard({ initialTab = "overview" }) {
   }, [user, navigate]);
 
   // Sync tab with URL
+  useEffect(() => {
+    setActiveTab(tabParam);
+  }, [tabParam]);
+
   const handleTabChange = (newTab) => {
+    if (!ADMIN_TABS.includes(newTab)) return;
     setActiveTab(newTab);
     setSearchParams({ tab: newTab });
   };

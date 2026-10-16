@@ -8,6 +8,7 @@ import { ExportLog } from "../models/exportLog.model.js";
 import { Notification } from "../models/notification.model.js";
 import { sendApplicationStatusEmail } from "../utils/mailService.js";
 import { EligibilityService } from "../services/eligibility.service.js";
+import { resolveStudentProgram } from "../constants/programCatalog.js";
 
 // Legal status transitions state machine
 const LEGAL_TRANSITIONS = {
@@ -173,7 +174,10 @@ export const buildSubmissionSnapshot = (studentProfile, user, placementDrive) =>
         phone: user?.phone || studentProfile.alternatePhone || "",
         department: studentProfile.department || studentProfile.branch || "",
         branch: studentProfile.branch || studentProfile.department || "",
-        course: studentProfile.course || "B.Tech",
+        course: studentProfile.course || "",
+        programCode: studentProfile.programCode || "",
+        programLevel: studentProfile.programLevel || "",
+        degreeType: studentProfile.degreeType || "",
         admissionYear: studentProfile.admissionYear,
         graduationYear: studentProfile.graduationYear,
         currentSemester: studentProfile.currentSemester || studentProfile.semester,
@@ -276,6 +280,7 @@ const applyForPlacement = asyncHandler(async (req, res) => {
                 activeBacklogs: studentProfile.activeBacklogs != null ? studentProfile.activeBacklogs : studentProfile.backlogs,
                 historicalBacklogs: studentProfile.historicalBacklogs || 0,
                 branch: studentProfile.branch || studentProfile.department,
+                programCode: resolveStudentProgram(studentProfile)?.code || "",
                 tenthPercentage: studentProfile.tenthPercentage,
                 twelfthPercentage: studentProfile.twelfthPercentage,
                 criteriaBreakdown: evalResult.criteriaBreakdown,
@@ -311,6 +316,7 @@ const applyForPlacement = asyncHandler(async (req, res) => {
             activeBacklogs: studentProfile.activeBacklogs != null ? studentProfile.activeBacklogs : studentProfile.backlogs,
             historicalBacklogs: studentProfile.historicalBacklogs || 0,
             branch: studentProfile.branch || studentProfile.department,
+            programCode: resolveStudentProgram(studentProfile)?.code || "",
             tenthPercentage: studentProfile.tenthPercentage,
             twelfthPercentage: studentProfile.twelfthPercentage,
             criteriaBreakdown: evalResult.criteriaBreakdown,
@@ -924,7 +930,8 @@ const exportDriveApplicants = asyncHandler(async (req, res) => {
         { key: "usn", label: "USN / Enrollment ID" },
         { key: "email", label: "Email Address" },
         { key: "phone", label: "Contact Number" },
-        { key: "branch", label: "Department / Branch" },
+        { key: "branch", label: "Academic Program" },
+        { key: "programCode", label: "Program Code" },
         { key: "graduationYear", label: "Batch Year" },
         { key: "cgpa", label: "Overall CGPA" },
         { key: "activeBacklogs", label: "Active Backlogs" },
@@ -971,7 +978,13 @@ const exportDriveApplicants = asyncHandler(async (req, res) => {
         const usn = snap.usn || student.enrollmentNumber || student.usn || "";
         const email = snap.email || user.email || student.collegeEmail || "";
         const phone = snap.phone || user.phone || student.alternatePhone || "";
-        const branch = snap.branch || snap.department || student.branch || student.department || "";
+        const program = resolveStudentProgram({
+            programCode: snap.programCode || student.programCode,
+            course: snap.course || student.course,
+            branch: snap.branch || snap.department || student.branch || student.department
+        });
+        const branch = program?.name || snap.branch || snap.department || student.branch || student.department || "";
+        const programCode = program?.code || snap.programCode || student.programCode || "";
         const gradYear = snap.graduationYear || student.graduationYear || "";
         const cgpa = snap.cgpa ?? student.verifiedCGPA ?? student.cgpa ?? "";
         const activeBacklogs = snap.activeBacklogs ?? student.activeBacklogs ?? student.backlogs ?? 0;
@@ -987,6 +1000,7 @@ const exportDriveApplicants = asyncHandler(async (req, res) => {
             escapeCsv(email),
             escapeCsv(phone),
             escapeCsv(branch),
+            escapeCsv(programCode),
             escapeCsv(gradYear),
             escapeCsv(cgpa),
             escapeCsv(activeBacklogs),

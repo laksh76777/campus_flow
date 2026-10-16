@@ -5,18 +5,56 @@ import { PlacementDrive, DEFAULT_STUDENT_REQUIREMENTS } from "../models/placemen
 import { Company } from "../models/company.model.js";
 import { StudentProfile } from "../models/studentProfile.model.js";
 import { Application } from "../models/application.model.js";
+import { PlacementSession } from "../models/placementSession.model.js";
 import { EligibilityService } from "../services/eligibility.service.js";
+import { getCatalogProgram, PROGRAM_CATALOG, resolveProgram } from "../constants/programCatalog.js";
+import { studentMatchesDriveProgram } from "../services/programTargeting.service.js";
+
+const normalizeEligiblePrograms = (programCodes, branches) => {
+    let programs;
+    if (programCodes !== undefined) {
+        if (!Array.isArray(programCodes) || programCodes.length === 0) {
+            throw new ApiError(400, "Select at least one approved academic program");
+        }
+        programs = programCodes.map((code) => getCatalogProgram(code));
+        if (programs.some((program) => !program)) {
+            throw new ApiError(400, "Drive targeting contains an unknown academic program code");
+        }
+    } else {
+        if (!Array.isArray(branches) || branches.length === 0) {
+            throw new ApiError(400, "Select at least one approved academic program");
+        }
+        if (branches.some((branch) => ["all", "all branches"].includes(String(branch).trim().toLowerCase()))) {
+            programs = PROGRAM_CATALOG;
+        } else {
+            programs = branches.map((branch) => resolveProgram(branch));
+            if (programs.some((program) => !program)) {
+                throw new ApiError(400, "Drive targeting contains an unknown or unsupported legacy program value");
+            }
+        }
+    }
+    const uniquePrograms = [...new Map(programs.map((program) => [program.code, program])).values()];
+    return {
+        eligibleProgramCodes: uniquePrograms.map((program) => program.code),
+        eligibleBranches: uniquePrograms.map((program) => program.name)
+    };
+};
 
 const createPlacementDrive = asyncHandler(async (req, res) => {
     const {
-        company,jobTitle,jobDescription,jobType,package: salaryPackage,location,eligibleBranches,minimumCGPA,maximumBacklogs,graduationYear,applicationStartDate,applicationDeadline,driveDate,venue,applicationLink,
-        placementSession,minimumTenthPercentage,minimumTwelfthPercentage,maximumHistoricalBacklogs
+        company,jobTitle,jobDescription,jobType,package: salaryPackage,location,eligibleBranches,eligibleProgramCodes,minimumCGPA,maximumBacklogs,graduationYear,placementSession,applicationStartDate,applicationDeadline,driveDate,venue,applicationLink,
+        minimumTenthPercentage,minimumTwelfthPercentage,maximumHistoricalBacklogs
     } = req.body;
-    if ( !company || !jobTitle || !jobType || salaryPackage === undefined || !eligibleBranches || minimumCGPA === undefined || graduationYear === undefined || !applicationStartDate || !applicationDeadline || !driveDate ) {
+    if ( !company || !jobTitle || !jobType || salaryPackage === undefined || (!eligibleBranches && !eligibleProgramCodes) || minimumCGPA === undefined || graduationYear === undefined || !placementSession || !applicationStartDate || !applicationDeadline || !driveDate ) {
         throw new ApiError(
             400,
             "Please provide all required placement drive details"
         );
+    }
+    const programTargeting = normalizeEligiblePrograms(eligibleProgramCodes, eligibleBranches);
+    const session = await PlacementSession.findById(placementSession);
+    if (!session || session.sessionYear !== Number(graduationYear) || session.isClosed || session.isArchived) {
+        throw new ApiError(400, "Select an open placement session matching the drive's graduation year");
     }
     const existingCompany = await Company.findOne({
         _id: company,
@@ -76,14 +114,14 @@ const createPlacementDrive = asyncHandler(async (req, res) => {
         jobType,
         package: salaryPackage,
         location: location || "",
-        eligibleBranches,
+        ...programTargeting,
         minimumCGPA,
         maximumBacklogs:
             maximumBacklogs !== undefined
                 ? maximumBacklogs
                 : 0,
         graduationYear,
-        placementSession: placementSession || null,
+        placementSession: session._id,
         minimumTenthPercentage: minimumTenthPercentage !== undefined ? Number(minimumTenthPercentage) : 0,
         minimumTwelfthPercentage: minimumTwelfthPercentage !== undefined ? Number(minimumTwelfthPercentage) : 0,
         maximumHistoricalBacklogs: maximumHistoricalBacklogs !== undefined && maximumHistoricalBacklogs !== null ? Number(maximumHistoricalBacklogs) : null,
@@ -180,7 +218,7 @@ const updatePlacementDrive = asyncHandler(async (req, res) => {
         );
     }
     const {
-        company,jobTitle,jobDescription, jobType,package: salaryPackage,location, eligibleBranches, minimumCGPA, maximumBacklogs, graduationYear, applicationStartDate, applicationDeadline,driveDate, venue,applicationLink,
+        company,jobTitle,jobDescription, jobType,package: salaryPackage,location, eligibleBranches, eligibleProgramCodes, minimumCGPA, maximumBacklogs, graduationYear, applicationStartDate, applicationDeadline,driveDate, venue,applicationLink,
         placementSession, minimumTenthPercentage, minimumTwelfthPercentage, maximumHistoricalBacklogs
     } = req.body;
     if (company !== undefined) {
@@ -217,18 +255,10 @@ const updatePlacementDrive = asyncHandler(async (req, res) => {
     if (location !== undefined) {
         placementDrive.location = location;
     }
-    if (eligibleBranches !== undefined) {
-
-        if (
-            !Array.isArray(eligibleBranches) ||
-            eligibleBranches.length === 0
-        ) {
-            throw new ApiError(
-                400,
-                "Eligible branches must be a non-empty array"
-            );
-        }
-        placementDrive.eligibleBranches = eligibleBranches;
+    if (eligibleBranches !== undefined || eligibleProgramCodes !== undefined) {
+        const programTargeting = normalizeEligiblePrograms(eligibleProgramCodes, eligibleBranches);
+        placementDrive.eligibleProgramCodes = programTargeting.eligibleProgramCodes;
+        placementDrive.eligibleBranches = programTargeting.eligibleBranches;
     }
     if (minimumCGPA !== undefined) {
         if (
@@ -252,11 +282,15 @@ const updatePlacementDrive = asyncHandler(async (req, res) => {
         }
         placementDrive.maximumBacklogs = maximumBacklogs;
     }
-    if (graduationYear !== undefined) {
-        placementDrive.graduationYear = graduationYear;
-    }
-    if (placementSession !== undefined) {
-        placementDrive.placementSession = placementSession || null;
+    if (graduationYear !== undefined || placementSession !== undefined) {
+        const nextGraduationYear = Number(graduationYear ?? placementDrive.graduationYear);
+        const nextSessionId = placementSession ?? placementDrive.placementSession;
+        const session = nextSessionId ? await PlacementSession.findById(nextSessionId) : null;
+        if (!session || session.sessionYear !== nextGraduationYear) {
+            throw new ApiError(400, "Placement session must match the drive's graduation year");
+        }
+        placementDrive.graduationYear = nextGraduationYear;
+        placementDrive.placementSession = session._id;
     }
     if (minimumTenthPercentage !== undefined) {
         placementDrive.minimumTenthPercentage = Number(minimumTenthPercentage);
@@ -411,9 +445,6 @@ const getEligibleStudents = asyncHandler(async (req, res) => {
         );
     }
     const eligibleStudents = await StudentProfile.find({
-        branch: {
-            $in: placementDrive.eligibleBranches
-        },
         cgpa: {
             $gte: placementDrive.minimumCGPA
         },
@@ -421,17 +452,14 @@ const getEligibleStudents = asyncHandler(async (req, res) => {
             $lte: placementDrive.maximumBacklogs
         },
         graduationYear: placementDrive.graduationYear
-    })
-        .populate(
-            "user",
-            "fullName email phone avatar"
-        );
+    });
+    const matchedStudents = eligibleStudents.filter((student) => studentMatchesDriveProgram(student, placementDrive));
+    const populatedStudents = await StudentProfile.populate(matchedStudents, {
+        path: "user",
+        select: "fullName email phone avatar"
+    });
     return res.status(200).json(
-        new ApiResponse(
-            200,
-            eligibleStudents,
-            "Eligible students fetched successfully"
-        )
+        new ApiResponse(200, populatedStudents, "Eligible students fetched successfully")
     );
 });
 
@@ -457,12 +485,8 @@ const getMyEligibleDrives = asyncHandler(async (req, res) => {
     // 3. Get current date
     const currentDate = new Date();
     // 4. Find all drives for which student is eligible
-    const eligibleDrives = await PlacementDrive.find({
-
+    const candidateDrives = await PlacementDrive.find({
         isActive: true,
-        eligibleBranches: {
-            $in: [studentProfile.branch]
-        },
         minimumCGPA: {
             $lte: studentProfile.cgpa
         },
@@ -477,14 +501,15 @@ const getMyEligibleDrives = asyncHandler(async (req, res) => {
         applicationDeadline: {
             $gte: currentDate
         }
-    })
-        .populate(
-            "company",
-            "companyName companyDescription companyWebsite companyLogo industry location"
-        )
-        .sort({
-            applicationDeadline: 1
-        });
+    });
+    const eligibleDrives = await PlacementDrive.populate(
+        candidateDrives.filter((drive) => studentMatchesDriveProgram(studentProfile, drive)),
+        {
+            path: "company",
+            select: "companyName companyDescription companyWebsite companyLogo industry location"
+        }
+    );
+    eligibleDrives.sort((a, b) => new Date(a.applicationDeadline) - new Date(b.applicationDeadline));
     // 5. Return eligible drives
     return res.status(200).json(
         new ApiResponse(

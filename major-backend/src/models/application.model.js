@@ -130,6 +130,7 @@ const applicationSchema = new mongoose.Schema(
             activeBacklogs: Number,
             historicalBacklogs: Number,
             branch: String,
+            programCode: String,
             tenthPercentage: Number,
             twelfthPercentage: Number,
             ruleVersion: {

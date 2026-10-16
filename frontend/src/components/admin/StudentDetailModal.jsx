@@ -54,7 +54,9 @@ export default function StudentDetailModal({ student, isOpen, onClose, onStudent
   const phone = user.phone || student.phone || "";
   const avatarUrl = user.avatar?.url || student.avatarUrl || null;
   const enrollmentNo = student.enrollmentNumber || student.usn || "Not Assigned";
-  const branch = student.branch || student.department || "Not provided";
+  const branch = student.programCode
+    ? `${student.degreeType || student.course || ""} · ${student.branch || student.department || student.programCode}`
+    : `Needs program review: ${student.branch || student.department || "Not provided"}`;
   const course = student.course || "Not provided";
   const semester = student.semester ?? student.currentSemester;
   const graduationYear = student.graduationYear;

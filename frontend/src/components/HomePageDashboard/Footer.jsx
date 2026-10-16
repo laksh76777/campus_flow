@@ -1,11 +1,7 @@
 import { Link } from "react-router-dom";
 import {
   Building2,
-  Heart,
   ArrowUp,
-  ShieldCheck,
-  GraduationCap,
-  Briefcase,
 } from "lucide-react";
 
 export default function Footer() {
@@ -28,24 +24,18 @@ export default function Footer() {
               </div>
               <div>
                 <h3 className="text-base font-bold text-white tracking-tight">
-                  Placement Portal
+                  CampusFlow
                 </h3>
                 <p className="text-xs text-slate-400">
-                  Campus Placement Management System
+                  College placement management
                 </p>
               </div>
             </div>
 
             <p className="text-xs leading-relaxed text-slate-400 max-w-sm">
-              An intelligent, transparent, and seamless campus placement portal connecting students with top global corporations, automating drive registrations, eligibility checks, and real-time application tracking.
+              A shared workspace for students and Training &amp; Placement teams to coordinate profiles, drives, applications, and placement activity.
             </p>
 
-            <div className="flex items-center gap-3 pt-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 border border-slate-800 px-3 py-1 text-[11px] text-slate-300">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                Backend API Connected
-              </span>
-            </div>
           </div>
 
           {/* Quick Links */}
@@ -60,18 +50,13 @@ export default function Footer() {
                 </a>
               </li>
               <li>
-                <a href="#drives" className="hover:text-blue-400 transition">
-                  Live Drives
+                <a href="#features" className="hover:text-blue-400 transition">
+                  Features
                 </a>
               </li>
               <li>
-                <a href="#companies" className="hover:text-blue-400 transition">
-                  Top Recruiters
-                </a>
-              </li>
-              <li>
-                <a href="#contact" className="hover:text-blue-400 transition">
-                  Placement Cell
+                <a href="#process" className="hover:text-blue-400 transition">
+                  How It Works
                 </a>
               </li>
             </ul>
@@ -85,41 +70,21 @@ export default function Footer() {
             <ul className="space-y-2 text-xs">
               <li>
                 <Link
-                  to="/login?role=student&redirect=/student-dashboard"
+                  to="/login"
                   className="hover:text-blue-400 transition flex items-center gap-1.5"
                 >
-                  <GraduationCap className="h-3.5 w-3.5 text-blue-400" />
-                  <span>Student Portal</span>
+                  <span>Sign In</span>
                 </Link>
               </li>
               <li>
                 <Link
-                  to="/login?role=admin&redirect=/admin-dashboard"
+                  to="/signup"
                   className="hover:text-blue-400 transition flex items-center gap-1.5"
                 >
-                  <ShieldCheck className="h-3.5 w-3.5 text-indigo-400" />
-                  <span>Admin / TPO Console</span>
-                </Link>
-              </li>
-              <li>
-                <Link to="/signup" className="hover:text-blue-400 transition">
-                  Student Registration
+                  <span>Student Registration</span>
                 </Link>
               </li>
             </ul>
-          </div>
-
-          {/* Contact Office */}
-          <div className="space-y-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-200">
-              Contact Desk
-            </h4>
-            <div className="space-y-1.5 text-xs text-slate-400">
-              <p>Training & Placement Office</p>
-              <p className="text-slate-300">placements@university.edu</p>
-              <p>Tel: +91 98765 43210</p>
-              <p className="text-[11px] text-slate-500">Working hours: 9 AM - 5:30 PM</p>
-            </div>
           </div>
 
         </div>
@@ -127,7 +92,7 @@ export default function Footer() {
         {/* Bottom Subfooter */}
         <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-slate-800/80 pt-8 sm:flex-row text-xs">
           <p className="text-slate-500">
-            © {currentYear} Placement Portal. All rights reserved. Built for engineering & management students.
+            © {currentYear} CampusFlow.
           </p>
 
           <button

@@ -6,6 +6,8 @@
  * - "MISSING_DATA": Student profile is incomplete; cannot evaluate criteria.
  *                   Missing data NEVER silently passes or converts to zero.
  */
+import { resolveStudentProgram } from "../constants/programCatalog.js";
+import { getDriveProgramCodes, studentMatchesDriveProgram } from "./programTargeting.service.js";
 
 export const EligibilityStatus = {
     ELIGIBLE: "ELIGIBLE",
@@ -134,36 +136,34 @@ export class EligibilityService {
         }
 
         // 5. Branch / Specialization Match
-        const studentBranch = (student.branch || student.department || "").trim().toLowerCase();
+        const studentProgram = resolveStudentProgram({
+            programCode: student.programCode,
+            course: student.course,
+            branch: student.branch,
+            department: student.department
+        });
         const eligibleBranches = Array.isArray(drive.eligibleBranches)
             ? drive.eligibleBranches
             : [];
-
-        const isAllBranches =
-            eligibleBranches.length === 0 ||
-            eligibleBranches.some((b) => b.trim().toLowerCase() === "all");
-
-        const branchMatches =
-            isAllBranches ||
-            eligibleBranches.some((b) => {
-                const normB = b.trim().toLowerCase();
-                return (
-                    normB === studentBranch ||
-                    studentBranch.includes(normB) ||
-                    normB.includes(studentBranch)
-                );
-            });
+        const targetProgramCodes = getDriveProgramCodes(drive);
+        const isAllBranches = targetProgramCodes.length === 13;
+        const branchMatches = studentMatchesDriveProgram(student, drive);
+        const requiredPrograms = isAllBranches
+            ? "All approved programs"
+            : (targetProgramCodes.length
+                ? targetProgramCodes.map((code) => resolveStudentProgram({ programCode: code }).name).join(", ")
+                : eligibleBranches.join(", "));
 
         criteriaBreakdown.push({
             criterion: "Department / Branch",
-            required: isAllBranches ? "All Branches" : eligibleBranches.join(", "),
-            actual: student.branch || student.department,
+            required: requiredPrograms || "No approved programs configured",
+            actual: studentProgram?.name || student.branch || student.department || "Unknown",
             passed: branchMatches
         });
 
         if (!branchMatches) {
             failureReasons.push(
-                `Your department (${student.branch || student.department}) is not in the eligible branches list (${eligibleBranches.join(", ")})`
+                `Your academic program (${studentProgram?.name || student.branch || student.department || "unknown"}) is not in the eligible programs list (${requiredPrograms || "none"})`
             );
         }
 

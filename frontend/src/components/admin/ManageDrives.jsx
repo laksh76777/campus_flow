@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Briefcase,
   Plus,
@@ -12,17 +12,8 @@ import {
   X,
 } from "lucide-react";
 import toast from "react-hot-toast";
-
-const AVAILABLE_BRANCHES = [
-  "CSE",
-  "IT",
-  "ECE",
-  "EE",
-  "ME",
-  "AIDS",
-  "CSBS",
-  "Civil",
-];
+import { getPublicDepartments } from "../../services/authService";
+import { getAllPlacementSessions } from "../../services/sessionService";
 
 const DEFAULT_FIELDS = [
   { fieldKey: "fullName", label: "Student Full Name", category: "personal", requiredToApply: true, visibleToTpo: true, shareWithCompany: true },
@@ -58,8 +49,9 @@ const getDefaultFormData = () => {
     location: "Bengaluru",
     minimumCGPA: "7.0",
     maximumBacklogs: "0",
-    graduationYear: "2027",
-    eligibleBranches: ["CSE", "IT", "ECE"],
+    graduationYear: "",
+    placementSession: "",
+    eligibleProgramCodes: [],
     applicationStartDate: new Date(now).toISOString().split("T")[0],
     applicationDeadline: new Date(now + 10 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
     driveDate: new Date(now + 20 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
@@ -83,6 +75,23 @@ export default function ManageDrives({
   const [statusFilter, setStatusFilter] = useState("all");
   const [internalModalOpen, setInternalModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [programs, setPrograms] = useState([]);
+  const [sessions, setSessions] = useState([]);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([getPublicDepartments(), getAllPlacementSessions()])
+      .then(([programResponse, sessionResponse]) => {
+        if (!active) return;
+        setPrograms(programResponse.data || []);
+        setSessions((sessionResponse.data || []).filter((session) => !session.isClosed && !session.isArchived));
+      })
+      .catch((error) => {
+        console.error("Could not load drive configuration:", error);
+        toast.error("Could not load approved programs and placement sessions");
+      });
+    return () => { active = false; };
+  }, []);
 
   // Sync external & internal modal state
   const isModalVisible = isCreateModalOpen !== undefined ? isCreateModalOpen : internalModalOpen;
@@ -90,14 +99,13 @@ export default function ManageDrives({
 
   const [formData, setFormData] = useState(getDefaultFormData);
 
-  const toggleBranch = (branch) => {
+  const toggleProgram = (programCode) => {
     setFormData((prev) => {
-      const exists = prev.eligibleBranches.includes(branch);
+      const exists = prev.eligibleProgramCodes.includes(programCode);
       if (exists) {
-        if (prev.eligibleBranches.length === 1) return prev; // keep at least 1
-        return { ...prev, eligibleBranches: prev.eligibleBranches.filter((b) => b !== branch) };
+        return { ...prev, eligibleProgramCodes: prev.eligibleProgramCodes.filter((code) => code !== programCode) };
       }
-      return { ...prev, eligibleBranches: [...prev.eligibleBranches, branch] };
+      return { ...prev, eligibleProgramCodes: [...prev.eligibleProgramCodes, programCode] };
     });
   };
 
@@ -136,11 +144,18 @@ export default function ManageDrives({
       toast.error("Please provide a valid package in LPA");
       return;
     }
+    if (!formData.placementSession || !formData.eligibleProgramCodes.length) {
+      toast.error("Select a placement session and at least one approved academic program");
+      return;
+    }
 
     try {
       setSubmitting(true);
       const payload = {
         ...formData,
+        eligibleBranches: formData.eligibleProgramCodes.map(
+          (code) => programs.find((program) => program.code === code)?.name
+        ),
         package: Number(formData.package),
         minimumCGPA: Number(formData.minimumCGPA),
         maximumBacklogs: Number(formData.maximumBacklogs),
@@ -512,7 +527,7 @@ export default function ManageDrives({
                 </div>
               </div>
 
-              {/* Eligibility: CGPA, Max Backlogs, Grad Year */}
+              {/* Eligibility: cohort and academic thresholds */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -544,37 +559,53 @@ export default function ManageDrives({
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Graduation Batch
+                    Placement Session
                   </label>
-                  <input
-                    type="number"
-                    value={formData.graduationYear}
-                    onChange={(e) => setFormData({ ...formData, graduationYear: e.target.value })}
+                  <select
+                    value={formData.placementSession}
+                    onChange={(e) => {
+                      const session = sessions.find((item) => item._id === e.target.value);
+                      setFormData({
+                        ...formData,
+                        placementSession: e.target.value,
+                        graduationYear: session ? String(session.sessionYear) : "",
+                      });
+                    }}
                     className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs focus:border-blue-500 focus:outline-none"
-                  />
+                  >
+                    <option value="">Select configured session</option>
+                    {sessions.map((session) => (
+                      <option key={session._id} value={session._id}>
+                        {session.name || `Class of ${session.sessionYear}`}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
-              {/* Eligible Branches Multi-Select */}
+              {/* Eligible Programs Multi-Select */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Eligible Academic Branches ({formData.eligibleBranches.length} selected)
+                  Eligible Academic Programs ({formData.eligibleProgramCodes.length} selected)
                 </label>
+                {programs.length === 0 && (
+                  <p className="mb-2 text-xs text-rose-600">Approved programs are unavailable. Reload the page before creating a drive.</p>
+                )}
                 <div className="flex flex-wrap gap-2">
-                  {AVAILABLE_BRANCHES.map((b) => {
-                    const isSelected = formData.eligibleBranches.includes(b);
+                  {programs.map((program) => {
+                    const isSelected = formData.eligibleProgramCodes.includes(program.code);
                     return (
                       <button
                         type="button"
-                        key={b}
-                        onClick={() => toggleBranch(b)}
+                        key={program.code}
+                        onClick={() => toggleProgram(program.code)}
                         className={`px-3 py-1 text-xs font-bold rounded-lg border transition ${
                           isSelected
                             ? "bg-blue-600 text-white border-blue-600 shadow-xs"
                             : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
                         }`}
                       >
-                        {b}
+                        {program.name}
                       </button>
                     );
                   })}

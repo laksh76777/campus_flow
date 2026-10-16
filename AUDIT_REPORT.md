@@ -74,7 +74,7 @@ Backend startup requires `MONGODB_URI`, `ACCESS_TOKEN_SECRET`, `ACCESS_TOKEN_EXP
 
 Configure the frontend hosting environment's `VITE_API_URL` to the actual deployed API base URL ending in `/api/v1`. No deployed URL is assumed or supplied. Production has no localhost fallback and requests fail with a configuration error when this value is missing. For local development, the frontend uses `http://localhost:8000/api/v1`.
 
-`seedCleanState.js` deletes documents from users, admins, student profiles, placement sessions, departments, companies, drives, applications, notifications, and export logs. It was not executed. The phase 6 Excel verification script also performs targeted record deletion and was not executed. Test records remain in the isolated database; no cleanup was performed.
+`seedCleanState.js` deletes documents from users, admins, student profiles, placement sessions, departments, companies, drives, applications, notifications, and export logs. It was not executed. The Phase 6 Excel verification script also performs targeted record deletion and was not executed. The isolated E2E database was not cleaned. Separately, a user-approved reset/reseed of `Place-on` was performed on 2026-10-16 after a local EJSON backup; the latest data and its difference from the requested empty company/drive workspace are documented below.
 
 ## Changed files
 
@@ -84,7 +84,7 @@ Configure the frontend hosting environment's `VITE_API_URL` to the actual deploy
 - Backend workflows: `major-backend/src/controllers/application.controller.js`, `placementSession.controller.js`; `major-backend/src/models/notification.model.js`.
 - Tests: `major-backend/tests/config.test.js`, `http.test.js`, `phase2_phase3_verification.mjs`, `phase4_phase5_verification.mjs`, `profile_requirements_export_verification.mjs`.
 
-All changes remain uncommitted; existing worktree changes were preserved.
+The stabilization changes above were committed and pushed as `2790cf7`. The UI/auth follow-up changes below are currently uncommitted.
 
 ## Remaining limitations and next gate
 
@@ -93,3 +93,125 @@ All changes remain uncommitted; existing worktree changes were preserved.
 - No production-readiness claim is made from the successful build or local tests alone.
 
 **Phase 6 decision:** Yes, it is safe to proceed with Phase 6 implementation and verification against a confirmed disposable database. Do not run its destructive Excel verification script against a shared or production database. Production readiness remains **Partially verified** until the remaining infrastructure and failure-mode checks are completed.
+
+## Demo login and UI follow-up (2026-10-16)
+
+### Authentication trace and outcome
+
+The login UI's two demo cards only select the matching role, populate the displayed email/password, update the redirect, and show a toast. They do **not** submit the form; the user must click the normal sign-in button. Student login uses `POST /api/v1/users/login`, while Admin/TPO login uses `POST /api/v1/admin/login`. Both paths compare the supplied password with the bcrypt hash and issue the existing JWTs; the admin controller additionally checks the admin role and admin profile.
+
+The reported “User does not exist” was caused by the local backend process targeting the isolated `Place-on_e2e_20261016_17f3c9d3` database while the demo accounts were in the confirmed demo database, `Place-on`. The frontend's local API base URL was `http://localhost:8000/api/v1`; therefore it reached the backend, but that backend process was connected to the wrong database. Restarting it without the E2E-only process-local URI override made the backend resolve to `Place-on`. This was a database-target mismatch, not a missing student record or a demo-fill defect.
+
+Both original records were present in `Place-on` with their correct roles and related profiles. No account was provisioned or replaced, and no password, role, or profile was changed for this login verification. Successful normal logins updated the expected last-login and refresh-token state.
+
+| Check | Status | Result |
+|---|---|---|
+| Student Demo quick-fill, field values, normal form submission | **Verified** | Correct displayed email/password populated; normal sign-in reached `/student-dashboard`. |
+| Student sign-out | **Verified** | Sign-out cleared the session and returned to the login page. |
+| Admin/TPO Demo quick-fill, field values, normal form submission | **Verified** | Correct displayed email/password populated; normal sign-in reached `/admin-dashboard`. |
+| Admin sign-out | **Verified** | Sign-out cleared the session and returned to the login page. |
+| Incorrect password | **Verified** | HTTP 401; the UI displays “Invalid email or password”; no authenticated token is stored. |
+| Student account submitted to admin endpoint | **Verified** | HTTP 403 with “This account is not an admin account”; no token is returned. |
+| Missing student account | **Verified** | HTTP 404 with “User does not exist”; the error is shown in the normal login form. |
+| Admin credentials submitted to student endpoint | **Verified** | Server returns the admin role; the client routes by that server role to the admin dashboard rather than granting student access. |
+| Expired/invalid access token | **Verified** | Protected endpoint returns HTTP 401; the browser clears the token, shows “Your session expired,” and redirects to login. |
+| Unauthorized admin API access by a student | **Verified** | Existing authorization check returned HTTP 403; role guards remain in the normal authentication path. |
+
+### Current demo database state and safety
+
+The database used for the login checks was `Place-on` on the existing configured MongoDB deployment. It still contains the two original demo users and their related profiles. It also contains **one demo company and one demo drive** seeded during the separately approved reset described above; there are zero applications and notifications. No company/drive was created, deleted, or modified during this login/UI follow-up.
+
+The requested “no companies/no drives” starting state is therefore **not met**. The current instruction prohibits deleting records as part of this login fix, so this follow-up intentionally left those records untouched. A fresh explicit authorization would be needed before removing the two existing demo records. No destructive seed script was run.
+
+### UI/navigation changes made
+
+- Removed static navigation badges, including the implementation-only “Phase 6” badge; aligned the Admin and Student sidebar brand with CampusFlow; replaced fabricated fallback identity/status indicators; and added accessible labels/current-page semantics and keyboard-operable mobile drawer backdrops.
+- Removed the “Phase 6 Standard” and “CampusFlow V2” presentation labels.
+- Removed a hardcoded “Placement Season 2025–26” heading and replaced a selected-applications/students ratio incorrectly presented as placement conversion with an explicit selected-application count. Active company/drive labels no longer imply verification or upcoming dates.
+- Fixed Admin tab state to follow URL query/history and guard unknown tab values. Student navigation now maps its existing dashboard, drives, applications, and profile routes to their corresponding views and responds to browser back navigation.
+- Reduced login failure console logging to the HTTP status (or a network-error marker); the actual actionable message remains in the UI without logging an Axios stack/request object.
+- No API/service, credential, JWT, password-hashing, or account-provisioning code was changed.
+
+Files changed in this follow-up: `AUDIT_REPORT.md`, `frontend/src/pages/auth/Login.jsx`, `frontend/src/pages/admin/AdminDashboard.jsx`, `frontend/src/pages/student/StudentDashboard.jsx`, `frontend/src/components/admin/AdminOverview.jsx`, `frontend/src/components/admin/AdminSidebar.jsx`, `frontend/src/components/admin/ExcelMigrationHub.jsx`, `frontend/src/components/studentDashboard/ProfileDrawer.jsx`, and `frontend/src/components/studentDashboard/StudentSidebar.jsx`.
+
+### Route/component inventory and verification boundary
+
+The frontend source inventory contains 54 files (35 JSX, 11 JS, 5 CSS, 2 SVG, and 1 PNG). `App.jsx` defines `/`, `/login`, `/signup`, `/student-dashboard`, `/placement-drives`, `/my-applications`, `/student-profile`, `/admin-dashboard`, `/admin/drives`, `/admin/companies`, and `/admin/applications`; additional Admin and Student sections are tabs inside the two dashboard pages.
+
+The route/auth setup, shared navigation, login flow, Admin/Student dashboard pages, Admin overview, student profile drawer, Admin student list/detail modal, API/auth client, login controllers, user model, password hashing, and role middleware were reviewed. The Admin student dossier opened from the live student list and displayed institutional academic data, semester SGPA, prior education, and TPO-confidential family/address sections without a blank-screen crash.
+
+| Area | Status | Evidence / boundary |
+|---|---|---|
+| Student profile/drives routes, sidebar tab changes, and browser back | **Verified** | `/student-profile` rendered Academic Profile; `/placement-drives` opened from mobile navigation; browser back returned to `/student-dashboard`. |
+| Admin list navigation and browser history | **Verified** | Dashboard KPI opened the student directory; back navigation restored the overview. |
+| Student detail drawer/modal | **Verified** | Opened from the Admin student row; populated profile and academic sections rendered. |
+| Responsive layout overflow | **Verified** | Admin and Student dashboard layouts checked at 360, 390, 430, 768, 1366, and 1920 CSS-pixel viewport widths; no horizontal overflow was measured. Mobile Admin navigation to drives also worked. |
+| Frontend production build | **Verified** | `npm run build` passed; largest JS chunk was 299.67 kB. |
+| Frontend lint | **Verified** | `npm run lint` exited successfully: 0 errors and 66 warnings (existing warnings remain). |
+| Student profile persistence, drive CRUD, applications, recruitment lifecycle, notifications, imports/exports, analytics/audit, SMTP, and document-provider workflows | **Not verified in this follow-up** | Not all interactive components were exercised end-to-end; application/recruitment data was empty and external SMTP/document infrastructure was not tested. |
+| Complete inspection/testing of every control in all 54 source files | **Not verified** | A route/component inventory and focused checks were completed, not an exhaustive control-by-control audit. |
+
+The previously recorded isolated E2E/unit test results remain as described in the stabilization report above. They do not constitute proof that every workflow in the current `Place-on` demo database was exercised. The overall audit remains **Partially verified**, not a production-readiness certification.
+
+## Public website and official program catalogue update (2026-10-16)
+
+### Implementation summary
+
+- Reworked the existing public page in place with a CampusFlow-branded hero, capability overview, six-step placement workflow, working sign-in/registration links, and responsive footer/navigation. Unsupported recruiter, drive, statistic, and contact claims are not rendered.
+- Added `major-backend/src/constants/programCatalog.js` as the single authoritative catalogue for the exact eight B.E. branches and five postgraduate programs. Stable codes, canonical labels, level, degree type, and duration are served through the existing public department API. The UI consumes that API rather than maintaining separate program lists.
+- Registration, profile changes, drive targeting, eligibility, notifications, analytics, application snapshots, and spreadsheet output now use stable program codes and exact program resolution. Recognized legacy values resolve only when the degree and any supplied program labels agree; unknown or conflicting values remain unresolved.
+- Placement sessions remain separate from programs. Registration and drive creation require a matching configured session; no fixed placement year or automatic session creation was added.
+- Student and academic import templates no longer include fabricated sample records. Historical placement import now requires an existing matching session, matching student cohort, supported job type/status, and an actual offer date; it no longer substitutes the active session or current date.
+- Added a read-only reconciliation script. No migration, department cleanup, account change, session creation, company/drive seeding, or database reset was performed for this update. `seedCleanState.js` remains destructive and was not executed.
+
+### Existing data inventory (read-only)
+
+The reconciliation script was run against the configured `Place-on` database. It aggregates program strings and counts only; it does not print student names, emails, or USNs and performs no writes.
+
+| Source | Observed values | Dry-run resolution |
+|---|---|---|
+| Student profiles | 1 record; no stable program code; course `B.Tech`; branch/department `Computer Science and Engineering` | Unambiguous suggestion: `CSE` / `Computer Science & Engineering (CSE)` |
+| Department catalogue documents | 1 record; code `CSE`; name `Computer Science and Engineering`; course `B.Tech`; level/type metadata absent | Unambiguous suggestion: `CSE`; the existing document was retained |
+| Drive targeting | 1 value: `Computer Science and Engineering` | Unambiguous suggestion: `CSE`; the historical target was retained |
+| Application snapshots | 0 records | No snapshot values to reconcile |
+
+No ambiguous values were present in those aggregated groups. The inventory is a point-in-time report, not proof that every record in every collection is valid. The existing profile and drive still have legacy text and have **not** been rewritten to canonical codes. No duplicate department documents were observed in this inventory (one record was present).
+
+### Migration/reconciliation plan
+
+1. Keep the current read-only aggregation as the pre-migration inventory.
+2. Reconcile only values whose code, label, program level, and degree type do not conflict; retain all original student, session, application, and offer relationships.
+3. Leave unknown, ambiguous, conflicting, or unsupported values unchanged and flag them for authorized review.
+4. Test any future write migration in a separately confirmed disposable database, compare pre/post counts and references, and obtain explicit authorization before modifying `Place-on`.
+
+No write migration has been applied; therefore no legacy mappings have been performed and no historical relationships have been changed.
+
+### Verification results
+
+| Area | Status | Evidence / boundary |
+|---|---|---|
+| Backend unit tests | **Verified** | `npm test`: 10 passed, 0 failed, including the exact 13 labels/counts, stable-code resolution, conflicting/unsupported values, exact drive matching, and empty/non-fabricated import templates. |
+| Backend syntax | **Verified** | `node --check` passed for the changed catalogue, targeting, controller, model, import/export, reconciliation, and test modules. |
+| Public catalogue API | **Verified** | On an isolated test database, `GET /api/v1/departments` returned 13 programs; level filters returned 8 undergraduate and 5 postgraduate options. |
+| Invalid registration program | **Verified** | The isolated API rejected an unapproved program code with HTTP 400 before creating an account. |
+| Registration program controls | **Verified** | Browser verified all eight undergraduate and all five postgraduate labels through the registration form using the live catalogue endpoint. A student account was not submitted or created. |
+| Program profile persistence for all 13 programs | **Not verified** | No registration or profile write was performed. A valid registration also requires a configured session, which the isolated API test database did not contain. |
+| Drive targeting and eligibility | **Partially verified** | Exact code matching and no-substring behavior pass unit tests; a full authenticated drive-creation/eligibility run was not performed. |
+| Notification recipient targeting | **Partially verified** | The recipient-selection path uses the canonical resolver; recipient counts were not exercised against a populated test cohort. |
+| Excel template generation | **Verified** | Templates contain headers/instructions but no fabricated student/company rows or fixed session year. |
+| Excel import conflict/migration and export contents | **Partially verified** | Import validation and canonical export paths were updated and syntax-checked; database-backed preview/commit and generated report contents were not run end-to-end. No import was committed. |
+| Analytics/reports | **Partially verified** | Program-key grouping and canonical labels are wired into the existing reporting paths; no populated analytics export was generated in this run. |
+| Public links and responsive layout | **Verified** | Home/features/workflow anchors, mobile menu, Sign In and Register navigation, direct public routes, browser back/forward, and no horizontal overflow were checked at 390, 768, 1440, and 1920 CSS-pixel widths. |
+| Demo login cards and credentials | **Partially verified** | Browser confirmed Student and Admin/TPO quick-fill populate the existing exact credentials. A successful login using those demo accounts was not exercised in this update; earlier auth tests used an isolated test admin, and the current catalogue test database did not contain the demo accounts. |
+| Frontend production build | **Verified** | `npm run build` passed after the landing-page and catalogue changes. |
+| Frontend lint | **Partially verified** | `npm run lint` exited successfully with 0 errors and 57 existing warnings, primarily unused imports/variables in pre-existing components. |
+| Database migration and historical preservation | **Not performed** | No database records were modified. A dedicated write-migration test was not run because no write migration was implemented or authorized. |
+
+### Files changed for this update
+
+- Public website: `frontend/index.html`; `frontend/src/components/HomePageDashboard/{Home,PlatformFeatures,ProcessWorkflow,IndexHome,Navbar,Footer}.jsx`.
+- Program forms, routes, and student/admin UI: `frontend/src/pages/{auth/Login,auth/Signup,admin/AdminDashboard,student/StudentDashboard}.jsx`; `frontend/src/components/studentDashboard/{ProfileDrawer,StudentNavbar,StudentSidebar}.jsx`; `frontend/src/components/admin/{AdminOverview,AdminSidebar,ExcelMigrationHub,ManageDrives,ManageStudents,ManageApplications,ManageSessions,PlacementAnalytics,StudentDetailModal}.jsx`; `frontend/src/services/sessionService.js`.
+- Catalogue and workflows: `major-backend/src/constants/programCatalog.js`; `major-backend/src/services/{programTargeting.service,eligibility.service,excelImportExport.service}.js`; `major-backend/src/controllers/{department,user,studentProfile,placementSession,placementDrive,notification,dashboard,application}.controller.js`; `major-backend/src/models/{studentProfile,placementDrive,department,application}.model.js`; `major-backend/src/routes/placementSession.routes.js`.
+- Safety/testing utilities: `major-backend/src/scripts/reconcileProgramCatalog.js`; `major-backend/src/scripts/seedCleanState.js` (updated but not run); `major-backend/tests/programCatalog.test.js`; `AUDIT_REPORT.md`.
+
+**Overall status remains Partially verified.** The catalogue API, program options, public landing page, exact targeting logic, and safe read-only inventory were checked. Full database-backed profile, drive, import/export, notification, and analytics workflows still require integration tests against a separately confirmed disposable database. No migration success is claimed.

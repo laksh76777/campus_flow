@@ -18,7 +18,15 @@ const departmentSchema = new mongoose.Schema(
         course: {
             type: String,
             trim: true,
-            default: "B.Tech"
+            default: undefined
+        },
+        programLevel: {
+            type: String,
+            enum: ["Undergraduate", "Postgraduate"]
+        },
+        degreeType: {
+            type: String,
+            enum: ["B.E.", "MBA", "MCA", "M.Tech"]
         },
         college: {
             type: String,

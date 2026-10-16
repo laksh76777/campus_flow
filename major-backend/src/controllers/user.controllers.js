@@ -3,7 +3,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { User } from "../models/user.models.js";
 import { StudentProfile } from "../models/studentProfile.model.js";
 import { PlacementSession } from "../models/placementSession.model.js";
-import { Department } from "../models/department.model.js";
+import { getCatalogProgram, normalizeDegreeType } from "../constants/programCatalog.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
@@ -52,10 +52,11 @@ const registerUser = asyncHandler(async (req, res) => {
         phone,
         usn,
         enrollmentNumber,
+        programCode,
+        programLevel,
+        degreeType,
         course,
         courseDurationYears,
-        department,
-        branch,
         admissionYear,
         graduationYear,
         semester,
@@ -90,78 +91,43 @@ const registerUser = asyncHandler(async (req, res) => {
         }
     }
 
-    // 3. Department validation (if departments exist in college database)
-    const selectedDeptName = (department || branch || "").trim();
-    let validatedDeptName = selectedDeptName || "Computer Science and Engineering (CSE)";
-
-    if (selectedDeptName) {
-        const deptDoc = await Department.findOne({
-            $or: [
-                { name: new RegExp(`^${selectedDeptName}$`, "i") },
-                { code: selectedDeptName.toUpperCase() }
-            ]
-        });
-
-        if (deptDoc) {
-            if (!deptDoc.isActive) {
-                throw new ApiError(400, `The department '${deptDoc.name}' is currently inactive. Please choose an active department.`);
-            }
-            validatedDeptName = deptDoc.name;
-        }
+    // 3. Academic program validation against the authoritative catalogue
+    const selectedProgram = getCatalogProgram(programCode);
+    if (!selectedProgram) {
+        throw new ApiError(400, "A valid approved programCode is required");
     }
+    if (
+        (programLevel && programLevel !== selectedProgram.programLevel) ||
+        (degreeType && normalizeDegreeType(degreeType) !== selectedProgram.degreeType) ||
+        (course && normalizeDegreeType(course) !== selectedProgram.degreeType)
+    ) {
+        throw new ApiError(400, "Program level or degree type does not match the selected academic program");
+    }
+    const validatedDeptName = selectedProgram.name;
 
     // 4. Academic Cohort and Placement Session Assignment
-    const selectedCourse = (course || "B.Tech").trim();
-    const duration =
-        selectedCourse === "MCA" || selectedCourse === "M.Tech"
-            ? 2
-            : (Number(courseDurationYears) || 4);
+    const selectedCourse = selectedProgram.degreeType;
+    const duration = selectedProgram.durationYears;
+    if (courseDurationYears !== undefined && Number(courseDurationYears) !== duration) {
+        throw new ApiError(400, "Course duration does not match the selected academic program");
+    }
 
     let resolvedAdmissionYear = admissionYear ? Number(admissionYear) : null;
     let resolvedGraduationYear = graduationYear ? Number(graduationYear) : null;
-
-    // Ensure at least standard default sessions exist if database is fresh
-    if ((await PlacementSession.countDocuments()) === 0) {
-        const currentYear = new Date().getFullYear();
-        const cohorts = [2025, 2026, 2027, 2028, 2029];
-        for (const yr of cohorts) {
-            await PlacementSession.create({
-                sessionYear: yr,
-                name: `Class of ${yr} Placement Session`,
-                academicYear: `${yr - 1}-${yr}`,
-                isActive: yr === 2027,
-                status: "ACTIVE"
-            });
-        }
+    if (!Number.isInteger(resolvedAdmissionYear) || resolvedAdmissionYear < 1900 || resolvedAdmissionYear > 2200) {
+        throw new ApiError(400, "A valid admission year is required");
     }
 
     let targetSession = null;
 
-    if (resolvedAdmissionYear && !resolvedGraduationYear) {
+    if (!resolvedGraduationYear) {
         resolvedGraduationYear = resolvedAdmissionYear + duration;
-    } else if (!resolvedAdmissionYear && resolvedGraduationYear) {
-        resolvedAdmissionYear = resolvedGraduationYear - duration;
-    } else if (resolvedAdmissionYear && resolvedGraduationYear) {
+    } else {
         if (resolvedGraduationYear !== resolvedAdmissionYear + duration) {
             throw new ApiError(
                 400,
                 `Invalid graduation year (${resolvedGraduationYear}). For a ${duration}-year ${selectedCourse} course starting in ${resolvedAdmissionYear}, expected graduation year is ${resolvedAdmissionYear + duration}.`
             );
-        }
-    } else {
-        // Fallback for minimal legacy registration: Link to active or open session
-        targetSession =
-            (await PlacementSession.findOne({ isActive: true })) ||
-            (await PlacementSession.findOne({ isClosed: false, isArchived: false })) ||
-            (await PlacementSession.findOne({ sessionYear: 2027 })) ||
-            (await PlacementSession.findOne().sort({ sessionYear: -1 }));
-
-        if (targetSession) {
-            resolvedGraduationYear = targetSession.sessionYear;
-            resolvedAdmissionYear = resolvedGraduationYear - duration;
-        } else {
-            resolvedGraduationYear = new Date().getFullYear() + 4;
-            resolvedAdmissionYear = resolvedGraduationYear - duration;
         }
     }
 
@@ -237,6 +203,9 @@ const registerUser = asyncHandler(async (req, res) => {
             enrollmentNumber: finalUsn,
             usn: finalUsn,
             course: selectedCourse,
+            programCode: selectedProgram.code,
+            programLevel: selectedProgram.programLevel,
+            degreeType: selectedProgram.degreeType,
             branch: validatedDeptName,
             department: validatedDeptName,
             admissionYear: resolvedAdmissionYear,

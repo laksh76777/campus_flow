@@ -145,7 +145,7 @@ export default function StudentNavbar({
 
           <span className="hidden md:inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-semibold text-blue-700 border border-blue-100 ml-2">
             <Sparkles className="h-3 w-3 text-blue-500" />
-            2025-26 Live Season
+            Placement workspace
           </span>
         </div>
       </div>

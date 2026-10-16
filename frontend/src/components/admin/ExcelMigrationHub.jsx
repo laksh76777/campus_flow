@@ -245,14 +245,9 @@ export default function ExcelMigrationHub({ sessions = [], drives = [], onRefres
               <FileSpreadsheet className="h-6 w-6" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-black tracking-tight text-slate-900">
-                  Excel Import, Migration & Exports Hub
-                </h1>
-                <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-black text-emerald-800 border border-emerald-200">
-                  Phase 6 Standard
-                </span>
-              </div>
+              <h1 className="text-xl font-black tracking-tight text-slate-900">
+                Excel Import, Migration & Exports Hub
+              </h1>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
                 Safe bulk student records ingestion, independent academic history imports, historical outcomes migration, and auditable reporting exports.
               </p>

@@ -9,14 +9,13 @@ import {
   LayoutDashboard,
   ShieldCheck,
   ChevronRight,
-  Sparkles,
 } from "lucide-react";
 import { useAuth } from "../../context/authContextDef";
 
 export default function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
-  const { isAuthenticated, user, userRole, logout } = useAuth();
+  const { isAuthenticated, userRole, logout } = useAuth();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -28,10 +27,8 @@ export default function Navbar() {
 
   const navLinks = [
     { name: "Home", href: "#home" },
-    { name: "Live Drives", href: "#drives" },
-    { name: "Top Recruiters", href: "#companies" },
+    { name: "Features", href: "#features" },
     { name: "How It Works", href: "#process" },
-    { name: "Contact Cell", href: "#contact" },
   ];
 
   const closeMenu = () => setIsMenuOpen(false);
@@ -58,12 +55,12 @@ export default function Navbar() {
           <div>
             <div className="flex items-center gap-1.5">
               <span className="text-lg font-extrabold tracking-tight text-slate-900">
-                Placement Portal
+                CampusFlow
               </span>
               
             </div>
             <p className="text-[11px] font-medium text-slate-500">
-              Campus Placement Management System
+              College placement management
             </p>
           </div>
         </a>

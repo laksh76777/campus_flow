@@ -4,6 +4,7 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { Notification } from "../models/notification.model.js";
 import { User } from "../models/user.models.js";
 import { StudentProfile } from "../models/studentProfile.model.js";
+import { resolveProgram, resolveStudentProgram } from "../constants/programCatalog.js";
 import { Application } from "../models/application.model.js";
 import { PlacementDrive } from "../models/placementDrive.model.js";
 
@@ -84,6 +85,7 @@ export const broadcastAnnouncement = asyncHandler(async (req, res) => {
         title,
         message,
         targetAudience = "all",
+        targetProgramCode,
         targetBranch,
         targetSessionYear,
         driveId,
@@ -93,10 +95,14 @@ export const broadcastAnnouncement = asyncHandler(async (req, res) => {
     if (!title || !message) {
         throw new ApiError(400, "Announcement title and message are required");
     }
+    if (!["all", "branch", "program", "session", "drive_applicants"].includes(targetAudience)) {
+        throw new ApiError(400, "Unsupported announcement audience");
+    }
 
     let targetUserIds = [];
 
-    if (targetAudience === "drive_applicants" && driveId) {
+    if (targetAudience === "drive_applicants") {
+        if (!driveId) throw new ApiError(400, "A placement drive is required for the selected audience");
         const apps = await Application.find({
             placementDrive: driveId,
             status: { $ne: "withdrawn" }
@@ -107,17 +113,30 @@ export const broadcastAnnouncement = asyncHandler(async (req, res) => {
             .filter(Boolean);
     } else {
         const profileFilter = {};
-        if (targetAudience === "branch" && targetBranch) {
-            profileFilter.branch = targetBranch;
+        if (targetAudience === "program" || targetAudience === "branch") {
+            const program = targetProgramCode
+                ? resolveProgram(targetProgramCode)
+                : resolveProgram(targetBranch);
+            if (!program) throw new ApiError(400, "Select one approved academic program for this announcement");
+            const profiles = await StudentProfile.find()
+                .select("user programCode programLevel degreeType course branch department")
+                .lean();
+            targetUserIds = profiles
+                .filter((profile) => resolveStudentProgram(profile)?.code === program.code)
+                .map((profile) => profile.user)
+                .filter(Boolean);
         }
         if (targetAudience === "session" && targetSessionYear) {
             profileFilter.graduationYear = Number(targetSessionYear);
+        }
+        if (targetAudience === "session" && !targetSessionYear) {
+            throw new ApiError(400, "A placement session graduation year is required for the selected audience");
         }
 
         if (Object.keys(profileFilter).length > 0) {
             const profiles = await StudentProfile.find(profileFilter).select("user");
             targetUserIds = profiles.map((p) => p.user).filter(Boolean);
-        } else {
+        } else if (targetAudience !== "program" && targetAudience !== "branch") {
             // All students
             const students = await User.find({ role: "student", isActive: true }).select("_id");
             targetUserIds = students.map((s) => s._id);
@@ -152,4 +171,3 @@ export const broadcastAnnouncement = asyncHandler(async (req, res) => {
         )
     );
 });
-

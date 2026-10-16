@@ -31,27 +31,26 @@ import {
   addSemesterResult,
   addBacklogRecord
 } from "../../services/studentService";
+import { getPublicDepartments } from "../../services/authService";
 import { getResumeViewUrl } from "../../utils/resumeHelper";
 
-const BRANCH_OPTIONS = [
-  "Computer Science and Engineering",
-  "Information Science and Engineering",
-  "Electronics and Communication Engineering",
-  "Electrical and Electronics Engineering",
-  "Mechanical Engineering",
-  "Civil Engineering",
-  "Artificial Intelligence and Machine Learning",
-  "CSE",
-  "ISE",
-  "ECE",
-  "EEE",
-  "ME",
-  "CE",
-  "AIML",
-  "Other"
-];
-
-const COURSE_OPTIONS = ["B.Tech", "B.E.", "M.Tech", "MCA", "BCA", "B.Sc", "MBA", "Other"];
+const LEGACY_PROGRAM_CODES = {
+  "computer science and engineering": "CSE",
+  "computer science and engineering (cse)": "CSE",
+  "information science and engineering": "ISE",
+  "information science and engineering (ise)": "ISE",
+  "electronics and communication engineering": "ECE",
+  "electronics and communication engineering (ece)": "ECE",
+  "electronics and instrumentation engineering": "EIE",
+  "robotics and automation": "RA",
+  "civil engineering": "CIVIL",
+  "mechanical engineering": "MECH",
+  "mechanical engineering (me)": "MECH",
+  "computer science and engineering - artificial intelligence and machine learning": "CSE-AIML",
+  "m.tech in data science": "MTECH-DS",
+  "m.tech in vlsi design and embedded systems": "MTECH-VLSI",
+  "m.tech in thermal engineering": "MTECH-THERMAL",
+};
 const BOARD_OPTIONS = ["CBSE", "ICSE", "State Board", "Other"];
 const TWELFTH_BOARD_OPTIONS = ["CBSE", "ISC", "State Board", "Other"];
 const GAP_REASONS = [
@@ -77,6 +76,7 @@ export default function ProfileDrawer({
   const [saving, setSaving] = useState(false);
   const [resumeFile, setResumeFile] = useState(null);
   const [uploadingResume, setUploadingResume] = useState(false);
+  const [programs, setPrograms] = useState([]);
 
   useEffect(() => {
     if (isOpen) {
@@ -84,6 +84,16 @@ export default function ProfileDrawer({
       if (initialEditing) setIsEditing(true);
     }
   }, [isOpen, initialSection, initialEditing]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    getPublicDepartments()
+      .then((response) => setPrograms(response.data || []))
+      .catch((error) => {
+        console.error("Failed to load approved academic programs:", error);
+        toast.error("Could not load approved academic programs");
+      });
+  }, [isOpen]);
 
   // Modal for editing an individual semester SGPA
   const [editingSem, setEditingSem] = useState(null); // { semester: 1, sgpa: "8.5" }
@@ -107,12 +117,11 @@ export default function ProfileDrawer({
   // Comprehensive Form State
   const [formData, setFormData] = useState({
     // College & Degree
-    course: "B.Tech",
-    branch: "Computer Science and Engineering",
-    customBranch: "",
-    semester: 6,
-    graduationYear: 2027,
-    admissionYear: 2023,
+    programLevel: "",
+    programCode: "",
+    semester: "",
+    graduationYear: "",
+    admissionYear: "",
     cgpa: "",
     about: "",
     skills: "React, Node.js, Python, SQL",
@@ -187,16 +196,16 @@ export default function ProfileDrawer({
   // Sync state with incoming studentProfile prop
   useEffect(() => {
     if (studentProfile) {
-      const isCustom =
-        studentProfile.branch && !BRANCH_OPTIONS.includes(studentProfile.branch);
+      const legacyBranch = (studentProfile.branch || studentProfile.department || "").trim();
+      const normalizedBranch = legacyBranch.toLowerCase();
+      const legacyProgramCode = LEGACY_PROGRAM_CODES[normalizedBranch] || "";
 
       setFormData({
-        course: studentProfile.course || "B.Tech",
-        branch: isCustom ? "Other" : studentProfile.branch || studentProfile.department || "Computer Science and Engineering",
-        customBranch: isCustom ? (studentProfile.branch || studentProfile.department) : "",
-        semester: studentProfile.semester ?? studentProfile.currentSemester ?? 6,
-        graduationYear: studentProfile.graduationYear ?? 2027,
-        admissionYear: studentProfile.admissionYear ?? (studentProfile.graduationYear ? studentProfile.graduationYear - 4 : 2023),
+        programLevel: studentProfile.programLevel || "",
+        programCode: studentProfile.programCode || legacyProgramCode,
+        semester: studentProfile.semester ?? studentProfile.currentSemester ?? "",
+        graduationYear: studentProfile.graduationYear ?? "",
+        admissionYear: studentProfile.admissionYear ?? "",
         cgpa: studentProfile.cgpa ?? studentProfile.verifiedCGPA ?? "",
         about: studentProfile.about || "",
         skills: Array.isArray(studentProfile.skills)
@@ -276,6 +285,19 @@ export default function ProfileDrawer({
     }
   }, [studentProfile]);
 
+  useEffect(() => {
+    if (!studentProfile || programs.length === 0) return;
+    const currentCode = studentProfile.programCode || LEGACY_PROGRAM_CODES[(studentProfile.branch || studentProfile.department || "").trim().toLowerCase()];
+    const program = programs.find((item) => item.code === currentCode);
+    if (program) {
+      setFormData((previous) => ({
+        ...previous,
+        programCode: previous.programCode || program.code,
+        programLevel: previous.programLevel || program.programLevel,
+      }));
+    }
+  }, [studentProfile, programs]);
+
   if (!isOpen) return null;
 
   const displayName = user?.fullName || studentProfile?.user?.fullName || "Student Candidate";
@@ -302,15 +324,20 @@ export default function ProfileDrawer({
     e.preventDefault();
     setSaving(true);
 
-    const actualBranch =
-      formData.branch === "Other" && formData.customBranch.trim()
-        ? formData.customBranch.trim()
-        : formData.branch;
+    const selectedProgram = programs.find((program) => program.code === formData.programCode);
+    if (!selectedProgram || selectedProgram.programLevel !== formData.programLevel) {
+      toast.error("Select a valid approved academic program before saving");
+      setSaving(false);
+      return;
+    }
 
     const payload = {
-      course: formData.course,
-      branch: actualBranch,
-      department: actualBranch,
+      programCode: selectedProgram.code,
+      programLevel: selectedProgram.programLevel,
+      degreeType: selectedProgram.degreeType,
+      course: selectedProgram.degreeType,
+      branch: selectedProgram.name,
+      department: selectedProgram.name,
       semester: Number(formData.semester),
       currentSemester: Number(formData.semester),
       graduationYear: Number(formData.graduationYear),
@@ -570,7 +597,7 @@ export default function ProfileDrawer({
                   {verification}
                 </span>
               </div>
-              <p className="text-xs text-slate-500 font-medium">CampusFlow V2 Verified Candidate Profile</p>
+              <p className="text-xs text-slate-500 font-medium">Verified candidate profile</p>
             </div>
           </div>
           <button
@@ -643,10 +670,11 @@ export default function ProfileDrawer({
                     USN: {enrollment}
                   </span>
                   <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
-                    {studentProfile?.course || "B.Tech"} - {studentProfile?.branch || studentProfile?.department || "CSE"}
+                    {programs.find((program) => program.code === (studentProfile?.programCode || formData.programCode))?.name
+                      || studentProfile?.branch || studentProfile?.department || "Program requires review"}
                   </span>
                   <span className="text-[11px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
-                    Grad: Class of {studentProfile?.graduationYear ?? 2027}
+                    Grad: {studentProfile?.graduationYear ?? "Not assigned"}
                   </span>
                   <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
                     CGPA: {studentProfile?.verifiedCGPA ?? studentProfile?.cgpa ?? "Not entered"}
@@ -677,27 +705,29 @@ export default function ProfileDrawer({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Degree Course *</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Program Level *</label>
                     <select
-                      value={formData.course}
-                      onChange={(e) => setFormData({ ...formData, course: e.target.value })}
+                      value={formData.programLevel}
+                      onChange={(e) => setFormData({ ...formData, programLevel: e.target.value, programCode: "" })}
                       className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500"
                     >
-                      {COURSE_OPTIONS.map((c) => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
+                      <option value="">Select program level</option>
+                      <option value="Undergraduate">Undergraduate</option>
+                      <option value="Postgraduate">Postgraduate</option>
                     </select>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Department / Branch *</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Academic Program *</label>
                     <select
-                      value={formData.branch}
-                      onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
+                      value={formData.programCode}
+                      disabled={!formData.programLevel}
+                      onChange={(e) => setFormData({ ...formData, programCode: e.target.value })}
                       className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500"
                     >
-                      {BRANCH_OPTIONS.map((b) => (
-                        <option key={b} value={b}>{b}</option>
+                      <option value="">Select academic program</option>
+                      {programs.filter((program) => program.programLevel === formData.programLevel).map((program) => (
+                        <option key={program.code} value={program.code}>{program.name}</option>
                       ))}
                     </select>
                   </div>
@@ -1204,7 +1234,7 @@ export default function ProfileDrawer({
                     <div className="rounded-xl border border-slate-200 bg-white p-3.5">
                       <span className="text-[11px] font-bold text-slate-400">Session Cohort</span>
                       <p className="text-xl font-black text-indigo-600 mt-0.5">
-                        {studentProfile?.graduationYear ?? 2027}
+                        {studentProfile?.graduationYear ?? ""}
                       </p>
                     </div>
                   </div>

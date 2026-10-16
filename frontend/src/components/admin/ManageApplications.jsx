@@ -85,7 +85,7 @@ export default function ManageApplications({
       const fullName = user.fullName || student.fullName || "";
       const email = user.email || student.email || "";
       const enrollmentNo = student.enrollmentNumber || "";
-      const branch = student.branch || "";
+      const branch = student.branch || student.department || "";
 
       const query = searchTerm.toLowerCase();
       return (
@@ -463,8 +463,8 @@ export default function ManageApplications({
             const user = student.user || {};
             const studentName = user.fullName || student.fullName || "Candidate";
             const studentEmail = user.email || student.email || "student@campus.edu";
-            const enrollmentNo = student.enrollmentNumber || "ENR-2026";
-            const branch = student.branch || "CSE";
+            const enrollmentNo = student.enrollmentNumber || "Not assigned";
+            const branch = student.branch || student.department || "Program not provided";
             const cgpa = student.cgpa ?? "8.2";
             const backlogs = student.backlogs ?? student.activeBacklogs ?? 0;
             const rawResumeUrl = student.resume?.url || student.resumeUrl;
