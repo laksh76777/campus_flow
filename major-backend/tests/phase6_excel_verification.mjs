@@ -21,6 +21,7 @@ import {
     generateDepartmentReportExport,
     generateHistoricalPlacementSummaryExport
 } from "../src/services/excelImportExport.service.js";
+import { resolveMongoConnection } from "../src/db/index.js";
 
 dotenv.config({ path: "./.env" });
 
@@ -29,8 +30,13 @@ const runPhase6Verification = async () => {
     console.log("   CAMPUSFLOW V2 PHASE 6: EXCEL IMPORT, MIGRATION & EXPORTS TEST SUITE         ");
     console.log("================================================================================");
 
-    await mongoose.connect(process.env.MONGODB_URI);
-    console.log(" connected to MongoDB successfully.\n");
+    const baseUri = process.env.TEST_MONGODB_URI || process.env.MONGODB_URI;
+    const { connectionUri, databaseName } = resolveMongoConnection(baseUri);
+    const isolatedDb = process.env.TEST_DATABASE_NAME || (databaseName === "Place-on" ? `Place-on_e2e_phase6_${Date.now()}` : databaseName);
+    const parsed = new URL(connectionUri);
+    parsed.pathname = `/${isolatedDb}`;
+    await mongoose.connect(parsed.toString());
+    console.log(` connected to isolated test database: ${parsed.host}/${isolatedDb}\n`);
 
     const stats = { passed: 0, failed: 0 };
     const assert = (condition, message) => {
@@ -469,6 +475,8 @@ const runPhase6Verification = async () => {
         console.log(` PHASE 6 VERIFICATION COMPLETE: ${stats.passed} PASSED, ${stats.failed} FAILED `);
         console.log("================================================================================");
 
+        await mongoose.disconnect();
+
         if (stats.failed === 0) {
             process.exit(0);
         } else {
@@ -476,6 +484,7 @@ const runPhase6Verification = async () => {
         }
     } catch (error) {
         console.error("❌ Exception during Phase 6 verification:", error);
+        await mongoose.disconnect().catch(() => {});
         process.exit(1);
     }
 };

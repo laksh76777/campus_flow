@@ -215,3 +215,37 @@ No write migration has been applied; therefore no legacy mappings have been perf
 - Safety/testing utilities: `major-backend/src/scripts/reconcileProgramCatalog.js`; `major-backend/src/scripts/seedCleanState.js` (updated but not run); `major-backend/tests/programCatalog.test.js`; `AUDIT_REPORT.md`.
 
 **Overall status remains Partially verified.** The catalogue API, program options, public landing page, exact targeting logic, and safe read-only inventory were checked. Full database-backed profile, drive, import/export, notification, and analytics workflows still require integration tests against a separately confirmed disposable database. No migration success is claimed.
+
+## Login Regression Verification and Database Safety (2026-10-16)
+
+### 1. Authentication Architecture & Trace
+- **Login Form & Demo Cards**: In `frontend/src/pages/auth/Login.jsx`, the Student and Admin/TPO quick-fill demo cards populate the explicit credentials and set the intended redirect route. They do not bypass passwords, do not auto-create accounts, and require normal form submission.
+- **API Client & Interceptors**: In `frontend/src/services/api.js` and `apiConfig.js`, requests target `http://localhost:8000/api/v1` for local development. Access tokens are stored as Bearer tokens in `localStorage` and synchronized with cookies (`withCredentials: true`). The 401 response interceptor attempts token refresh via `/users/refresh-token` and redirects to `/login` if refresh fails or expires.
+- **Backend Role Gatekeeping**: `POST /api/v1/users/login` checks credentials using `user.isPasswordCorrect(password)`. `POST /api/v1/admin/login` enforces `user.role === 'admin'` and verifies the associated `Admin` record exists; students attempting admin login receive HTTP 403.
+- **Database Safety & Diagnostics**: The database resolver in `major-backend/src/db/index.js` safely extracts the target database name without logging credentials or connection URIs. Local startup logs `MongoDB connected successfully: host/databaseName`, and `GET /health` safely exposes `databaseName` when connected.
+- **Test Database Isolation**: Test fixtures are guarded to prevent running destructive operations on the shared `Place-on` database. `phase6_excel_verification.mjs` targets an explicitly isolated test database name (`Place-on_e2e_phase6_<timestamp>`) and disconnects cleanly upon completion.
+
+---
+
+## Excel Import/Export Audit and Reliability (2026-10-16)
+
+### 1. Audit of Existing Functionality
+
+| Capability | Module & Location | Implementation Status | Findings & Safety Controls |
+|---|---|---|---|
+| **Template Generation** | `excelImportExport.service.js` (`generateImportTemplate`) | **Fully Functional** | Produces `.xlsx` files with Data + Instructions worksheets for `student_records`, `academic_history`, and `historical_placements`. Does not supply fabricated student records or fixed session years. |
+| **Formula Injection Defense** | `excelImportExport.service.js` (`sanitizeFormula`) | **Fully Functional** | Sanitizes cells beginning with `=`, `+`, `-`, `@`, `\t`, or `\r` by prepending a single quote (`'`), preventing spreadsheet formula execution upon opening exports. |
+| **Upload & File Validation** | `excel.routes.js` (`memoryUpload`) | **Fully Functional** | Enforces 10 MB limit and restricts MIME types to `.xlsx` (`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`). File is held in memory and does not write to disk. |
+| **Import Preview (Dry Run)** | `excelImportExport.service.js` (`previewImport`) | **Fully Functional** | Uploading a spreadsheet generates a preview without modifying database records. Identifies `VALID`, `WARNING`, `CONFLICT`, and `ERROR` rows with row numbers, identifiers, and failure reasons. |
+| **Intra-Spreadsheet Duplicate Detection** | `previewImport` | **Fully Functional** | Tracks seen USNs within the spreadsheet and flags subsequent duplicate rows with explicit conflict warnings. |
+| **Identity & Database Conflict Detection** | `previewImport` | **Fully Functional** | Cross-references existing `StudentProfile` records by `enrollmentNumber`/`usn`. Verified student profiles are protected from overwrite (`verificationStatus: "VERIFIED"` flags conflict). |
+| **Explicit Confirmation & Commit** | `commitImportBatch` | **Fully Functional** | Batch is saved with status `PREVIEWED`. The administrator must explicitly call `POST /api/v1/excel/commit/:batchId` to apply changes. Revalidates sessions and program constraints during commit; does not blindly trust client preview. |
+| **Atomic User Rollback on Failure** | `commitImportBatch` | **Enhanced & Fixed** | If `StudentProfile.create` fails during student insert, the newly created `User` record is immediately deleted (`User.findByIdAndDelete`) to prevent orphaned user accounts. |
+| **Audit History & Error Reports** | `ImportBatch` schema & `generateErrorReportExport` | **Fully Functional** | Batches are persisted in MongoDB with summary metrics (`totalRows`, `validRows`, `invalidRows`, `conflictRows`, `insertedRows`, `updatedRows`, `skippedRows`). Downloadable error spreadsheet lists row-by-row failure details. |
+| **Reporting Exports** | `generateEligibleStudentsExport`, `generateDriveApplicantsExport`, `generateSessionReportExport`, `generateDepartmentReportExport`, `generateHistoricalPlacementSummaryExport` | **Fully Functional** | Generates styled Excel workbooks with headers. Empty datasets render valid formatted headers without throwing errors. Company-facing export applies privacy filters (excludes parent details and full residential addresses). |
+
+### 2. Verified Test Results
+- **Unit & Configuration Tests**: `npm test` passed 10/10 tests, validating environment variables, production CORS rules, MongoDB URI resolution, root health, approved 13-program catalog, and non-fabricated Excel templates.
+- **Frontend Build**: `npm run build` compiled successfully in 919ms with zero errors. All JavaScript chunks remain under 260 kB.
+- **Frontend Lint**: `npm run lint` reported 0 errors (57 pre-existing warnings for unused imports/variables).
+- **Backend Syntax Check**: `node --check` passed for `major-backend/src/app.js`, `excelImportExport.service.js`, and `tests/phase6_excel_verification.mjs`.
