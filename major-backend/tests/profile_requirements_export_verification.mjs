@@ -84,8 +84,20 @@ async function run() {
     if (!placementSessionId) {
         const getSessionsRes = await fetch(`${BASE_URL}/api/v1/sessions`);
         const sessionsData = await getSessionsRes.json();
-        const active = sessionsData.data?.find((s) => s.sessionYear === 2027) || sessionsData.data?.[0];
-        placementSessionId = active._id;
+        const session2027 = sessionsData.data?.find((s) => s.sessionYear === 2027);
+        placementSessionId = session2027?._id;
+    }
+
+    if (!placementSessionId) {
+        throw new Error("Unable to create or resolve the placement session for graduation year 2027");
+    }
+
+    const activateSessionRes = await fetch(`${BASE_URL}/api/v1/sessions/${placementSessionId}/activate`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${adminToken}` }
+    });
+    if (!activateSessionRes.ok) {
+        throw new Error(`Unable to activate the 2027 placement session (HTTP ${activateSessionRes.status})`);
     }
 
     test("Placement Session resolved", () => {
@@ -137,15 +149,18 @@ async function run() {
         })
     });
     const s1RegData = await s1RegRes.json();
-    student1Token = s1RegData.data.accessToken;
-    student1ProfileId = s1RegData.data.studentProfile?._id;
-    student1UserId = s1RegData.data.user?._id;
+    student1Token = s1RegData.data?.accessToken || "";
+    student1ProfileId = s1RegData.data?.studentProfile?._id || "";
+    student1UserId = s1RegData.data?.user?._id || "";
 
     test("Student 1 registered and profile linked", () => {
         assert.equal(s1RegRes.status, 201);
         assert.ok(student1Token, "Student 1 token should exist");
         assert.ok(student1ProfileId, "Student 1 profile ID should exist");
     });
+    if (!student1Token || !student1ProfileId) {
+        throw new Error(`Student 1 registration failed (HTTP ${s1RegRes.status}): ${s1RegData.message || "missing account data"}`);
+    }
 
     // 5. Register Student 2
     const s2Email = `student2_${uniqueId}@campus.edu`;
@@ -168,13 +183,16 @@ async function run() {
         })
     });
     const s2RegData = await s2RegRes.json();
-    student2Token = s2RegData.data.accessToken;
-    student2ProfileId = s2RegData.data.studentProfile?._id;
+    student2Token = s2RegData.data?.accessToken || "";
+    student2ProfileId = s2RegData.data?.studentProfile?._id || "";
 
     test("Student 2 registered and profile linked", () => {
         assert.equal(s2RegRes.status, 201);
         assert.ok(student2Token, "Student 2 token should exist");
     });
+    if (!student2Token || !student2ProfileId) {
+        throw new Error(`Student 2 registration failed (HTTP ${s2RegRes.status}): ${s2RegData.message || "missing account data"}`);
+    }
 
     console.log("\n[Test Group 1] Structured Academic Profile, Independent SGPA & Overall CGPA");
 

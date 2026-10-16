@@ -155,9 +155,9 @@ cd ../frontend
 npm install
 ```
 
-### 3. Initialize & Seed Pristine Database
+### 3. Initialize a Disposable Database (Destructive)
 
-To reset the database, purge test artifacts, and provision official placement sessions, departments, TPO officer, demo student, and an active drive:
+**This script deletes every record in all configured application collections before creating demo data. Never run it against a shared, staging, or production database. Confirm the effective `MONGODB_URI` database name and use an explicitly disposable database before running:**
 ```powershell
 cd major-backend
 node src/scripts/seedCleanState.js
@@ -174,6 +174,8 @@ npm run dev
 cd frontend
 npm run dev
 ```
+
+For production, set `VITE_API_URL` in the frontend hosting provider's build environment to the deployed backend origin ending in `/api/v1`. Set backend `CORS_ORIGIN` to the exact HTTPS frontend origin. Do not use a wildcard with credentialed API requests.
 
 Visit [`http://localhost:5173`](http://localhost:5173) in your browser.
 

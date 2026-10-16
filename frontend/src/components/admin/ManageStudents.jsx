@@ -19,6 +19,7 @@ import StudentDetailModal from "./StudentDetailModal";
 
 export default function ManageStudents({
   students = [],
+  dataStatus = "loaded",
   onRefresh,
 }) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -60,8 +61,8 @@ export default function ManageStudents({
         backlogFilter === "all"
           ? true
           : backlogFilter === "zero"
-          ? (s.backlogs ?? 0) === 0
-          : (s.backlogs ?? 0) > 0;
+          ? (s.activeBacklogs ?? s.backlogs) === 0
+          : (s.activeBacklogs ?? s.backlogs) > 0;
 
       const matchesPlaced =
         placedFilter === "all"
@@ -86,13 +87,21 @@ export default function ManageStudents({
   // Cohort statistics
   const stats = useMemo(() => {
     const total = students.length;
-    const zeroBacklogs = students.filter((s) => (s.backlogs ?? 0) === 0).length;
+    const zeroBacklogs = students.filter(
+      (s) => (s.activeBacklogs ?? s.backlogs) === 0
+    ).length;
     const withResume = students.filter((s) => s.resume?.url).length;
     const placed = students.filter((s) => s.isPlaced === true).length;
+    const cgpaValues = students
+      .map((s) => s.verifiedCGPA ?? s.cgpa)
+      .filter((cgpa) => typeof cgpa === "number" && Number.isFinite(cgpa));
     const avgCgpa =
-      total > 0
-        ? (students.reduce((acc, s) => acc + (s.cgpa ?? 0), 0) / total).toFixed(2)
-        : "8.45";
+      cgpaValues.length > 0
+        ? (
+            cgpaValues.reduce((totalCgpa, cgpa) => totalCgpa + cgpa, 0) /
+            cgpaValues.length
+          ).toFixed(2)
+        : "N/A";
 
     return { total, zeroBacklogs, withResume, avgCgpa, placed };
   }, [students]);
@@ -181,7 +190,11 @@ export default function ManageStudents({
           <h2 className="text-xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2.5">
             <span>Registered Students Directory</span>
             <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700 border border-blue-100">
-              {filteredStudents.length} Students
+              {dataStatus === "loading" && students.length === 0
+                ? "Loading..."
+                : dataStatus === "error" && students.length === 0
+                ? "Unavailable"
+                : `${filteredStudents.length} Students`}
             </span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -288,9 +301,19 @@ export default function ManageStudents({
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400 mb-3">
             <Users className="h-6 w-6" />
           </div>
-          <h3 className="text-sm font-bold text-slate-800">No student profiles found</h3>
+          <h3 className="text-sm font-bold text-slate-800">
+            {dataStatus === "loading"
+              ? "Loading student profiles"
+              : dataStatus === "error"
+              ? "Unable to load student profiles"
+              : "No student profiles found"}
+          </h3>
           <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-            {searchQuery || branchFilter !== "all"
+            {dataStatus === "loading"
+              ? "Student records are being retrieved."
+              : dataStatus === "error"
+              ? "The student request failed. Check the admin session and API connection, then refresh."
+              : searchQuery || branchFilter !== "all"
               ? "No registered students match the selected filter criteria."
               : "Students will appear here once they register and activate their academic profiles."}
           </p>
@@ -316,10 +339,10 @@ export default function ManageStudents({
                   const name =
                     student.user?.fullName || student.fullName || "Candidate";
                   const email =
-                    student.user?.email || student.email || "student@college.edu";
+                    student.user?.email || student.email || "No email available";
                   const initial = name.charAt(0).toUpperCase();
-                  const cgpa = student.cgpa ?? 8.5;
-                  const backlogs = student.backlogs ?? 0;
+                  const cgpa = student.verifiedCGPA ?? student.cgpa;
+                  const backlogs = student.activeBacklogs ?? student.backlogs;
                   const hasResume = !!student.resume?.url;
 
                   return (
@@ -350,18 +373,18 @@ export default function ManageStudents({
                       {/* Enrollment ID */}
                       <td className="py-3.5 px-3">
                         <span className="font-mono text-[11px] font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/60">
-                          {student.enrollmentNumber || "ENR-2022"}
+                          {student.enrollmentNumber || student.usn || "Not assigned"}
                         </span>
                       </td>
 
                       {/* Branch & Semester */}
                       <td className="py-3.5 px-3">
                         <div className="font-semibold text-slate-800">
-                          {student.branch || "Computer Science"}
+                          {student.branch || student.department || "Not provided"}
                         </div>
                         <div className="text-[11px] text-slate-400">
-                          Sem {student.semester || 6} • Batch of{" "}
-                          {student.graduationYear || 2026}
+                          Sem {student.semester ?? student.currentSemester ?? "—"} • Batch of{" "}
+                          {student.graduationYear ?? "—"}
                         </div>
                         {(student.tenthPercentage != null || student.twelfthPercentage != null || student.certificates?.length > 0) && (
                           <div className="text-[10px] text-slate-500 mt-1 flex flex-wrap gap-1.5 items-center">
@@ -388,15 +411,15 @@ export default function ManageStudents({
                       <td className="py-3.5 px-3 text-center">
                         <span
                           className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-extrabold ${
-                            cgpa >= 8.5
+                            cgpa != null && cgpa >= 8.5
                               ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                              : cgpa >= 7.0
+                              : cgpa != null && cgpa >= 7.0
                               ? "bg-blue-50 text-blue-700 border border-blue-200"
                               : "bg-slate-100 text-slate-700"
                           }`}
                         >
                           <Award className="h-3 w-3" />
-                          <span>{cgpa}</span>
+                          <span>{cgpa ?? "N/A"}</span>
                         </span>
                       </td>
 
@@ -407,6 +430,8 @@ export default function ManageStudents({
                             <CheckCircle2 className="h-3 w-3" />
                             <span>0 Active</span>
                           </span>
+                        ) : backlogs == null ? (
+                          <span className="text-[11px] text-slate-400">N/A</span>
                         ) : (
                           <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
                             <AlertCircle className="h-3 w-3" />
@@ -417,7 +442,7 @@ export default function ManageStudents({
 
                       {/* Placement Status */}
                       <td className="py-3.5 px-3 text-center">
-                        {student.isPlaced ? (
+                        {student.isPlaced === true ? (
                           <div className="flex flex-col items-center gap-0.5">
                             <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-300">
                               ✓ Placed
@@ -431,18 +456,17 @@ export default function ManageStudents({
                               <span className="text-[9px] text-slate-500">₹{student.placedPackage} LPA</span>
                             )}
                           </div>
-                        ) : (
+                        ) : student.isPlaced === false ? (
                           <span className="text-[11px] text-slate-400 font-medium">⏳ Seeking</span>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 font-medium">Not specified</span>
                         )}
                       </td>
 
                       {/* Skills */}
                       <td className="py-3.5 px-3 max-w-xs">
                         <div className="flex flex-wrap gap-1">
-                          {(Array.isArray(student.skills) && student.skills.length > 0
-                            ? student.skills.slice(0, 3)
-                            : ["React", "Python", "SQL"]
-                          ).map((skill, i) => (
+                          {(Array.isArray(student.skills) ? student.skills.slice(0, 3) : []).map((skill, i) => (
                             <span
                               key={i}
                               className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600"
@@ -450,6 +474,12 @@ export default function ManageStudents({
                               {skill}
                             </span>
                           ))}
+                          {(!Array.isArray(student.skills) ||
+                            student.skills.length === 0) && (
+                            <span className="text-[10px] text-slate-400 italic">
+                              No skills listed
+                            </span>
+                          )}
                           {Array.isArray(student.skills) &&
                             student.skills.length > 3 && (
                               <span className="text-[10px] text-slate-400 font-semibold self-center">

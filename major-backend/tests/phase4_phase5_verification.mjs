@@ -415,6 +415,18 @@ async function runTests() {
         assert(offerRes.status === 200, "Legal transition to 'offer_received' succeeded (HTTP 200)");
         assert(offerData.data?.offerDetails?.designation === "Associate Software Engineer - L1", "Offer details designation saved");
         assert(offerData.data?.offerDetails?.studentDecision === "pending", "Initial student offer decision is 'pending'");
+
+        const notificationRes = await fetch(`${BASE_URL}/api/v1/notifications`, {
+            headers: { Authorization: `Bearer ${studentEligibleToken}` }
+        });
+        const notificationData = await notificationRes.json();
+        const offerNotification = notificationData.data?.notifications?.find(
+            (notification) => String(notification.application) === String(createdAppId)
+        );
+        assert(
+            notificationRes.status === 200 && offerNotification?.type === "offer",
+            "Offer transition creates a retrievable in-app notification linked to the application"
+        );
     } catch (err) {
         assert(false, "Recruitment lifecycle state machine completed", err.message);
     }

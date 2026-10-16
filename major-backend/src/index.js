@@ -1,22 +1,23 @@
-import "../env.js"
+import "../env.js";
 import connectDB from "./db/index.js";
-import {app} from "./app.js";
-console.log("Envirnment variables loaded successgfully.");
-connectDB().then(()=>{
-    app.on("error", (error) => {
-      console.log("The application is unable to talk with the database", error);
-      throw error;
-    });
+import { app } from "./app.js";
+import { validateEnvironment } from "./config.js";
 
-    const port = process.env.PORT || 8000;
+try {
+    validateEnvironment();
+    await connectDB();
 
+    const port = Number(process.env.PORT) || 8000;
     app.listen(port, "0.0.0.0", () => {
-        console.log(`Server is running on port ${port}`);
+        console.log(`Server is listening on port ${port}`);
     });
-})
-.catch((err)=>{
-    console.log("Mongodb connection failed !!!",err);
-});
+} catch (error) {
+    const errorCode = error?.code || error?.name || "ConfigurationError";
+    console.error(
+        `Server startup failed (${errorCode}). Check required environment settings and MongoDB connectivity.`
+    );
+    process.exitCode = 1;
+}
 
 
 

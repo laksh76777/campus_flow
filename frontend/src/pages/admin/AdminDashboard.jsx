@@ -41,6 +41,7 @@ export default function AdminDashboard({ initialTab = "overview" }) {
   // Core Data States
   const [stats, setStats] = useState(null);
   const [students, setStudents] = useState([]);
+  const [studentsLoadState, setStudentsLoadState] = useState("loading");
   const [companies, setCompanies] = useState([]);
   const [drives, setDrives] = useState([]);
   const [applications, setApplications] = useState([]);
@@ -70,6 +71,8 @@ export default function AdminDashboard({ initialTab = "overview" }) {
   const loadDashboardData = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
 
+    const failedSections = [];
+
     try {
       // 1. Fetch Placement Sessions
       try {
@@ -81,17 +84,25 @@ export default function AdminDashboard({ initialTab = "overview" }) {
           if (activeSess && selectedSessionId === "all") {
             // Keep "all" or select active
           }
+        } else {
+          failedSections.push("placement sessions (unexpected response)");
         }
       } catch (err) {
         console.warn("Failed to fetch sessions:", err.message);
+        failedSections.push("placement sessions");
       }
 
       // 2. Fetch Stats
       try {
         const statsRes = await getAdminDashboardStats();
-        if (statsRes?.data) setStats(statsRes.data);
+        if (statsRes?.data && typeof statsRes.data === "object") {
+          setStats(statsRes.data);
+        } else {
+          failedSections.push("dashboard statistics (unexpected response)");
+        }
       } catch (err) {
         console.warn("Failed to fetch dashboard stats:", err.message);
+        failedSections.push("dashboard statistics");
       }
 
       // 3. Fetch Students Cohort
@@ -100,10 +111,15 @@ export default function AdminDashboard({ initialTab = "overview" }) {
         const studentsData = studentsRes?.data?.students || studentsRes?.data;
         if (Array.isArray(studentsData)) {
           setStudents(studentsData);
+          setStudentsLoadState("loaded");
+        } else {
+          setStudentsLoadState("error");
+          failedSections.push("student records (unexpected response)");
         }
       } catch (err) {
         console.warn("Failed to fetch students:", err.message);
-        setStudents([]);
+        setStudentsLoadState("error");
+        failedSections.push("student records");
       }
 
       // 4. Fetch Companies
@@ -111,10 +127,12 @@ export default function AdminDashboard({ initialTab = "overview" }) {
         const compRes = await getAllCompanies();
         if (Array.isArray(compRes?.data)) {
           setCompanies(compRes.data);
+        } else {
+          failedSections.push("companies (unexpected response)");
         }
       } catch (err) {
         console.warn("Failed to fetch companies:", err.message);
-        setCompanies([]);
+        failedSections.push("companies");
       }
 
       // 5. Fetch Drives
@@ -122,10 +140,12 @@ export default function AdminDashboard({ initialTab = "overview" }) {
         const driveRes = await getAllPlacementDrives();
         if (Array.isArray(driveRes?.data)) {
           setDrives(driveRes.data);
+        } else {
+          failedSections.push("placement drives (unexpected response)");
         }
       } catch (err) {
         console.warn("Failed to fetch placement drives:", err.message);
-        setDrives([]);
+        failedSections.push("placement drives");
       }
 
       // 6. Fetch all applications
@@ -134,13 +154,24 @@ export default function AdminDashboard({ initialTab = "overview" }) {
         const appsData = appsRes?.data?.applications || appsRes?.data;
         if (Array.isArray(appsData)) {
           setApplications(appsData);
+        } else {
+          failedSections.push("applications (unexpected response)");
         }
       } catch (err) {
         console.warn("Failed to fetch applications:", err.message);
-        setApplications([]);
+        failedSections.push("applications");
+      }
+
+      if (failedSections.length > 0) {
+        toast.error(
+          `Unable to load ${failedSections.join(", ")}. Check the API connection and admin session.`
+        );
       }
     } catch (err) {
       console.warn("Failed to fetch fresh admin data:", err.message);
+      toast.error(
+        err.response?.data?.message || "Failed to load admin dashboard data."
+      );
     } finally {
       setRefreshing(false);
     }
@@ -367,6 +398,7 @@ export default function AdminDashboard({ initialTab = "overview" }) {
           {activeTab === "students" && (
             <ManageStudents
               students={scopedStudents}
+              dataStatus={studentsLoadState}
               sessions={sessions}
               onRefresh={() => loadDashboardData(true)}
             />

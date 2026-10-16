@@ -470,8 +470,7 @@ export default function ProfileDrawer({
       setEditingSem(null);
       setSemSgpaInput("");
       if (onProfileUpdated && res?.data) {
-        studentProfile.semesterResults = res.data.semesterResults;
-        onProfileUpdated({ ...studentProfile });
+        onProfileUpdated({ semesterResults: res.data.semesterResults });
       }
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to record semester SGPA");
@@ -496,10 +495,13 @@ export default function ProfileDrawer({
       setBacklogSubCode("");
       setBacklogSubName("");
       if (onProfileUpdated && res?.data) {
-        studentProfile.backlogDetails = res.data.backlogDetails;
-        studentProfile.activeBacklogs = res.data.activeBacklogs;
-        studentProfile.clearedBacklogsCount = res.data.clearedBacklogsCount;
-        onProfileUpdated({ ...studentProfile });
+        onProfileUpdated({
+          backlogDetails: res.data.backlogDetails,
+          activeBacklogs: res.data.activeBacklogs,
+          clearedBacklogsCount: res.data.clearedBacklogsCount,
+          historicalBacklogs: res.data.historicalBacklogs,
+          backlogs: res.data.backlogs,
+        });
       }
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to add backlog record");

@@ -5,7 +5,7 @@
 // 3. Session activation & closure lifecycle
 // 4. Safe backfill preview & execution for existing unlinked records
 // 5. Upgraded Student Profile structured persistence (personal, family, address, 10th/12th)
-// 6. Semester-wise SGPA recording & Institutional credit-weighted CGPA calculation
+// 6. Semester-wise SGPA recording without overwriting the student's official CGPA
 // 7. Backlogs tracking (Active vs Cleared historical arrears)
 // 8. TPO Profile verification workflow (VERIFIED / REVERIFICATION_REQUESTED)
 
@@ -261,8 +261,8 @@ async function runTests() {
         assert(false, "Structured student profile test completed", err.message);
     }
 
-    // Phase 3: Semester SGPA Ledger & Institutional CGPA Calculation
-    console.log("\n[Test Group 4] Semester Results Ledger & Institutional CGPA Calculation");
+    // Phase 3: Semester SGPA Ledger & Official CGPA Preservation
+    console.log("\n[Test Group 4] Semester Results Ledger & Official CGPA Preservation");
     try {
         // Record Sem 1: SGPA 8.0 with 20 credits
         const sem1Res = await fetch(`${BASE_URL}/api/v1/studentprofile/semester-result`, {
@@ -280,7 +280,6 @@ async function runTests() {
         assert(sem1Res.status === 200, "POST /semester-result records Semester 1 SGPA");
 
         // Record Sem 2: SGPA 9.0 with 20 credits
-        // Expected CGPA: (8.0 * 20 + 9.0 * 20) / 40 = 8.5
         const sem2Res = await fetch(`${BASE_URL}/api/v1/studentprofile/semester-result`, {
             method: "POST",
             headers: {
@@ -296,9 +295,9 @@ async function runTests() {
         const sem2Data = await sem2Res.json();
         assert(sem2Res.status === 200, "POST /semester-result records Semester 2 SGPA");
         assert(
-            sem2Data.data?.cgpa === 8.5,
-            "Institutional CGPA correctly calculated via credit-weighted SGPA formula (8.5 CGPA)",
-            `Calculated CGPA: ${sem2Data.data?.cgpa}`
+            sem2Data.data?.cgpa == null,
+            "Semester SGPA results do not fabricate or overwrite the official CGPA",
+            `Returned CGPA: ${sem2Data.data?.cgpa}`
         );
     } catch (err) {
         assert(false, "Semester SGPA test completed", err.message);

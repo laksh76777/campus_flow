@@ -605,12 +605,18 @@ const updateApplicationStatus = asyncHandler(async (req, res) => {
 
         try {
             await Notification.create({
-                recipient: studentUser._id,
+                user: studentUser._id,
                 title: notifTitle,
                 message: remarks || `Your application status for ${jobTitle} at ${companyName} is now "${status}".`,
                 type: notifType,
-                relatedDrive: application.placementDrive?._id,
-                relatedApplication: application._id
+                companyName,
+                jobTitle,
+                remarks: remarks || "",
+                interviewDate: application.interviewDate,
+                interviewRound: application.interviewRound,
+                interviewLocation: application.interviewLocation,
+                offeredPackage: application.offeredPackage,
+                application: application._id
             });
         } catch (notifErr) {
             console.error("Failed to create in-app notification:", notifErr.message);

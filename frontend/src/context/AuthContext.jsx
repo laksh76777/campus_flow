@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import toast from "react-hot-toast";
 import api from "../services/api";
 import { AuthContext, useAuth } from "./authContextDef";
 
@@ -83,6 +84,26 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     fetchUserData();
   }, [fetchUserData]);
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      if (!localStorage.getItem("accessToken")) {
+        return;
+      }
+
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("userRole");
+      setToken("");
+      setUser(null);
+      setUserRole(null);
+      setStudentProfile(null);
+      toast.error("Your session expired. Please sign in again.");
+    };
+
+    window.addEventListener("campusflow:unauthorized", handleUnauthorized);
+    return () =>
+      window.removeEventListener("campusflow:unauthorized", handleUnauthorized);
+  }, []);
 
   const login = (newToken, userData, explicitRole = null) => {
     localStorage.setItem("accessToken", newToken);

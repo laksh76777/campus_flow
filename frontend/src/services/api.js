@@ -1,6 +1,5 @@
 import axios from "axios";
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1";
+import { API_BASE_URL, API_CONFIGURATION_ERROR } from "./apiConfig";
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -13,6 +12,10 @@ const api = axios.create({
 // Request interceptor: attach bearer token if present
 api.interceptors.request.use(
   (config) => {
+    if (API_CONFIGURATION_ERROR) {
+      return Promise.reject(new Error(API_CONFIGURATION_ERROR));
+    }
+
     const token = localStorage.getItem("accessToken");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -27,7 +30,7 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      console.warn("Unauthorized request or session expired");
+      window.dispatchEvent(new Event("campusflow:unauthorized"));
     }
     return Promise.reject(error);
   }

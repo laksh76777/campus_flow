@@ -108,22 +108,32 @@ export default function StudentDashboard() {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
 
+    const failedSections = [];
+    let sessionExpired = false;
+    const recordLoadFailure = (section, error) => {
+      console.warn(`${section} load failed:`, error.message);
+      failedSections.push(section);
+      sessionExpired ||= error.response?.status === 401;
+    };
+
     try {
       // 1. Fetch Student Profile
       try {
         const profileRes = await getCurrentStudentProfile();
-        if (profileRes.data) {
+        if (profileRes.data && typeof profileRes.data === "object") {
           setStudentProfile(profileRes.data);
           if (profileRes.data.user) setUser(profileRes.data.user);
+        } else {
+          failedSections.push("student profile (unexpected response)");
         }
       } catch (err) {
-        console.warn("Student profile note:", err.message);
+        recordLoadFailure("Student profile", err);
       }
 
       // 2. Fetch Dashboard Stats
       try {
         const statsRes = await getStudentDashboardStats();
-        if (statsRes.data) {
+        if (statsRes.data && typeof statsRes.data === "object") {
           setDashboardStats(statsRes.data);
           if (statsRes.data.upcomingDrives?.length > 0) {
             setEligibleDrives(statsRes.data.upcomingDrives);
@@ -131,9 +141,11 @@ export default function StudentDashboard() {
           if (statsRes.data.recentApplications?.length > 0) {
             setApplications(statsRes.data.recentApplications);
           }
+        } else {
+          failedSections.push("dashboard statistics (unexpected response)");
         }
       } catch (err) {
-        console.warn("Dashboard stats note:", err.message);
+        recordLoadFailure("Dashboard statistics", err);
       }
 
       // 3. Fetch Eligible Drives directly
@@ -141,9 +153,11 @@ export default function StudentDashboard() {
         const drivesRes = await getMyEligibleDrives();
         if (Array.isArray(drivesRes?.data)) {
           setEligibleDrives(drivesRes.data);
+        } else {
+          failedSections.push("eligible drives (unexpected response)");
         }
       } catch (err) {
-        console.warn("Eligible drives note:", err.message);
+        recordLoadFailure("Eligible drives", err);
       }
 
       // 4. Fetch All Applications
@@ -151,9 +165,15 @@ export default function StudentDashboard() {
         const appsRes = await getMyApplications();
         if (Array.isArray(appsRes?.data)) {
           setApplications(appsRes.data);
+        } else {
+          failedSections.push("applications (unexpected response)");
         }
       } catch (err) {
-        console.warn("Applications note:", err.message);
+        recordLoadFailure("Applications", err);
+      }
+
+      if (failedSections.length > 0 && !sessionExpired) {
+        toast.error(`Unable to load ${failedSections.join(", ")}.`);
       }
     } catch (error) {
       console.error("Dashboard data load error:", error);
@@ -161,7 +181,7 @@ export default function StudentDashboard() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [authUser?.role, navigate, userRole]);
 
   useEffect(() => {
     loadDashboardData();
