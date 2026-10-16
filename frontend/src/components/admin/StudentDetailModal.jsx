@@ -15,19 +15,24 @@ import {
   Sparkles,
   Users,
   Check,
-  RotateCcw
+  RotateCcw,
+  Trash2
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { getResumeViewUrl } from "../../utils/resumeHelper";
-import { verifyStudentProfile } from "../../services/studentService";
+import { verifyStudentProfile, deleteBacklogRecord } from "../../services/studentService";
 
 export default function StudentDetailModal({ student, isOpen, onClose, onStudentVerified }) {
   const [verifying, setVerifying] = useState(false);
   const [currentVerification, setCurrentVerification] = useState(student?.verificationStatus || "PENDING");
+  const [isLocked, setIsLocked] = useState(Boolean(student?.isProfileLocked));
+  const [backlogList, setBacklogList] = useState(Array.isArray(student?.backlogDetails) ? student.backlogDetails : []);
 
   useEffect(() => {
     if (student) {
       setCurrentVerification(student.verificationStatus || "PENDING");
+      setIsLocked(Boolean(student.isProfileLocked));
+      setBacklogList(Array.isArray(student.backlogDetails) ? student.backlogDetails : []);
     }
   }, [student]);
 
@@ -93,15 +98,43 @@ export default function StudentDetailModal({ student, isOpen, onClose, onStudent
         verificationRemarks: remarks,
         verifiedCGPA: student.cgpa
       });
-      toast.success(`Candidate profile status set to ${status}!`);
+      const lockedState = status === "VERIFIED";
       setCurrentVerification(status);
+      setIsLocked(lockedState);
+      toast.success(
+        status === "REVERIFICATION_REQUESTED"
+          ? "All profile fields unlocked! Candidate can now edit all records & backlogs."
+          : "Candidate profile verified and officially locked!"
+      );
       if (onStudentVerified && res?.data) {
-        onStudentVerified(res.data);
+        onStudentVerified({ ...res.data, isProfileLocked: lockedState });
       }
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to update candidate verification status");
     } finally {
       setVerifying(false);
+    }
+  };
+
+  const handleDeleteBacklogAdmin = async (backlogId) => {
+    if (!window.confirm("Are you sure you want to delete this backlog record for the student?")) return;
+    try {
+      const res = await deleteBacklogRecord(backlogId, student._id);
+      toast.success("Backlog record deleted successfully!");
+      const updated = backlogList.filter((b) => b._id !== backlogId);
+      setBacklogList(updated);
+      if (onStudentVerified) {
+        onStudentVerified({
+          ...student,
+          backlogDetails: updated,
+          activeBacklogs: res?.data?.activeBacklogs ?? 0,
+          clearedBacklogsCount: res?.data?.clearedBacklogsCount ?? 0,
+          historicalBacklogs: res?.data?.historicalBacklogs ?? 0,
+          backlogs: res?.data?.backlogs ?? 0
+        });
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to delete backlog record");
     }
   };
 
@@ -145,14 +178,20 @@ export default function StudentDetailModal({ student, isOpen, onClose, onStudent
                       ? "bg-emerald-500/20 text-emerald-300 border-emerald-400/30"
                       : currentVerification === "REJECTED"
                       ? "bg-rose-500/20 text-rose-300 border-rose-400/30"
+                      : currentVerification === "REVERIFICATION_REQUESTED"
+                      ? "bg-cyan-500/20 text-cyan-300 border-cyan-400/30"
                       : "bg-amber-500/20 text-amber-300 border-amber-400/30"
                   }`}
                 >
-                  {currentVerification}
+                  {currentVerification === "REVERIFICATION_REQUESTED" ? "Re-Verification Enabled" : currentVerification}
                 </span>
-                {student.isProfileLocked && (
+                {isLocked ? (
                   <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-orange-500/20 text-orange-300 border border-orange-400/30">
                     🔒 Locked Profile
+                  </span>
+                ) : (
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                    🔓 Unlocked (All Fields Editable)
                   </span>
                 )}
               </div>
@@ -386,16 +425,16 @@ export default function StudentDetailModal({ student, isOpen, onClose, onStudent
             </div>
           </div>
 
-          {(backlogDetails.length > 0 || skills.length > 0 || certificates.length > 0 || about) && (
+          {(backlogList.length > 0 || skills.length > 0 || certificates.length > 0 || about) && (
             <div className="space-y-4">
-              {backlogDetails.length > 0 && (
+              {backlogList.length > 0 && (
                 <section>
                   <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                     <BookOpen className="h-4 w-4 text-rose-500" />
-                    <span>Backlog Records</span>
+                    <span>Backlog Records ({backlogList.length})</span>
                   </h4>
                   <div className="space-y-2">
-                    {backlogDetails.map((backlog, idx) => {
+                    {backlogList.map((backlog, idx) => {
                       const isCleared = backlog.status === "CLEARED";
                       return (
                         <div key={backlog._id || idx} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 text-xs">
@@ -408,10 +447,20 @@ export default function StudentDetailModal({ student, isOpen, onClose, onStudent
                               Semester {backlog.semester ?? "N/A"} · Attempts {backlog.attempts ?? "N/A"}
                             </p>
                           </div>
-                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 font-bold ${isCleared ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
-                            {isCleared ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
-                            {isCleared ? "Cleared" : "Active"}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 font-bold ${isCleared ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
+                              {isCleared ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+                              {isCleared ? "Cleared" : "Active"}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteBacklogAdmin(backlog._id)}
+                              className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition"
+                              title="Delete Backlog Record"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                         </div>
                       );
                     })}
@@ -463,24 +512,24 @@ export default function StudentDetailModal({ student, isOpen, onClose, onStudent
             <button
               onClick={() => handleVerify("VERIFIED")}
               disabled={verifying}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 transition shadow-xs disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-emerald-700 transition shadow-xs disabled:opacity-50"
             >
               <Check className="h-3.5 w-3.5" />
-              <span>Verify Profile</span>
+              <span>Verify Profile (Lock)</span>
             </button>
             <button
-              onClick={() => handleVerify("REVERIFICATION_REQUESTED", "Academic metrics require updated marksheets.")}
+              onClick={() => handleVerify("REVERIFICATION_REQUESTED", "Academic metrics require updated re-verification. All profile fields unlocked for student.")}
               disabled={verifying}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-100 transition disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-800 hover:bg-amber-100 transition disabled:opacity-50"
             >
               <RotateCcw className="h-3.5 w-3.5" />
-              <span>Request Re-check</span>
+              <span>Allow All / Re-Verify (Unlock All Fields)</span>
             </button>
           </div>
 
           <button
             onClick={onClose}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition"
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition"
           >
             Close
           </button>

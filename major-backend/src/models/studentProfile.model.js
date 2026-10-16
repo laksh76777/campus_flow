@@ -542,6 +542,11 @@ studentProfileSchema.pre("save", async function () {
         this.clearedBacklogsCount = cleared;
         this.historicalBacklogs = this.backlogDetails.length;
         this.backlogs = active; // maintain legacy backlogs field
+    } else if (Array.isArray(this.backlogDetails) && this.backlogDetails.length === 0) {
+        this.activeBacklogs = 0;
+        this.clearedBacklogsCount = 0;
+        this.historicalBacklogs = 0;
+        this.backlogs = 0;
     } else if (this.backlogs !== undefined) {
         this.activeBacklogs = this.backlogs;
     }
