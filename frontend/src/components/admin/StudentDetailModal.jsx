@@ -196,9 +196,19 @@ export default function StudentDetailModal({ student, isOpen, onClose, onStudent
                 )}
               </div>
 
-              <div className="flex flex-wrap items-center gap-3 mt-1.5 text-xs text-white/70">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1.5 text-xs text-white/80">
                 <span className="font-mono bg-white/10 px-2 py-0.5 rounded-md text-white font-bold">
                   USN: {enrollmentNo}
+                </span>
+                <span>•</span>
+                <span className="font-mono bg-white/10 px-2 py-0.5 rounded-md text-white font-bold flex items-center gap-1">
+                  <Phone className="h-3 w-3 text-cyan-300" />
+                  {phone || "No Mobile"}
+                </span>
+                <span>•</span>
+                <span className="font-mono bg-white/10 px-2 py-0.5 rounded-md text-white font-bold flex items-center gap-1">
+                  <Mail className="h-3 w-3 text-cyan-300" />
+                  {email}
                 </span>
                 <span>•</span>
                 <span>{course} - {branch}</span>
@@ -425,48 +435,62 @@ export default function StudentDetailModal({ student, isOpen, onClose, onStudent
             </div>
           </div>
 
-          {(backlogList.length > 0 || skills.length > 0 || certificates.length > 0 || about) && (
-            <div className="space-y-4">
-              {backlogList.length > 0 && (
-                <section>
-                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                    <BookOpen className="h-4 w-4 text-rose-500" />
-                    <span>Backlog Records ({backlogList.length})</span>
-                  </h4>
-                  <div className="space-y-2">
-                    {backlogList.map((backlog, idx) => {
-                      const isCleared = backlog.status === "CLEARED";
-                      return (
-                        <div key={backlog._id || idx} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 text-xs">
-                          <div>
-                            <p className="font-bold text-slate-800">
-                              {backlog.subjectCode || "Subject code not provided"}
-                              {backlog.subjectName ? ` - ${backlog.subjectName}` : ""}
-                            </p>
-                            <p className="text-slate-500">
-                              Semester {backlog.semester ?? "N/A"} · Attempts {backlog.attempts ?? "N/A"}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 font-bold ${isCleared ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
-                              {isCleared ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
-                              {isCleared ? "Cleared" : "Active"}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteBacklogAdmin(backlog._id)}
-                              className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition"
-                              title="Delete Backlog Record"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
+          <div className="space-y-4">
+            <section>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <BookOpen className="h-4 w-4 text-rose-500" />
+                  <span>Backlog Records ({backlogList.length})</span>
+                </h4>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${backlogList.filter(b => b.status === "ACTIVE").length === 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-50 text-rose-700 border border-rose-200"}`}>
+                  {backlogList.filter(b => b.status === "ACTIVE").length === 0 ? "0 Active (Clear)" : `${backlogList.filter(b => b.status === "ACTIVE").length} Active Arrears`}
+                </span>
+              </div>
+              {backlogList.length === 0 ? (
+                <div className="p-3.5 rounded-2xl border border-emerald-200 bg-emerald-50/70 text-xs text-emerald-800 font-bold flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    <span>Clean Academic Track Record: 0 Active Backlogs (All Clear).</span>
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-100 text-emerald-800 uppercase font-black">
+                    Clean
+                  </span>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {backlogList.map((backlog, idx) => {
+                    const isCleared = backlog.status === "CLEARED";
+                    return (
+                      <div key={backlog._id || idx} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 text-xs">
+                        <div>
+                          <p className="font-bold text-slate-800">
+                            {backlog.subjectCode || "Subject code not provided"}
+                            {backlog.subjectName ? ` - ${backlog.subjectName}` : ""}
+                          </p>
+                          <p className="text-slate-500">
+                            Semester {backlog.semester ?? "N/A"} · Attempts {backlog.attempts ?? "N/A"}
+                          </p>
                         </div>
-                      );
-                    })}
-                  </div>
-                </section>
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 font-bold ${isCleared ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
+                            {isCleared ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+                            {isCleared ? "Cleared" : "Active"}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteBacklogAdmin(backlog._id)}
+                            className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition"
+                            title="Delete Backlog Record"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
+            </section>
 
               {(skills.length > 0 || certificates.length > 0 || about) && (
                 <section>
@@ -502,8 +526,7 @@ export default function StudentDetailModal({ student, isOpen, onClose, onStudent
                 </section>
               )}
             </div>
-          )}
-        </div>
+          </div>
 
         {/* Footer with One-Click TPO Verification Controls */}
         <div className="p-4 border-t border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-3 shrink-0">

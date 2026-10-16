@@ -114,6 +114,9 @@ export default function StudentDashboard() {
     if (f.includes("backlog")) {
       return "backlogs";
     }
+    if (f.includes("certificate") || f.includes("credential")) {
+      return "certificates";
+    }
     if (f.includes("gap")) {
       return "gaps";
     }
@@ -467,11 +470,10 @@ export default function StudentDashboard() {
     }
 
     const checklist = [
-      { field: "Basic Details", completed: Boolean(studentProfile?.enrollmentNumber && (user?.fullName || authUser?.fullName)), points: 15, hint: "Name & Enrollment number" },
-      { field: "Contact Info", completed: Boolean(user?.email && (user?.phone || studentProfile?.phone)), points: 10, hint: "Email & Phone number" },
+      { field: "Basic Details", completed: Boolean(studentProfile?.enrollmentNumber && (user?.fullName || authUser?.fullName)), points: 20, hint: "Name & Enrollment number" },
+      { field: "Contact Info", completed: Boolean(user?.email && (user?.phone || studentProfile?.phone || studentProfile?.alternatePhone)), points: 15, hint: "Email & Phone number" },
       { field: "Academic Standing", completed: Boolean(studentProfile?.branch && studentProfile?.cgpa), points: 25, hint: "Branch & CGPA" },
-      { field: "10th & 12th Marks", completed: Boolean(studentProfile?.tenthPercentage && studentProfile?.twelfthPercentage), points: 15, hint: "Board exam percentages" },
-      { field: "Skills Portfolio", completed: Boolean(studentProfile?.skills && studentProfile.skills.length >= 3), points: 15, hint: "Add at least 3 skills" },
+      { field: "10th & 12th Marks", completed: Boolean(studentProfile?.tenthPercentage && studentProfile?.twelfthPercentage), points: 20, hint: "Board exam percentages" },
       { field: "Verified Resume", completed: Boolean(studentProfile?.resume?.url), points: 20, hint: "Uploaded verified resume" }
     ];
 
@@ -1251,8 +1253,8 @@ export default function StudentDashboard() {
                   </div>
 
                   <button
-                    onClick={() => setIsProfileDrawerOpen(true)}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-2xs"
+                    onClick={() => handleOpenProfileToSection("certificates", true)}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-2xs cursor-pointer"
                   >
                     <Plus className="h-3.5 w-3.5 text-blue-600" />
                     <span>Manage</span>
@@ -1269,8 +1271,8 @@ export default function StudentDashboard() {
                       Add your certifications and verification links to impress campus recruiters.
                     </p>
                     <button
-                      onClick={() => setIsProfileDrawerOpen(true)}
-                      className="mt-3 inline-flex items-center gap-1 rounded-xl bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100 transition border border-blue-100"
+                      onClick={() => handleOpenProfileToSection("certificates", true)}
+                      className="mt-3 inline-flex items-center gap-1 rounded-xl bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100 transition border border-blue-100 cursor-pointer"
                     >
                       <Plus className="h-3.5 w-3.5" />
                       <span>Add Credentials</span>
