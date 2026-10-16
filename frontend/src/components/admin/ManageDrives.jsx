@@ -10,6 +10,7 @@ import {
   Users,
   Clock,
   X,
+  Bell,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { getPublicDepartments } from "../../services/authService";
@@ -57,6 +58,11 @@ const getDefaultFormData = () => {
     driveDate: new Date(now + 20 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
     venue: "Main Campus Auditorium & Online OA",
     jobDescription: "",
+    reminderSettings: {
+      remindersEnabled: true,
+      reminderOffsetsHours: [6],
+      channels: ["in_app", "email"]
+    },
     studentRequirements: DEFAULT_FIELDS.map(f => ({ ...f }))
   };
 };
@@ -678,6 +684,135 @@ export default function ManageDrives({
                   onChange={(e) => setFormData({ ...formData, jobDescription: e.target.value })}
                   className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs focus:border-blue-500 focus:outline-none resize-none"
                 />
+              </div>
+
+              {/* Application Deadline Reminder Settings */}
+              <div className="rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-indigo-100 text-indigo-700">
+                      <Bell className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900">
+                        Application Deadline Reminders
+                      </h4>
+                      <p className="text-[11px] text-slate-500">
+                        Automatically alert eligible candidates who have not yet submitted their application.
+                      </p>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.reminderSettings?.remindersEnabled ?? true}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          reminderSettings: {
+                            ...prev.reminderSettings,
+                            remindersEnabled: e.target.checked
+                          }
+                        }))
+                      }
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                  </label>
+                </div>
+
+                {formData.reminderSettings?.remindersEnabled && (
+                  <div className="space-y-3 pt-2 border-t border-indigo-100/80">
+                    <div>
+                      <span className="block text-[11px] font-bold text-slate-700 mb-1.5">
+                        Reminder Timing (Hours Before Deadline)
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        {[1, 3, 6, 12, 24].map((hours) => {
+                          const isSelected = formData.reminderSettings?.reminderOffsetsHours?.includes(hours);
+                          return (
+                            <button
+                              type="button"
+                              key={hours}
+                              onClick={() => {
+                                setFormData((prev) => {
+                                  const currentOffsets = prev.reminderSettings?.reminderOffsetsHours || [6];
+                                  let updatedOffsets;
+                                  if (currentOffsets.includes(hours)) {
+                                    if (currentOffsets.length === 1) return prev; // Keep at least one
+                                    updatedOffsets = currentOffsets.filter((h) => h !== hours);
+                                  } else {
+                                    updatedOffsets = [...currentOffsets, hours].sort((a, b) => b - a);
+                                  }
+                                  return {
+                                    ...prev,
+                                    reminderSettings: {
+                                      ...prev.reminderSettings,
+                                      reminderOffsetsHours: updatedOffsets
+                                    }
+                                  };
+                                });
+                              }}
+                              className={`px-3 py-1 text-xs font-semibold rounded-lg border transition ${
+                                isSelected
+                                  ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                                  : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                              }`}
+                            >
+                              {hours} {hours === 1 ? "Hour" : "Hours"} before
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4 pt-1">
+                      <span className="text-[11px] font-bold text-slate-700">Channels:</span>
+                      <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.reminderSettings?.channels?.includes("in_app")}
+                          onChange={(e) => {
+                            setFormData((prev) => {
+                              const channels = prev.reminderSettings?.channels || ["in_app", "email"];
+                              const newChannels = e.target.checked
+                                ? [...new Set([...channels, "in_app"])]
+                                : channels.filter((c) => c !== "in_app");
+                              if (newChannels.length === 0) return prev;
+                              return {
+                                ...prev,
+                                reminderSettings: { ...prev.reminderSettings, channels: newChannels }
+                              };
+                            });
+                          }}
+                          className="rounded text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span>In-App Alert</span>
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.reminderSettings?.channels?.includes("email")}
+                          onChange={(e) => {
+                            setFormData((prev) => {
+                              const channels = prev.reminderSettings?.channels || ["in_app", "email"];
+                              const newChannels = e.target.checked
+                                ? [...new Set([...channels, "email"])]
+                                : channels.filter((c) => c !== "email");
+                              if (newChannels.length === 0) return prev;
+                              return {
+                                ...prev,
+                                reminderSettings: { ...prev.reminderSettings, channels: newChannels }
+                              };
+                            });
+                          }}
+                          className="rounded text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span>Official Email</span>
+                      </label>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Student Information Requirements Section */}

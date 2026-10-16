@@ -22,6 +22,7 @@ export default function StudentNavbar({
   user,
   studentProfile,
   onOpenProfile,
+  onSelectTab,
 }) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -88,6 +89,31 @@ export default function StudentNavbar({
       );
     } catch (err) {
       console.error("Failed to mark notification read:", err);
+    }
+  };
+
+  const handleNotificationClick = async (notification) => {
+    if (!notification.isRead) {
+      await handleMarkOneRead(notification._id, false);
+    }
+    setShowNotifications(false);
+    const titleLower = (notification.title || "").toLowerCase();
+    const messageLower = (notification.message || "").toLowerCase();
+    if (
+      notification.type === "urgent" ||
+      titleLower.includes("deadline") ||
+      titleLower.includes("drive") ||
+      messageLower.includes("deadline") ||
+      messageLower.includes("drive")
+    ) {
+      onSelectTab?.("drives");
+    } else if (
+      notification.interviewDate ||
+      notification.status ||
+      titleLower.includes("application") ||
+      messageLower.includes("status")
+    ) {
+      onSelectTab?.("applications");
     }
   };
 
@@ -208,7 +234,7 @@ export default function StudentNavbar({
                   notifications.map((n) => (
                     <div
                       key={n._id}
-                      onClick={() => handleMarkOneRead(n._id, n.isRead)}
+                      onClick={() => handleNotificationClick(n)}
                       className={`p-3 rounded-xl transition cursor-pointer my-1 ${
                         !n.isRead
                           ? "bg-blue-50/60 border border-blue-100 shadow-xs"

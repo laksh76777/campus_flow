@@ -2,10 +2,12 @@ import "../env.js";
 import connectDB from "./db/index.js";
 import { app } from "./app.js";
 import { validateEnvironment } from "./config.js";
+import { startReminderScheduler } from "./services/reminderScheduler.service.js";
 
 try {
     validateEnvironment();
     await connectDB();
+    startReminderScheduler();
 
     const port = Number(process.env.PORT) || 8000;
     app.listen(port, "0.0.0.0", () => {

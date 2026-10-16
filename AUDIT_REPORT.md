@@ -245,7 +245,55 @@ No write migration has been applied; therefore no legacy mappings have been perf
 | **Reporting Exports** | `generateEligibleStudentsExport`, `generateDriveApplicantsExport`, `generateSessionReportExport`, `generateDepartmentReportExport`, `generateHistoricalPlacementSummaryExport` | **Fully Functional** | Generates styled Excel workbooks with headers. Empty datasets render valid formatted headers without throwing errors. Company-facing export applies privacy filters (excludes parent details and full residential addresses). |
 
 ### 2. Verified Test Results
-- **Unit & Configuration Tests**: `npm test` passed 10/10 tests, validating environment variables, production CORS rules, MongoDB URI resolution, root health, approved 13-program catalog, and non-fabricated Excel templates.
-- **Frontend Build**: `npm run build` compiled successfully in 919ms with zero errors. All JavaScript chunks remain under 260 kB.
+- **Unit & Configuration Tests**: `npm test` passed 14/14 tests, validating environment variables, production CORS rules, MongoDB URI resolution, root health, approved 13-program catalog, SMTP configuration truthfulness, sender identity, and email templating.
+- **Frontend Build**: `npm run build` compiled successfully in 880ms with zero errors.
 - **Frontend Lint**: `npm run lint` reported 0 errors (57 pre-existing warnings for unused imports/variables).
+
+---
+
+## Reliable Notifications, Email Delivery and Placement Deadline Reminders (2026-10-16)
+
+### 1. Audit of Existing Implementation vs. Confirmed Gaps
+
+| Capability | Previous Status | Confirmed Gap | Resolution & Architecture |
+|---|---|---|---|
+| **In-App Notifications** | Partially implemented | Missing `deadline_reminder` type in enum; no link between reminders and student notifications. | Added `deadline_reminder` to `Notification` model enum; integrated with scheduler for in-app alert generation. |
+| **Admin Announcements** | Basic in-app broadcast only | Did not support email delivery; did not provide live audience count preview; did not support session-level targeting; did not report delivery statistics truthfully. | Added `GET /api/v1/notifications/announcement-preview` with candidate counts, sample recipient preview, and SMTP readiness indicator; enhanced `POST /api/v1/notifications/broadcast` with channels (`in_app`, `email`), truthful SMTP handling, and detailed delivery metrics. |
+| **Email Delivery via Nodemailer** | Partial stub | Lacked dedicated deadline reminder & announcement HTML/text templates; did not verify SMTP credentials before delivery; simulated success when SMTP unconfigured. | Implemented `sendDeadlineReminderEmail`, `sendBroadcastAnnouncementEmail`, and `isSmtpConfigured()`. Truthfully reports `SMTP_NOT_CONFIGURED` when credentials are absent, creating in-app alerts while skipping emails without simulating fake success. |
+| **Placement Drive Reminders** | Stored in schema only | Schema had `reminderSettings`, but `createPlacementDrive` and `updatePlacementDrive` completely ignored the field and never saved it; no persistent scheduler existed. | Wire `reminderSettings` into `createPlacementDrive`, `updatePlacementDrive`, `deactivatePlacementDrive`, and `reactivatePlacementDrive`. Automated call to `syncDriveReminders(drive._id)`. |
+| **Background Scheduler** | Absent | No worker existed; reminders would not survive server restarts. | Implemented durable MongoDB-backed scheduler (`ReminderJob` collection) with compound indexing on `{ status: 1, scheduledTime: 1 }`, atomic `findOneAndUpdate` state transitions (`PENDING` -> `PROCESSING` -> `COMPLETED`/`FAILED`/`CANCELLED`), idempotency keys (`<driveId>_<offsetHours>_<deadlineTime>`), restart recovery, and bounded polling (60s). Avoids extra Redis/BullMQ infrastructure dependencies. |
+| **Audience Targeting & Eligibility** | Inconsistent | Previous notification query used raw strings or graduation year substitution. | Integrated canonical `PROGRAM_CATALOG` resolver, `PlacementSession._id` lookup, and `EligibilityService.evaluate(student, drive)` directly into reminder dispatch, strictly excluding ineligible candidates and students who have already submitted non-withdrawn applications. |
+| **Admin UI Management** | Missing menu item | No interface existed for composing announcements, viewing live audience previews, or monitoring scheduled deadline reminders. | Created `ManageAnnouncements.jsx` in admin dashboard with tab navigation (`Broadcast & Alerts` in `AdminSidebar`), audience composer, live counter, channel toggles, and scheduled reminders log with manual worker trigger. Added Reminder Settings card to drive modal in `ManageDrives.jsx`. |
+| **Student UI Experience** | In-app list | Could not navigate to drive from reminder notification. | Updated `StudentNavbar.jsx` with notification click routing (`onSelectTab("drives")` for urgent/deadline alerts, `onSelectTab("applications")` for application status updates). |
+
+### 2. Architecture & Persistence Guarantees
+
+- **No In-Memory-Only Timers**: Scheduled reminders are stored in the `ReminderJob` MongoDB collection. A server restart re-evaluates all pending jobs upon boot (`startReminderScheduler()` called in `src/index.js`).
+- **Concurrency & Idempotency Safeguards**: Each job has a deterministic unique idempotency key (`${drive._id}_${offsetNum}_${deadline.getTime()}`). When polling due jobs, the worker atomically transitions status from `PENDING` to `PROCESSING` with `findOneAndUpdate`. If two worker instances or scheduler ticks overlap, only one can claim and execute a job.
+- **Deadline Change & Cancellation Handling**: When an administrator changes a drive's application deadline or disables reminders, `syncDriveReminders` immediately marks pending jobs with mismatched deadlines or disabled states as `CANCELLED`, scheduling new jobs for future offsets if valid.
+- **Strict Recipient Filtering**: Immediately prior to reminder dispatch, the worker queries current applications for the drive and filters out students who have already applied (`status !== "withdrawn"`). It evaluates academic program matching and multi-criteria eligibility (CGPA, backlogs, required documents) using `EligibilityService.evaluate`.
+- **Truthful Delivery Reporting**: Emails are sent using configured `EMAIL_FROM` or `"Training & Placement Cell" <user>`. If SMTP credentials are not configured in `.env`, the system explicitly records `emailStatus: "SMTP_NOT_CONFIGURED"`, returns `emailsSent: 0`, and never fabricates delivery.
+
+### 3. Verification & Test Evidence
+
+- **Isolated Test Suite (`tests/notifications_reminders_verification.mjs`)**: 32/32 tests passed against an isolated test database (`Place-on_e2e_reminders_*`):
+  1. Truthful SMTP status reporting (`isSmtpConfigured()`).
+  2. Mock email transport acceptance and recipient validation.
+  3. Safe handling of missing or blank email addresses.
+  4. Candidate profile setup across distinct eligibility states.
+  5. Drive creation with persistent `reminderSettings` (`remindersEnabled: true`, `[6, 1]` hours, `["in_app", "email"]`).
+  6. Persistence of reminder jobs for exact calculated timestamps (`deadline - offsetHours`).
+  7. Idempotency protection preventing duplicate jobs upon repeated scheduler sync.
+  8. Rescheduling and cancellation of obsolete jobs when application deadline changes.
+  9. Cancellation of pending jobs when reminders are disabled.
+  10. Worker execution atomically claiming due jobs.
+  11. Exclusion of students who have already applied (`skippedAlreadyApplied: 1`).
+  12. Exclusion of ineligible students (`skippedIneligible: 1`).
+  13. Delivery to eligible non-applicant candidates (`targetedCandidates: 1`, `inAppCreated: 1`, `emailAccepted: 1`).
+  14. Past-deadline cancellation preventing stale reminders after deadline expiration.
+  15. Admin broadcast email templating and delivery acceptance.
+- **Regression Suite (`tests/notifications_reminders.test.js` under `npm test`)**: 14/14 tests passed with zero failures in 1.7s.
+- **Excel Verification Suite (`tests/phase6_excel_verification.mjs`)**: 54/54 tests passed with zero failures.
+- **Frontend Production Build**: `npm run build` compiled successfully in 880ms with 0 errors.
+
 - **Backend Syntax Check**: `node --check` passed for `major-backend/src/app.js`, `excelImportExport.service.js`, and `tests/phase6_excel_verification.mjs`.

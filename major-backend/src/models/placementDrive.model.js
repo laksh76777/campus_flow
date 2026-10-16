@@ -101,7 +101,12 @@ const placementDriveSchema = new mongoose.Schema(
             },
             reminderOffsetsHours: {
                 type: [Number],
-                default: [24, 6],
+                default: [6],
+            },
+            channels: {
+                type: [String],
+                enum: ["in_app", "email"],
+                default: ["in_app", "email"],
             },
         },
 

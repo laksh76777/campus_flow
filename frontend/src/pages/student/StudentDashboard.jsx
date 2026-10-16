@@ -387,6 +387,7 @@ export default function StudentDashboard() {
           user={user}
           studentProfile={studentProfile}
           onOpenProfile={() => setIsProfileDrawerOpen(true)}
+          onSelectTab={handleTabChange}
         />
 
         {/* Page Content Body */}

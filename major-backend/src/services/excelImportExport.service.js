@@ -638,7 +638,7 @@ export const previewImport = async ({
             const jobTitle = (rawJobTitle || "").trim();
             const pkg = Number(rawPkg);
             const status = (rawStatus || "").toLowerCase().trim();
-            const jobType = (rawJobType || "").toLowerCase().trim();
+            const jobType = (rawJobType || "full-time").toLowerCase().trim();
             const offerDate = rawOfferDate ? new Date(rawOfferDate) : null;
 
             const errors = [];
@@ -816,8 +816,10 @@ export const commitImportBatch = async (batchId, adminUser) => {
             if (batch.importType === "student_records") {
                 const d = item.details;
                 let session = batch.placementSession;
-                if (!session && d.graduationYear) {
-                    session = await PlacementSession.findOne({ sessionYear: d.graduationYear });
+                if (session && !session.sessionYear) {
+                    session = await PlacementSession.findById(session);
+                } else if (!session && d.graduationYear) {
+                    session = await PlacementSession.findOne({ sessionYear: Number(d.graduationYear) });
                 }
                 if (!session || Number(session.sessionYear) !== Number(d.graduationYear)) {
                     throw new Error("A matching placement session is no longer available for this student's graduation cohort.");
