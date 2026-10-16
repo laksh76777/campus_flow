@@ -8,6 +8,8 @@ import { resolveProgram, resolveStudentProgram } from "../constants/programCatal
 import { Application } from "../models/application.model.js";
 import { PlacementDrive } from "../models/placementDrive.model.js";
 import { PlacementSession } from "../models/placementSession.model.js";
+import { ReminderJob } from "../models/reminderJob.model.js";
+import { Company } from "../models/company.model.js";
 import {
     isSmtpConfigured,
     getSenderAddress,
@@ -15,7 +17,8 @@ import {
     getSmtpConfigStatus,
     verifySmtpConnection,
     sendTestEmail,
-    validateEmailAddress
+    validateEmailAddress,
+    reconfigureTransporter
 } from "../utils/mailService.js";
 import { processDueReminders } from "../services/reminderScheduler.service.js";
 
@@ -451,6 +454,7 @@ export const triggerReminderWorker = asyncHandler(async (req, res) => {
 // @route   GET /api/v1/notifications/smtp-status
 // @access  Admin
 export const getSmtpStatus = asyncHandler(async (req, res) => {
+    reconfigureTransporter();
     const configStatus = getSmtpConfigStatus();
     const verification = await verifySmtpConnection();
 
@@ -470,6 +474,7 @@ export const getSmtpStatus = asyncHandler(async (req, res) => {
 // @route   POST /api/v1/notifications/smtp-test-email
 // @access  Admin
 export const sendSmtpTestEmail = asyncHandler(async (req, res) => {
+    reconfigureTransporter();
     const { testEmail } = req.body;
 
     if (!testEmail || !validateEmailAddress(testEmail)) {
