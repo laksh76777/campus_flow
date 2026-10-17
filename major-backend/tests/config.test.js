@@ -52,7 +52,7 @@ test("production configuration requires exact HTTPS CORS origins", () => {
 
 test("MongoDB URI defaults to the application's database and preserves options", () => {
     const resolved = resolveMongoConnection(
-        "mongodb://user:password@localhost:27017/?retryWrites=true"
+        "mongodb://127.0.0.1:27017/?retryWrites=true"
     );
 
     assert.equal(resolved.databaseName, "Place-on");
@@ -65,7 +65,7 @@ test("MongoDB URI defaults to the application's database and preserves options",
 
 test("MongoDB URI honors an explicit isolated database name", () => {
     const resolved = resolveMongoConnection(
-        "mongodb+srv://user:password@cluster.example/Place-on_e2e_123?retryWrites=true"
+        "mongodb+srv://cluster.example.internal/Place-on_e2e_123?retryWrites=true"
     );
 
     assert.equal(resolved.databaseName, "Place-on_e2e_123");

@@ -223,8 +223,8 @@ NODE_ENV=development
 FRONTEND_URL=http://localhost:5173
 CORS_ORIGIN=http://localhost:5173,http://localhost:3000
 
-# Database Configuration (Replace with your instance URI)
-MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.mongodb.net/campus_flow
+# Database Configuration (Set in major-backend/.env, see major-backend/.env.example)
+MONGODB_URI=mongodb://127.0.0.1:27017
 
 # JWT Authentication Secrets (Generate secure random 64-char strings)
 ACCESS_TOKEN_SECRET=your_jwt_access_token_secret_key_minimum_64_characters
