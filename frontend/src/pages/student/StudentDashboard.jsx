@@ -93,6 +93,16 @@ export default function StudentDashboard() {
     }
   }, [location.pathname]);
 
+  // Live Data States
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [studentProfile, setStudentProfile] = useState(null);
+  const [dashboardStats, setDashboardStats] = useState(null);
+  const [eligibleDrives, setEligibleDrives] = useState([]);
+  const [applications, setApplications] = useState([]);
+  const [user, setUser] = useState(null);
+
+  // Profile Drawer & Modification Review State
   const [isProfileDrawerOpen, setIsProfileDrawerOpen] = useState(false);
   const [drawerSection, setDrawerSection] = useState("academic");
   const [drawerEditing, setDrawerEditing] = useState(false);
@@ -137,15 +147,6 @@ export default function StudentDashboard() {
   // Apply Modal State
   const [selectedDriveToApply, setSelectedDriveToApply] = useState(null);
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
-
-  // Live Data States
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [studentProfile, setStudentProfile] = useState(null);
-  const [dashboardStats, setDashboardStats] = useState(null);
-  const [eligibleDrives, setEligibleDrives] = useState([]);
-  const [applications, setApplications] = useState([]);
-  const [user, setUser] = useState(null);
 
   const semMap = useMemo(() => {
     const map = {};
