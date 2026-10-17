@@ -587,5 +587,38 @@ Perform a final, safe end-to-end verification of the Automated Placement Drive f
 - **Frontend Lint**: `npm run lint` → **0 errors**.
 - **Frontend Build**: `npm run build` → **1926 modules transformed, built in 1.05s with 0 errors**.
 
+## Follow-up: student profile blank screens and privacy
+
+### Findings and fixes
+
+| Finding | Impact | Resolution |
+|---|---|---|
+| The profile editor referenced an undefined CGPA value. | Opening or editing the profile could throw at runtime. | Use the profile's official CGPA fields and preserve a valid zero value. |
+| Backlog deletion called state setters that did not exist in the drawer. | The API could delete the backlog, then the UI could throw instead of refreshing the profile. | Refresh the profile through the existing parent callback after a successful delete. |
+| Dashboard/profile rendering assumed complete API data and well-formed arrays. | Missing checklist properties or malformed legacy semester, backlog, certificate, or date values could crash a page/drawer. | Normalize optional checklist data and guard arrays, entries, and invalid dates before rendering. |
+| The approved-program response was assumed to be a list. | A malformed response could make `programs.find()` crash the profile editor. | Validate the response shape, surface a visible load error, and keep the profile drawer usable without program editing options. |
+| A previously loaded profile could remain during an account change or stale request. | Student-specific details could be shown after switching accounts. | Clear profile/dashboard state on account changes and ignore responses belonging to an older token or user. |
+| Profile edits did not consistently enforce the verified-profile lock on every mutation endpoint. | A locked profile could be changed through some direct API operations. | Apply a shared server-side edit-permission check to profile, semester, backlog, resume, and profile-creation mutations. |
+| Applicant exports did not consistently honor company field-sharing settings. | Candidate fields could be exported even when not explicitly shared. | Restrict exports to recognized, enabled fields; require the separate sensitive-data opt-in for family/address data. |
+
+### Privacy and access scope
+
+The current-student profile endpoint is scoped to the authenticated user's ID. Student ID-based dossier reads and all-student listing require Admin/TPO authorization. Students can view their own profile; Admin/TPO access to student records is an intentional authorized workflow, not a public profile listing. Company-facing applicant exports now follow the drive's explicit sharing configuration. These conclusions apply to the inspected profile and applicant-export routes; this follow-up is not a full privacy audit of every project endpoint.
+
+### Follow-up verification
+
+| Area | Status | Evidence |
+|---|---|---|
+| Frontend lint | **Verified** | `npm run lint -- --quiet` passed with 0 errors. |
+| Frontend production build | **Verified** | `npm run build` passed; 1930 modules transformed. |
+| Backend unit tests | **Verified** | `npm test`: 37 passed, 0 failed. |
+| Changed backend syntax | **Verified** | `node --check` passed for the changed controllers and new services. |
+| Student dashboard with missing `profileScore.missingItems` | **Verified** | Browser mock rendered the dashboard without a runtime error. |
+| Student profile route and editor drawer | **Verified** | Browser mock rendered the profile route and editor; a valid approved-program response displayed program options. |
+| Malformed approved-program response | **Verified** | Browser mock showed a visible error notification and kept the profile editor open without a blank screen. |
+| Backlog deletion flow | **Verified** | Browser mock showed the success notification; no live student record was changed. |
+| Account switching between two real student accounts | **Partially verified** | State-clearing and stale-request guards are implemented, but the attempted browser login-switch scenario did not complete. |
+| Production database migration or record repair | **Not performed** | No live student data was rewritten, no database reset was run, and no migration was applied. |
+| Unrelated project workflows | **Not verified** | This follow-up focused on student profiles, profile privacy boundaries, and the closely related applicant export. |
 
 

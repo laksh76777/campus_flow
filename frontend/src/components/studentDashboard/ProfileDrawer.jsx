@@ -75,6 +75,12 @@ const GAP_REASONS = [
   "Other"
 ];
 
+const toDateInputValue = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
+};
+
 export default function ProfileDrawer({
   isOpen,
   onClose,
@@ -120,10 +126,16 @@ export default function ProfileDrawer({
   useEffect(() => {
     if (!isOpen) return;
     getPublicDepartments()
-      .then((response) => setPrograms(response.data || []))
+      .then((response) => {
+        if (!Array.isArray(response?.data)) {
+          throw new Error("The approved academic program response is not a list");
+        }
+        setPrograms(response.data);
+      })
       .catch((error) => {
         console.error("Failed to load approved academic programs:", error);
         toast.error("Could not load approved academic programs");
+        setPrograms([]);
       });
   }, [isOpen]);
 
@@ -156,11 +168,11 @@ export default function ProfileDrawer({
     admissionYear: "",
     cgpa: "",
     about: "",
-    skills: "React, Node.js, Python, SQL",
+    skills: "",
 
     // Class 10 Details
     tenthSchool: "",
-    tenthBoard: "CBSE",
+    tenthBoard: "",
     tenthState: "",
     tenthYear: "",
     tenthPercentage: "",
@@ -171,7 +183,7 @@ export default function ProfileDrawer({
     // Class 12 / Diploma Details
     twelfthType: "12th", // "12th", "Diploma", "Other"
     twelfthInst: "",
-    twelfthBoard: "CBSE",
+    twelfthBoard: "",
     twelfthState: "",
     diplomaBranch: "",
     twelfthYear: "",
@@ -244,11 +256,11 @@ export default function ProfileDrawer({
           ? studentProfile.skills.join(", ")
           : typeof studentProfile.skills === "string"
           ? studentProfile.skills
-          : "React, Node.js, Python, SQL",
+          : "",
 
         // Class 10
         tenthSchool: studentProfile.tenthDetails?.schoolName || "",
-        tenthBoard: studentProfile.tenthDetails?.board || "CBSE",
+        tenthBoard: studentProfile.tenthDetails?.board || "",
         tenthState: studentProfile.tenthDetails?.state || "",
         tenthYear: studentProfile.tenthDetails?.passingYear || "",
         tenthPercentage: studentProfile.tenthDetails?.percentage ?? studentProfile.tenthPercentage ?? "",
@@ -259,7 +271,7 @@ export default function ProfileDrawer({
         // Class 12 / Diploma
         twelfthType: studentProfile.twelfthOrDiplomaDetails?.qualificationType || "12th",
         twelfthInst: studentProfile.twelfthOrDiplomaDetails?.institutionName || "",
-        twelfthBoard: studentProfile.twelfthOrDiplomaDetails?.boardOrUniversity || "CBSE",
+        twelfthBoard: studentProfile.twelfthOrDiplomaDetails?.boardOrUniversity || "",
         twelfthState: studentProfile.twelfthOrDiplomaDetails?.state || "",
         diplomaBranch: studentProfile.twelfthOrDiplomaDetails?.diplomaBranch || "",
         twelfthYear: studentProfile.twelfthOrDiplomaDetails?.passingYear || "",
@@ -274,7 +286,7 @@ export default function ProfileDrawer({
 
         // Personal
         gender: studentProfile.gender || "Prefer not to say",
-        dob: studentProfile.dob ? new Date(studentProfile.dob).toISOString().slice(0, 10) : "",
+        dob: toDateInputValue(studentProfile.dob),
         personalEmail: studentProfile.personalEmail || user?.email || "",
         collegeEmail: studentProfile.collegeEmail || "",
         alternatePhone: studentProfile.alternatePhone || studentProfile.phone || user?.phone || "",
@@ -312,7 +324,9 @@ export default function ProfileDrawer({
       });
 
       setCertificates(
-        Array.isArray(studentProfile.certificates) ? studentProfile.certificates : []
+        Array.isArray(studentProfile.certificates)
+          ? studentProfile.certificates.filter((certificate) => certificate && typeof certificate === "object")
+          : []
       );
     }
   }, [studentProfile, user]);
@@ -340,8 +354,12 @@ export default function ProfileDrawer({
   const rawResumeUrl = studentProfile?.resume?.url;
   const resumeViewUrl = getResumeViewUrl(rawResumeUrl);
 
-  const semesterResults = studentProfile?.semesterResults || [];
-  const backlogDetails = studentProfile?.backlogDetails || [];
+  const semesterResults = Array.isArray(studentProfile?.semesterResults)
+    ? studentProfile.semesterResults.filter((result) => result && typeof result === "object")
+    : [];
+  const backlogDetails = Array.isArray(studentProfile?.backlogDetails)
+    ? studentProfile.backlogDetails.filter((backlog) => backlog && typeof backlog === "object")
+    : [];
   const activeBacklogsCount = studentProfile?.activeBacklogs ?? studentProfile?.backlogs ?? 0;
   const clearedBacklogsCount = studentProfile?.clearedBacklogsCount ?? 0;
   const educationGapsList = formData.educationGaps || [];
@@ -353,7 +371,9 @@ export default function ProfileDrawer({
   });
 
   // College CGPA stored independently and editable by student
-  const collegeCgpa = formData.cgpa || studentProfile?.verifiedCGPA || studentProfile?.cgpa || "";
+  const collegeCgpa = formData.cgpa !== ""
+    ? formData.cgpa
+    : studentProfile?.verifiedCGPA ?? studentProfile?.cgpa ?? "";
 
   const handleAddCertificate = (e) => {
     if (e && e.preventDefault) e.preventDefault();
@@ -683,9 +703,6 @@ export default function ProfileDrawer({
       const res = await deleteBacklogRecord(backlogId);
       toast.success("Backlog record deleted successfully!");
       if (res?.data) {
-        setBacklogDetails(res.data.backlogDetails || []);
-        setActiveBacklogsCount(res.data.activeBacklogs || 0);
-        setClearedBacklogsCount(res.data.clearedBacklogsCount || 0);
         if (onProfileUpdated) {
           onProfileUpdated({
             backlogDetails: res.data.backlogDetails,
@@ -696,8 +713,9 @@ export default function ProfileDrawer({
           });
         }
       } else {
-        const remaining = backlogDetails.filter((b) => b._id !== backlogId);
-        setBacklogDetails(remaining);
+        const remaining = (studentProfile?.backlogDetails || []).filter(
+          (backlog) => backlog._id !== backlogId
+        );
         if (onProfileUpdated) {
           onProfileUpdated({ backlogDetails: remaining });
         }
@@ -1201,6 +1219,7 @@ export default function ProfileDrawer({
                       onChange={(e) => setFormData({ ...formData, tenthBoard: e.target.value })}
                       className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-700 disabled:font-bold disabled:cursor-not-allowed disabled:border-slate-200"
                     >
+                      <option value="">Select board</option>
                       {BOARD_OPTIONS.map((b) => (
                         <option key={b} value={b}>{b}</option>
                       ))}
@@ -1719,7 +1738,7 @@ export default function ProfileDrawer({
                       <span>College & Academic Profile</span>
                     </h4>
                     <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-lg border border-blue-100">
-                      Official CGPA: {calculatedCgpa || studentProfile?.verifiedCGPA || studentProfile?.cgpa || "—"}
+                      Official CGPA: {collegeCgpa || "—"}
                     </span>
                   </div>
 
@@ -1727,7 +1746,7 @@ export default function ProfileDrawer({
                     <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3.5">
                       <span className="text-[11px] font-bold text-slate-400">Official CGPA</span>
                       <p className="text-xl font-black text-blue-600 mt-0.5">
-                        {calculatedCgpa || studentProfile?.verifiedCGPA || studentProfile?.cgpa || "Not entered"}
+                        {collegeCgpa || "Not entered"}
                       </p>
                     </div>
                     <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3.5">
@@ -1762,7 +1781,7 @@ export default function ProfileDrawer({
                         <span>Semester-Wise SGPA Records</span>
                       </h4>
                       <p className="text-[11px] text-slate-500 mt-0.5">
-                        Cumulative College CGPA is calculated from entered semester SGPAs: <span className="font-bold text-blue-600">{calculatedCgpa || "—"}</span>
+                        Semester SGPAs are recorded separately and do not replace your official CGPA.
                       </p>
                     </div>
                   </div>
@@ -1821,7 +1840,7 @@ export default function ProfileDrawer({
                       </div>
                       <p className="text-xs text-slate-700 font-bold">{studentProfile?.tenthDetails?.schoolName || "School Name not entered"}</p>
                       <p className="text-xs text-slate-500">
-                        Board: {studentProfile?.tenthDetails?.board || "CBSE"} • Passing Year: {studentProfile?.tenthDetails?.passingYear || "N/A"}
+                        Board: {studentProfile?.tenthDetails?.board || "Not entered"} • Passing Year: {studentProfile?.tenthDetails?.passingYear || "N/A"}
                       </p>
                     </div>
 
@@ -1837,7 +1856,7 @@ export default function ProfileDrawer({
                       </div>
                       <p className="text-xs text-slate-700 font-bold">{studentProfile?.twelfthOrDiplomaDetails?.institutionName || "Institution not entered"}</p>
                       <p className="text-xs text-slate-500">
-                        Authority: {studentProfile?.twelfthOrDiplomaDetails?.boardOrUniversity || "CBSE"} • Passing Year: {studentProfile?.twelfthOrDiplomaDetails?.passingYear || "N/A"}
+                        Authority: {studentProfile?.twelfthOrDiplomaDetails?.boardOrUniversity || "Not entered"} • Passing Year: {studentProfile?.twelfthOrDiplomaDetails?.passingYear || "N/A"}
                       </p>
                     </div>
                   </div>
@@ -2485,7 +2504,7 @@ export default function ProfileDrawer({
         isOpen={isLockModalOpen}
         onClose={() => setIsLockModalOpen(false)}
         onConfirmLock={handleConfirmLock}
-        formData={{ ...formData, certificates, cgpa: calculatedCgpa || formData.cgpa }}
+        formData={{ ...formData, certificates, cgpa: collegeCgpa }}
         studentProfile={studentProfile}
         user={user}
         saving={saving}

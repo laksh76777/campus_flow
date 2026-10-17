@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   FileText,
   XCircle,
+  RefreshCw,
 } from "lucide-react";
 
 export default function RecentDrives({
@@ -21,6 +22,8 @@ export default function RecentDrives({
   description = "Active campus recruitment drives with your live eligibility status",
   showSearch = true,
   maxItems = null,
+  onRefresh = null,
+  refreshing = false,
 }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -118,6 +121,21 @@ export default function RecentDrives({
               <option value="internship">Internship</option>
               <option value="internship-to-full-time">Intern to FTE</option>
             </select>
+
+            {onRefresh && (
+              <button
+                type="button"
+                onClick={onRefresh}
+                disabled={refreshing}
+                className="h-9 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-xs hover:bg-slate-50 active:scale-95 disabled:opacity-60 transition"
+                title="Sync Live Placement Drives"
+              >
+                <RefreshCw
+                  className={`h-3.5 w-3.5 text-slate-500 ${refreshing ? "animate-spin" : ""}`}
+                />
+                <span className="hidden sm:inline">{refreshing ? "Syncing..." : "Sync Live Data"}</span>
+              </button>
+            )}
           </div>
         )}
       </div>

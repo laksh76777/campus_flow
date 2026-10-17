@@ -7,6 +7,7 @@ import { PlacementSession } from "../models/placementSession.model.js";
 import { Notification } from "../models/notification.model.js";
 import { uploadOnCloudinary, deleteFromCloudinary } from "../utils/cloudinary.js";
 import { resolveStudentProgram } from "../constants/programCatalog.js";
+import { ensureProfileEditable } from "../services/studentProfilePermissions.service.js";
 
 // @desc    Create student profile
 // @route   POST /api/v1/studentprofile/create-student-profile
@@ -81,6 +82,7 @@ const createStudentProfile = asyncHandler(async (req, res) => {
     if (selectedProgram) branchName = selectedProgram.name;
 
     if (profile) {
+        ensureProfileEditable(profile, req.user);
         if (enrNum) { profile.enrollmentNumber = enrNum; profile.usn = enrNum; }
         if (selectedProgram) {
             profile.programCode = selectedProgram.code;
@@ -254,6 +256,7 @@ const updateStudentProfile = asyncHandler(async (req, res) => {
     if (!studentProfile) {
         throw new ApiError(404, "Student profile not found");
     }
+    ensureProfileEditable(studentProfile, req.user);
 
     const {
         enrollmentNumber,
@@ -472,11 +475,18 @@ const addSemesterResult = asyncHandler(async (req, res) => {
     if (!semester || sgpa === undefined) {
         throw new ApiError(400, "Semester number and SGPA are required");
     }
+    if (!Number.isInteger(Number(semester)) || Number(semester) < 1 || Number(semester) > 10) {
+        throw new ApiError(400, "Semester must be a whole number between 1 and 10");
+    }
+    if (!Number.isFinite(Number(sgpa)) || Number(sgpa) < 0 || Number(sgpa) > 10) {
+        throw new ApiError(400, "SGPA must be between 0.0 and 10.0");
+    }
 
     const studentProfile = await StudentProfile.findOne({ user: req.user._id });
     if (!studentProfile) {
         throw new ApiError(404, "Student profile not found");
     }
+    ensureProfileEditable(studentProfile, req.user);
 
     const existingIdx = studentProfile.semesterResults.findIndex(
         (s) => s.semester === Number(semester)
@@ -519,11 +529,18 @@ const addBacklogRecord = asyncHandler(async (req, res) => {
     if (!subjectName || !semester) {
         throw new ApiError(400, "Subject name and semester are required");
     }
+    if (!Number.isInteger(Number(semester)) || Number(semester) < 1 || Number(semester) > 10) {
+        throw new ApiError(400, "Semester must be a whole number between 1 and 10");
+    }
+    if (!["ACTIVE", "CLEARED"].includes(status)) {
+        throw new ApiError(400, "Backlog status must be ACTIVE or CLEARED");
+    }
 
     const studentProfile = await StudentProfile.findOne({ user: req.user._id });
     if (!studentProfile) {
         throw new ApiError(404, "Student profile not found");
     }
+    ensureProfileEditable(studentProfile, req.user);
 
     studentProfile.backlogDetails.push({
         subjectCode: subjectCode || "",
@@ -565,9 +582,7 @@ const deleteBacklogRecord = asyncHandler(async (req, res) => {
         throw new ApiError(404, "Student profile not found");
     }
 
-    if (studentProfile.isProfileLocked && req.user.role !== "admin") {
-        throw new ApiError(403, "Profile is locked. Request TPO Modification or have TPO request re-verification to delete records.");
-    }
+    ensureProfileEditable(studentProfile, req.user);
 
     const initialLength = studentProfile.backlogDetails.length;
     studentProfile.backlogDetails = studentProfile.backlogDetails.filter(
@@ -697,6 +712,15 @@ const updateStudentResume = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Resume file is missing");
     }
 
+    let studentProfile = await StudentProfile.findOne({
+        user: req.user?._id
+    });
+
+    if (!studentProfile) {
+        throw new ApiError(404, "Student profile not found. Complete an approved academic profile before uploading a resume.");
+    }
+    ensureProfileEditable(studentProfile, req.user);
+
     const resume = await uploadOnCloudinary(resumeLocalPath, {
         folder: "campusflow/resumes",
         resource_type: "image"
@@ -704,14 +728,6 @@ const updateStudentResume = asyncHandler(async (req, res) => {
 
     if (!resume || (!resume.secure_url && !resume.url)) {
         throw new ApiError(400, "Error while uploading new resume to Cloudinary");
-    }
-
-    let studentProfile = await StudentProfile.findOne({
-        user: req.user?._id
-    });
-
-    if (!studentProfile) {
-        throw new ApiError(404, "Student profile not found. Complete an approved academic profile before uploading a resume.");
     }
 
     // Safely delete old resume from Cloudinary if existed
@@ -742,6 +758,7 @@ const deleteStudentResume = asyncHandler(async (req, res) => {
     if (!studentProfile) {
         throw new ApiError(404, "Student profile not found");
     }
+    ensureProfileEditable(studentProfile, req.user);
 
     if (studentProfile.resume?.publicId) {
         await deleteFromCloudinary(studentProfile.resume.publicId, "image");

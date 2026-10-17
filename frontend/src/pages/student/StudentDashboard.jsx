@@ -1,9 +1,8 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import {
   Sparkles,
-  GraduationCap,
   ArrowRight,
   RefreshCw,
   Award,
@@ -69,7 +68,7 @@ const STUDENT_ROUTE_TABS = {
 export default function StudentDashboard() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user: authUser, userRole, logout, studentProfile: authProfile } = useAuth();
+  const { user: authUser, userRole, logout } = useAuth();
 
   // If logged-in user is an admin, immediately redirect to Admin Console and avoid student calls
   useEffect(() => {
@@ -97,10 +96,16 @@ export default function StudentDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [studentProfile, setStudentProfile] = useState(null);
+  const [profileLoadError, setProfileLoadError] = useState("");
   const [dashboardStats, setDashboardStats] = useState(null);
   const [eligibleDrives, setEligibleDrives] = useState([]);
   const [applications, setApplications] = useState([]);
   const [user, setUser] = useState(null);
+  const dashboardRequestId = useRef(0);
+  const notificationRequestId = useRef(0);
+  const accountId = useRef(authUser?._id);
+  const authUserId = authUser?._id;
+  const authUserRole = authUser?.role;
 
   // Profile Drawer & Modification Review State
   const [isProfileDrawerOpen, setIsProfileDrawerOpen] = useState(false);
@@ -113,6 +118,10 @@ export default function StudentDashboard() {
   );
 
   const handleOpenProfileToSection = (section = "academic", edit = true) => {
+    if (!studentProfile) {
+      toast.error("Your student profile is unavailable. Refresh or contact the TPO office.");
+      return;
+    }
     setDrawerSection(section);
     setDrawerEditing(edit && !isProfileLocked);
     setIsProfileDrawerOpen(true);
@@ -150,11 +159,14 @@ export default function StudentDashboard() {
 
   const semMap = useMemo(() => {
     const map = {};
-    (studentProfile?.semesterResults || []).forEach((s) => {
+    const semesterResults = Array.isArray(studentProfile?.semesterResults)
+      ? studentProfile.semesterResults.filter((result) => result && typeof result === "object")
+      : [];
+    semesterResults.forEach((s) => {
       map[s.semester] = s.sgpa;
     });
     return map;
-  }, [studentProfile?.semesterResults]);
+  }, [studentProfile]);
 
   // Notification / Message Center States
   const [notifications, setNotifications] = useState([]);
@@ -163,21 +175,48 @@ export default function StudentDashboard() {
   const [notifFilter, setNotifFilter] = useState("all");
   const [selectedNotification, setSelectedNotification] = useState(null);
 
+  useEffect(() => {
+    const nextAccountId = authUser?._id;
+    if (
+      accountId.current &&
+      nextAccountId &&
+      String(accountId.current) !== String(nextAccountId)
+    ) {
+      dashboardRequestId.current += 1;
+      notificationRequestId.current += 1;
+      setStudentProfile(null);
+      setProfileLoadError("");
+      setDashboardStats(null);
+      setEligibleDrives([]);
+      setApplications([]);
+      setNotifications([]);
+      setUnreadCount(0);
+      setLoadingNotifs(false);
+      setSelectedNotification(null);
+      setUser(null);
+      setLoading(true);
+    }
+    accountId.current = nextAccountId;
+  }, [authUser?._id]);
+
   // Notifications loader & auto-poll
   const fetchNotifications = useCallback(async () => {
+    const requestId = ++notificationRequestId.current;
     try {
       setLoadingNotifs(true);
       const res = await getMyNotifications();
-      if (res?.data) {
-        setNotifications(res.data.notifications || []);
+      if (requestId === notificationRequestId.current && res?.data) {
+        setNotifications(Array.isArray(res.data.notifications) ? res.data.notifications : []);
         setUnreadCount(res.data.unreadCount || 0);
       }
     } catch (err) {
-      console.warn("Notifications sync notice:", err.message);
+      if (requestId === notificationRequestId.current) {
+        console.warn("Notifications sync notice:", err.message);
+      }
     } finally {
-      setLoadingNotifs(false);
+      if (requestId === notificationRequestId.current) setLoadingNotifs(false);
     }
-  }, []);
+  }, [authUserId, setLoadingNotifs, setNotifications, setUnreadCount]);
 
   useEffect(() => {
     fetchNotifications();
@@ -312,7 +351,9 @@ export default function StudentDashboard() {
 
   // Load all dashboard data
   const loadDashboardData = useCallback(async (isRefresh = false) => {
-    const currentRole = userRole || localStorage.getItem("userRole") || authUser?.role;
+    const requestId = ++dashboardRequestId.current;
+    const isCurrentRequest = () => requestId === dashboardRequestId.current;
+    const currentRole = userRole || localStorage.getItem("userRole") || authUserRole;
     if (currentRole === "admin") {
       navigate("/admin-dashboard", { replace: true });
       return;
@@ -333,19 +374,46 @@ export default function StudentDashboard() {
       // 1. Fetch Student Profile
       try {
         const profileRes = await getCurrentStudentProfile();
+        if (!isCurrentRequest()) return;
         if (profileRes.data && typeof profileRes.data === "object") {
-          setStudentProfile(profileRes.data);
-          if (profileRes.data.user) setUser(profileRes.data.user);
+          const profileUserId = profileRes.data.user?._id;
+          if (
+            authUserId &&
+            profileUserId &&
+            String(profileUserId) !== String(authUserId)
+          ) {
+            setStudentProfile(null);
+            setProfileLoadError("The loaded profile does not match the signed-in account. Sign out and sign in again.");
+            failedSections.push("student profile (account mismatch)");
+          } else {
+            setStudentProfile(profileRes.data);
+            setProfileLoadError("");
+            if (profileRes.data.user) setUser(profileRes.data.user);
+          }
         } else {
+          setStudentProfile(null);
+          setProfileLoadError("The student profile response was empty. Refresh or contact the TPO office.");
           failedSections.push("student profile (unexpected response)");
         }
       } catch (err) {
+        if (!isCurrentRequest()) return;
+        if (err.response?.status === 404) {
+          setStudentProfile(null);
+          setProfileLoadError("No student profile is linked to this account yet. Contact the TPO office to complete the profile setup.");
+          setDashboardStats(null);
+          setEligibleDrives([]);
+          setApplications([]);
+          return;
+        } else {
+          setProfileLoadError("We could not load your student profile. Check your connection and try again.");
+        }
         recordLoadFailure("Student profile", err);
       }
 
       // 2. Fetch Dashboard Stats
       try {
         const statsRes = await getStudentDashboardStats();
+        if (!isCurrentRequest()) return;
         if (statsRes.data && typeof statsRes.data === "object") {
           setDashboardStats(statsRes.data);
           if (statsRes.data.upcomingDrives?.length > 0) {
@@ -358,30 +426,35 @@ export default function StudentDashboard() {
           failedSections.push("dashboard statistics (unexpected response)");
         }
       } catch (err) {
+        if (!isCurrentRequest()) return;
         recordLoadFailure("Dashboard statistics", err);
       }
 
       // 3. Fetch Eligible Drives directly
       try {
         const drivesRes = await getMyEligibleDrives();
+        if (!isCurrentRequest()) return;
         if (Array.isArray(drivesRes?.data)) {
           setEligibleDrives(drivesRes.data);
         } else {
           failedSections.push("eligible drives (unexpected response)");
         }
       } catch (err) {
+        if (!isCurrentRequest()) return;
         recordLoadFailure("Eligible drives", err);
       }
 
       // 4. Fetch All Applications
       try {
         const appsRes = await getMyApplications();
+        if (!isCurrentRequest()) return;
         if (Array.isArray(appsRes?.data)) {
           setApplications(appsRes.data);
         } else {
           failedSections.push("applications (unexpected response)");
         }
       } catch (err) {
+        if (!isCurrentRequest()) return;
         recordLoadFailure("Applications", err);
       }
 
@@ -389,12 +462,15 @@ export default function StudentDashboard() {
         toast.error(`Unable to load ${failedSections.join(", ")}.`);
       }
     } catch (error) {
+      if (!isCurrentRequest()) return;
       console.error("Dashboard data load error:", error);
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (isCurrentRequest()) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
-  }, [authUser?.role, navigate, userRole]);
+  }, [authUserId, authUserRole, navigate, userRole]);
 
   useEffect(() => {
     loadDashboardData();
@@ -474,8 +550,17 @@ export default function StudentDashboard() {
 
   // Profile readiness calculation (0-100%) and missing requirements
   const profileScore = useMemo(() => {
-    if (dashboardStats?.profileScore?.checklist) {
-      return dashboardStats.profileScore;
+    const serverProfileScore = dashboardStats?.profileScore;
+    if (serverProfileScore && Array.isArray(serverProfileScore.checklist)) {
+      return {
+        ...serverProfileScore,
+        percentage: Number.isFinite(serverProfileScore.percentage)
+          ? serverProfileScore.percentage
+          : 0,
+        missingItems: Array.isArray(serverProfileScore.missingItems)
+          ? serverProfileScore.missingItems
+          : serverProfileScore.checklist.filter((item) => !item.completed)
+      };
     }
 
     const checklist = [
@@ -490,6 +575,10 @@ export default function StudentDashboard() {
     const missingItems = checklist.filter((c) => !c.completed);
     return { percentage, checklist, missingItems };
   }, [dashboardStats, studentProfile, user, authUser]);
+
+  const certificates = Array.isArray(studentProfile?.certificates)
+    ? studentProfile.certificates
+    : [];
 
   // Scheduled upcoming interviews
   const upcomingInterviews = useMemo(() => {
@@ -587,10 +676,10 @@ export default function StudentDashboard() {
 
   const studentName =
     user?.fullName || authUser?.fullName || studentProfile?.user?.fullName || "Student";
-  const studentBranch = studentProfile?.branch || studentProfile?.department || authProfile?.branch || "Department Not Set";
-  const studentCgpa = studentProfile?.cgpa ?? authProfile?.cgpa ?? "--";
-  const graduationYear = studentProfile?.graduationYear ?? authProfile?.graduationYear ?? "----";
-  const admissionYear = studentProfile?.admissionYear ?? (studentProfile?.graduationYear ? studentProfile.graduationYear - 4 : null);
+  const studentBranch = studentProfile?.branch || studentProfile?.department || "Department Not Set";
+  const studentCgpa = studentProfile?.cgpa ?? "--";
+  const graduationYear = studentProfile?.graduationYear ?? "----";
+  const admissionYear = studentProfile?.admissionYear;
   const sessionName = studentProfile?.placementSession?.name || (studentProfile?.graduationYear ? `Class of ${studentProfile.graduationYear} Placement Session` : "Session Pending");
 
   return (
@@ -615,11 +704,12 @@ export default function StudentDashboard() {
       <div className="flex-1 min-w-0 flex flex-col min-h-screen">
         {/* Sticky Header */}
         <StudentNavbar
-          onMenuClick={() => setIsSidebarOpen(true)}
+            key={authUserId}
+            onMenuClick={() => setIsSidebarOpen(true)}
           activeTab={activeTab}
           user={user}
           studentProfile={studentProfile}
-          onOpenProfile={() => setIsProfileDrawerOpen(true)}
+          onOpenProfile={() => handleOpenProfileToSection("all", false)}
           onSelectTab={handleTabChange}
           unreadCount={unreadCount}
           onRefreshNotifications={fetchNotifications}
@@ -627,56 +717,47 @@ export default function StudentDashboard() {
 
         {/* Page Content Body */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 w-full max-w-7xl mx-auto">
-          {/* Top Greeting Header */}
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                <span className="rounded-full bg-blue-50 text-blue-700 px-2.5 py-0.5 text-[11px] font-bold border border-blue-200">
-                  {studentBranch}
-                </span>
-                <span className="rounded-full bg-purple-50 text-purple-700 px-2.5 py-0.5 text-[11px] font-bold border border-purple-200">
-                  {sessionName}
-                </span>
-                {(studentProfile?.usn || studentProfile?.enrollmentNumber) && (
-                  <span className="rounded-full bg-slate-100 text-slate-700 px-2.5 py-0.5 text-[11px] font-semibold border border-slate-200">
-                    USN: {studentProfile.usn || studentProfile.enrollmentNumber}
-                  </span>
-                )}
-              </div>
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-                Welcome back, {studentName} 👋
-              </h2>
-              <p className="mt-1 text-xs sm:text-sm font-medium text-slate-500">
-                {studentProfile?.degreeType || studentProfile?.course || ""} {admissionYear ? `• Admitted: ${admissionYear}` : ""} • Expected Graduation: Class of {graduationYear} • Academic CGPA: {typeof studentCgpa === "number" ? studentCgpa.toFixed(2) : studentCgpa}
-              </p>
-            </div>
-
-            {/* Top Right Action Controls */}
-            <div className="flex items-center gap-2.5">
-              <button
-                onClick={() => loadDashboardData(true)}
-                disabled={refreshing}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-xs hover:bg-slate-50 active:scale-95 disabled:opacity-60 transition"
-              >
-                <RefreshCw
-                  className={`h-3.5 w-3.5 text-slate-500 ${refreshing ? "animate-spin" : ""}`}
-                />
-                <span>{refreshing ? "Syncing..." : "Sync Live Data"}</span>
-              </button>
-
-              <button
-                onClick={() => setIsProfileDrawerOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:bg-blue-700 transition"
-              >
-                <GraduationCap className="h-3.5 w-3.5" />
-                <span>My Profile</span>
-              </button>
-            </div>
-          </div>
-
           {/* TAB 1: OVERVIEW */}
           {activeTab === "overview" && (
             <div className="space-y-6">
+              {/* Top Greeting Header */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                    <span className="rounded-full bg-blue-50 text-blue-700 px-2.5 py-0.5 text-[11px] font-bold border border-blue-200">
+                      {studentBranch}
+                    </span>
+                    <span className="rounded-full bg-purple-50 text-purple-700 px-2.5 py-0.5 text-[11px] font-bold border border-purple-200">
+                      {sessionName}
+                    </span>
+                    {(studentProfile?.usn || studentProfile?.enrollmentNumber) && (
+                      <span className="rounded-full bg-slate-100 text-slate-700 px-2.5 py-0.5 text-[11px] font-semibold border border-slate-200">
+                        USN: {studentProfile.usn || studentProfile.enrollmentNumber}
+                      </span>
+                    )}
+                  </div>
+                  <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+                    Welcome back, {studentName} 👋
+                  </h2>
+                  <p className="mt-1 text-xs sm:text-sm font-medium text-slate-500">
+                    {studentProfile?.degreeType || studentProfile?.course || ""} {admissionYear ? `• Admitted: ${admissionYear}` : ""} • Expected Graduation: Class of {graduationYear} • Academic CGPA: {typeof studentCgpa === "number" ? studentCgpa.toFixed(2) : studentCgpa}
+                  </p>
+                </div>
+
+                {/* Top Right Action Controls */}
+                <div className="flex items-center gap-2.5">
+                  <button
+                    onClick={() => loadDashboardData(true)}
+                    disabled={refreshing}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-xs hover:bg-slate-50 active:scale-95 disabled:opacity-60 transition"
+                  >
+                    <RefreshCw
+                      className={`h-3.5 w-3.5 text-slate-500 ${refreshing ? "animate-spin" : ""}`}
+                    />
+                    <span>{refreshing ? "Syncing..." : "Sync Live Data"}</span>
+                  </button>
+                </div>
+              </div>
               {/* Placed Student Offer Celebration Banner */}
               {offerDetails && (
                 <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-700 p-6 text-white shadow-xl animate-in fade-in-50">
@@ -970,6 +1051,8 @@ export default function StudentDashboard() {
                 title="All Eligible Placement Drives"
                 description="Live recruitment drives filtered by your eligibility criteria"
                 showSearch={true}
+                onRefresh={() => loadDashboardData(true)}
+                refreshing={refreshing}
               />
             </div>
           )}
@@ -989,7 +1072,31 @@ export default function StudentDashboard() {
           )}
 
           {/* TAB 4: ACADEMIC PROFILE */}
-          {activeTab === "profile" && (
+          {activeTab === "profile" && !studentProfile && (
+            <section
+              className="mx-auto max-w-3xl rounded-2xl border border-amber-200 bg-white p-6 shadow-xs sm:p-8"
+              role="status"
+            >
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-50 text-amber-700">
+                <AlertTriangle className="h-6 w-6" />
+              </div>
+              <h3 className="mt-4 text-lg font-bold text-slate-900">Student profile unavailable</h3>
+              <p className="mt-2 text-sm text-slate-600">
+                {profileLoadError || "Your academic profile could not be loaded."}
+              </p>
+              <button
+                type="button"
+                onClick={() => loadDashboardData(true)}
+                disabled={refreshing}
+                className="mt-5 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60"
+              >
+                <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+                Retry profile load
+              </button>
+            </section>
+          )}
+
+          {activeTab === "profile" && studentProfile && (
             <div className="rounded-2xl border border-slate-200/90 bg-white p-6 sm:p-8 shadow-xs max-w-4xl mx-auto space-y-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -1049,7 +1156,7 @@ export default function StudentDashboard() {
                 <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 text-center">
                   <span className="text-[11px] font-bold text-slate-400 uppercase">Semester</span>
                   <p className="text-xl font-extrabold text-slate-900 mt-1">
-                    {studentProfile?.semester ?? 6}th
+                    {studentProfile?.semester ?? studentProfile?.currentSemester ?? "—"}
                   </p>
                 </div>
                 <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 text-center">
@@ -1070,7 +1177,7 @@ export default function StudentDashboard() {
                   </div>
                   <div>
                     <span className="text-slate-400 block text-[11px]">Email Address: </span>
-                    <strong className="text-slate-800 text-xs">{user?.email || "student@college.edu"}</strong>
+                    <strong className="text-slate-800 text-xs">{user?.email || "Not entered"}</strong>
                   </div>
                   <div>
                     <span className="text-slate-400 block text-[11px]">Mobile / Phone Number: </span>
@@ -1082,7 +1189,7 @@ export default function StudentDashboard() {
                   <div>
                     <span className="text-slate-400 block text-[11px]">Enrollment ID (USN): </span>
                     <strong className="text-slate-800 text-xs font-mono">
-                      {studentProfile?.enrollmentNumber || studentProfile?.usn || "ENR-2022-CS01"}
+                      {studentProfile?.enrollmentNumber || studentProfile?.usn || "Not assigned"}
                     </strong>
                   </div>
                   <div>
@@ -1103,7 +1210,11 @@ export default function StudentDashboard() {
                   )}
                   <div>
                     <span className="text-slate-400 block text-[11px]">Current Semester: </span>
-                    <strong className="text-slate-800 text-xs">Semester {studentProfile?.semester ?? 6}</strong>
+                    <strong className="text-slate-800 text-xs">
+                      {studentProfile?.semester || studentProfile?.currentSemester
+                        ? `Semester ${studentProfile.semester ?? studentProfile.currentSemester}`
+                        : "Not entered"}
+                    </strong>
                   </div>
                   <div>
                     <span className="text-slate-400 block text-[11px]">Batch: </span>
@@ -1143,7 +1254,7 @@ export default function StudentDashboard() {
                     </div>
                     <p className="font-bold text-slate-700">{studentProfile?.tenthDetails?.schoolName || "School Name not entered"}</p>
                     <p className="text-slate-500 text-[11px]">
-                      Board: {studentProfile?.tenthDetails?.board || "CBSE"} • Passing Year: {studentProfile?.tenthDetails?.passingYear || "--"}
+                      Board: {studentProfile?.tenthDetails?.board || "Not entered"} • Passing Year: {studentProfile?.tenthDetails?.passingYear || "--"}
                     </p>
                   </div>
 
@@ -1159,7 +1270,7 @@ export default function StudentDashboard() {
                     </div>
                     <p className="font-bold text-slate-700">{studentProfile?.twelfthOrDiplomaDetails?.institutionName || "Institution not entered"}</p>
                     <p className="text-slate-500 text-[11px]">
-                      Authority: {studentProfile?.twelfthOrDiplomaDetails?.boardOrUniversity || "CBSE"} • Passing Year: {studentProfile?.twelfthOrDiplomaDetails?.passingYear || "--"}
+                      Authority: {studentProfile?.twelfthOrDiplomaDetails?.boardOrUniversity || "Not entered"} • Passing Year: {studentProfile?.twelfthOrDiplomaDetails?.passingYear || "--"}
                     </p>
                   </div>
                 </div>
@@ -1331,7 +1442,7 @@ export default function StudentDashboard() {
                       <Award className="h-4 w-4 text-amber-500" />
                       <span>Certificates & External Credentials</span>
                       <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700 border border-blue-100">
-                        {studentProfile?.certificates?.length || 0}
+                        {certificates.length}
                       </span>
                     </h4>
                     <p className="text-xs text-slate-500 mt-0.5">
@@ -1348,7 +1459,7 @@ export default function StudentDashboard() {
                   </button>
                 </div>
 
-                {!studentProfile?.certificates || studentProfile.certificates.length === 0 ? (
+                {certificates.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-slate-200 bg-white p-6 text-center">
                     <Award className="h-8 w-8 text-slate-300 mx-auto mb-2" />
                     <p className="text-xs font-semibold text-slate-700">
@@ -1367,7 +1478,7 @@ export default function StudentDashboard() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {studentProfile.certificates.map((cert, idx) => (
+                    {certificates.map((cert, idx) => (
                       <div
                         key={idx}
                         className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs hover:border-blue-200 transition flex flex-col justify-between gap-3"

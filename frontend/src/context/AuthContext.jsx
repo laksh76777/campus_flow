@@ -20,9 +20,15 @@ export function AuthProvider({ children }) {
     const storedRole = localStorage.getItem("userRole");
 
     if (!storedToken) {
+      setUser(null);
+      setUserRole(null);
+      setStudentProfile(null);
       setLoading(false);
       return;
     }
+
+    const isCurrentSession = () =>
+      localStorage.getItem("accessToken") === storedToken;
 
     try {
       let userRes;
@@ -36,6 +42,8 @@ export function AuthProvider({ children }) {
       } else {
         userRes = await api.get("/users/current-user");
       }
+
+      if (!isCurrentSession()) return;
 
       if (userRes.data?.data) {
         const resData = userRes.data.data;
@@ -54,17 +62,27 @@ export function AuthProvider({ children }) {
               "/studentprofile/current-student-profile"
             );
 
-            if (profileRes.data?.data) {
-              setStudentProfile(profileRes.data.data);
+            if (isCurrentSession()) {
+              setStudentProfile(profileRes.data?.data || null);
             }
           } catch (err) {
-            console.warn("Student profile error:", err);
+            if (isCurrentSession()) {
+              setStudentProfile(null);
+              if (err.response?.status !== 404) {
+                console.warn("Student profile error:", err.message);
+              }
+            }
           }
         } else {
           setStudentProfile(null);
         }
+      } else {
+        setUser(null);
+        setUserRole(null);
+        setStudentProfile(null);
       }
     } catch (error) {
+      if (!isCurrentSession()) return;
       console.warn("Failed to verify user session:", error.message);
 
       if (error.response?.status === 401) {
@@ -75,9 +93,10 @@ export function AuthProvider({ children }) {
         setUser(null);
         setUserRole(null);
         setStudentProfile(null);
+        setLoading(false);
       }
     } finally {
-      setLoading(false);
+      if (isCurrentSession()) setLoading(false);
     }
   }, []);
 
@@ -108,18 +127,14 @@ export function AuthProvider({ children }) {
   const login = (newToken, userData, explicitRole = null) => {
     localStorage.setItem("accessToken", newToken);
     setToken(newToken);
+    setStudentProfile(null);
 
     const resolvedRole = userData?.role || explicitRole || "student";
 
     setUserRole(resolvedRole);
     localStorage.setItem("userRole", resolvedRole);
 
-    if (userData) {
-      setUser(userData);
-    }
-    if (resolvedRole === "admin") {
-      setStudentProfile(null);
-    }
+    setUser(userData || null);
 
     setLoading(false);
   };
@@ -139,7 +154,7 @@ export function AuthProvider({ children }) {
       localStorage.removeItem("userRole");
       setToken("");
       setUser(null);
-      setUserRole("student");
+      setUserRole(null);
       setStudentProfile(null);
     }
   };
