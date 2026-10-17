@@ -14,10 +14,48 @@ import {
   FileText,
   Paperclip,
   Trash2,
+  ShieldCheck,
+  HelpCircle,
+  Sparkles,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { getPublicDepartments } from "../../services/authService";
 import { getAllPlacementSessions } from "../../services/sessionService";
+
+const QUESTION_PRESETS = [
+  {
+    id: "preset_reloc",
+    question: "Are you willing to relocate to any company office location?",
+    type: "boolean",
+    options: [],
+    required: true,
+    placeholder: "",
+  },
+  {
+    id: "preset_bond",
+    question: "Do you agree to the standard 2-year service agreement / bond?",
+    type: "boolean",
+    options: [],
+    required: true,
+    placeholder: "",
+  },
+  {
+    id: "preset_stack",
+    question: "What is your primary programming language / technical stack?",
+    type: "select",
+    options: ["Java / Spring Boot", "Python / Django / FastAPI", "MERN (React / Node.js)", "C++ / Systems", "Cloud / DevOps", "Data Engineering / SQL"],
+    required: true,
+    placeholder: "",
+  },
+  {
+    id: "preset_notice",
+    question: "Earliest date or notice period you are available to join?",
+    type: "text",
+    options: [],
+    required: false,
+    placeholder: "e.g. Immediate / Within 15 days",
+  },
+];
 
 const DEFAULT_FIELDS = [
   { fieldKey: "fullName", label: "Student Full Name", category: "personal", requiredToApply: true, visibleToTpo: true, shareWithCompany: true },
@@ -55,8 +93,18 @@ const getDefaultFormData = () => {
     jdUrl: "",
     package: "",
     location: "Bengaluru",
+    checkCgpa: true,
     minimumCGPA: "7.0",
+    checkBacklogs: true,
     maximumBacklogs: "0",
+    checkTenthMarks: false,
+    minimumTenthPercentage: "60",
+    checkTwelfthMarks: false,
+    minimumTwelfthPercentage: "60",
+    checkEducationGaps: false,
+    allowEducationGaps: true,
+    maxEducationGapYears: "0",
+    customQuestions: [],
     graduationYear: "",
     placementSession: "",
     eligibleProgramCodes: [],
@@ -124,6 +172,39 @@ export default function ManageDrives({
     });
   };
 
+  const handleAddCustomQuestion = (preset = null) => {
+    const newQ = preset
+      ? { ...preset, id: `q_${Date.now()}_${Math.random().toString(36).substr(2, 4)}` }
+      : {
+          id: `q_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+          question: "",
+          type: "text",
+          options: [],
+          required: false,
+          placeholder: "",
+        };
+    setFormData((prev) => ({
+      ...prev,
+      customQuestions: [...(prev.customQuestions || []), newQ],
+    }));
+  };
+
+  const handleUpdateCustomQuestion = (idx, field, value) => {
+    setFormData((prev) => {
+      const updated = [...(prev.customQuestions || [])];
+      updated[idx] = { ...updated[idx], [field]: value };
+      return { ...prev, customQuestions: updated };
+    });
+  };
+
+  const handleRemoveCustomQuestion = (idx) => {
+    setFormData((prev) => {
+      const updated = [...(prev.customQuestions || [])];
+      updated.splice(idx, 1);
+      return { ...prev, customQuestions: updated };
+    });
+  };
+
   const filteredDrives = useMemo(() => {
     return drives.filter((d) => {
       const compName = typeof d.company === "object" ? d.company?.companyName : d.companyName || "";
@@ -172,8 +253,18 @@ export default function ManageDrives({
           (code) => programs.find((program) => program.code === code)?.name || code
         ),
         package: Number(formData.package),
-        minimumCGPA: Number(formData.minimumCGPA),
-        maximumBacklogs: Number(formData.maximumBacklogs),
+        checkCgpa: Boolean(formData.checkCgpa),
+        minimumCGPA: Number(formData.minimumCGPA || 0),
+        checkBacklogs: Boolean(formData.checkBacklogs),
+        maximumBacklogs: Number(formData.maximumBacklogs || 0),
+        checkTenthMarks: Boolean(formData.checkTenthMarks),
+        minimumTenthPercentage: Number(formData.minimumTenthPercentage || 0),
+        checkTwelfthMarks: Boolean(formData.checkTwelfthMarks),
+        minimumTwelfthPercentage: Number(formData.minimumTwelfthPercentage || 0),
+        checkEducationGaps: Boolean(formData.checkEducationGaps),
+        allowEducationGaps: Boolean(formData.allowEducationGaps),
+        maxEducationGapYears: Number(formData.maxEducationGapYears || 0),
+        customQuestions: (formData.customQuestions || []).filter((q) => q.question && q.question.trim()),
         graduationYear: Number(formData.graduationYear),
       };
 
@@ -435,6 +526,37 @@ export default function ManageDrives({
                     ))}
                   </div>
 
+                  {/* Criteria & Custom Questions Tags */}
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    {d.checkTenthMarks && Number(d.minimumTenthPercentage) > 0 && (
+                      <span className="rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 border border-blue-200">
+                        ≥{d.minimumTenthPercentage}% (10th)
+                      </span>
+                    )}
+                    {d.checkTwelfthMarks && Number(d.minimumTwelfthPercentage) > 0 && (
+                      <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700 border border-indigo-200">
+                        ≥{d.minimumTwelfthPercentage}% (12th)
+                      </span>
+                    )}
+                    {d.checkEducationGaps && (
+                      <span
+                        className={`rounded-md px-2 py-0.5 text-[10px] font-bold border ${
+                          !d.allowEducationGaps
+                            ? "bg-rose-50 text-rose-700 border-rose-200"
+                            : "bg-purple-50 text-purple-700 border-purple-200"
+                        }`}
+                      >
+                        {!d.allowEducationGaps ? "No Year Gaps Allowed" : `Max ${d.maxEducationGapYears || 0}y Gap`}
+                      </span>
+                    )}
+                    {Array.isArray(d.customQuestions) && d.customQuestions.length > 0 && (
+                      <span className="rounded-md bg-purple-50 px-2 py-0.5 text-[10px] font-bold text-purple-700 border border-purple-200 flex items-center gap-1">
+                        <HelpCircle className="h-3 w-3 text-purple-600" />
+                        <span>{d.customQuestions.length} Custom {d.customQuestions.length === 1 ? "Question" : "Questions"}</span>
+                      </span>
+                    )}
+                  </div>
+
                   {/* Location & Dates */}
                   <div className="mt-3 space-y-1.5 text-xs text-slate-500">
                     {d.location && (
@@ -669,59 +791,399 @@ export default function ManageDrives({
                 </div>
               )}
 
-              {/* Eligibility: cohort and academic thresholds */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Minimum CGPA
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="10"
-                    value={formData.minimumCGPA}
-                    onChange={(e) => setFormData({ ...formData, minimumCGPA: e.target.value })}
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs focus:border-blue-500 focus:outline-none"
-                  />
+              {/* Placement Session Selector */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Placement Session <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  required
+                  value={formData.placementSession}
+                  onChange={(e) => {
+                    const session = sessions.find((item) => item._id === e.target.value);
+                    setFormData({
+                      ...formData,
+                      placementSession: e.target.value,
+                      graduationYear: session ? String(session.sessionYear) : "",
+                    });
+                  }}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs focus:border-blue-500 focus:outline-none"
+                >
+                  <option value="">-- Select configured placement session --</option>
+                  {sessions.map((session) => (
+                    <option key={session._id} value={session._id}>
+                      {session.name || `Class of ${session.sessionYear}`} ({session.academicYear})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Automated Eligibility Engine Criteria Card */}
+              <div className="rounded-2xl border border-blue-100 bg-blue-50/40 p-4 space-y-4">
+                <div className="flex items-center justify-between border-b border-blue-100/80 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-blue-100 text-blue-700">
+                      <ShieldCheck className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900">
+                        Configurable Eligibility Criteria Checkpoints
+                      </h4>
+                      <p className="text-[11px] text-slate-500">
+                        Select which criteria the Centralized Engine checks before permitting candidate applications.
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Max Active Backlogs
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={formData.maximumBacklogs}
-                    onChange={(e) => setFormData({ ...formData, maximumBacklogs: e.target.value })}
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs focus:border-blue-500 focus:outline-none"
-                  />
+                {/* CGPA & Active Backlogs */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.checkCgpa}
+                        onChange={(e) => setFormData({ ...formData, checkCgpa: e.target.checked })}
+                        className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
+                      />
+                      <span className="text-xs font-bold text-slate-800">Enforce CGPA Cutoff</span>
+                    </label>
+                    {formData.checkCgpa && (
+                      <div>
+                        <span className="block text-[11px] font-semibold text-slate-600 mb-1">
+                          Minimum CGPA (0.0 - 10.0)
+                        </span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          max="10"
+                          value={formData.minimumCGPA}
+                          onChange={(e) => setFormData({ ...formData, minimumCGPA: e.target.value })}
+                          className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
+                          placeholder="e.g. 7.00"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.checkBacklogs}
+                        onChange={(e) => setFormData({ ...formData, checkBacklogs: e.target.checked })}
+                        className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
+                      />
+                      <span className="text-xs font-bold text-slate-800">Enforce Active Backlogs Limit</span>
+                    </label>
+                    {formData.checkBacklogs && (
+                      <div>
+                        <span className="block text-[11px] font-semibold text-slate-600 mb-1">
+                          Max Allowed Active Backlogs
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={formData.maximumBacklogs}
+                          onChange={(e) => setFormData({ ...formData, maximumBacklogs: e.target.value })}
+                          className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
+                          placeholder="0"
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Placement Session
-                  </label>
-                  <select
-                    value={formData.placementSession}
-                    onChange={(e) => {
-                      const session = sessions.find((item) => item._id === e.target.value);
-                      setFormData({
-                        ...formData,
-                        placementSession: e.target.value,
-                        graduationYear: session ? String(session.sessionYear) : "",
-                      });
-                    }}
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs focus:border-blue-500 focus:outline-none"
+                {/* 10th & 12th Marks Check */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.checkTenthMarks}
+                        onChange={(e) => setFormData({ ...formData, checkTenthMarks: e.target.checked })}
+                        className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
+                      />
+                      <span className="text-xs font-bold text-slate-800">Check Class 10th Marks</span>
+                    </label>
+                    {formData.checkTenthMarks && (
+                      <div>
+                        <span className="block text-[11px] font-semibold text-slate-600 mb-1">
+                          Minimum 10th Percentage (%)
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          value={formData.minimumTenthPercentage}
+                          onChange={(e) => setFormData({ ...formData, minimumTenthPercentage: e.target.value })}
+                          className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
+                          placeholder="e.g. 60"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.checkTwelfthMarks}
+                        onChange={(e) => setFormData({ ...formData, checkTwelfthMarks: e.target.checked })}
+                        className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
+                      />
+                      <span className="text-xs font-bold text-slate-800">Check Class 12th / Diploma Marks</span>
+                    </label>
+                    {formData.checkTwelfthMarks && (
+                      <div>
+                        <span className="block text-[11px] font-semibold text-slate-600 mb-1">
+                          Minimum 12th/Diploma Percentage (%)
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          value={formData.minimumTwelfthPercentage}
+                          onChange={(e) => setFormData({ ...formData, minimumTwelfthPercentage: e.target.value })}
+                          className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
+                          placeholder="e.g. 60"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Education Gap Verification */}
+                <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.checkEducationGaps}
+                        onChange={(e) => setFormData({ ...formData, checkEducationGaps: e.target.checked })}
+                        className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
+                      />
+                      <span className="text-xs font-bold text-slate-800">
+                        Check Student Education & Year Gaps
+                      </span>
+                    </label>
+                    {formData.checkEducationGaps && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200">
+                        Gap Rule Active
+                      </span>
+                    )}
+                  </div>
+
+                  {formData.checkEducationGaps && (
+                    <div className="pt-2 border-t border-slate-100 space-y-3 animate-in fade-in-50">
+                      <div>
+                        <span className="block text-[11px] font-semibold text-slate-600 mb-1.5">
+                          Education Gap Allowance Policy
+                        </span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setFormData({ ...formData, allowEducationGaps: false })}
+                            className={`px-3 py-2 text-xs font-bold rounded-xl border text-left transition ${
+                              !formData.allowEducationGaps
+                                ? "bg-rose-50 text-rose-800 border-rose-300 ring-1 ring-rose-300"
+                                : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                            }`}
+                          >
+                            <div className="font-extrabold">🚫 Strictly No Gaps Allowed</div>
+                            <div className="text-[10px] font-normal text-slate-500 mt-0.5">
+                              Students with any declared education gap will be marked ineligible
+                            </div>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setFormData({ ...formData, allowEducationGaps: true })}
+                            className={`px-3 py-2 text-xs font-bold rounded-xl border text-left transition ${
+                              formData.allowEducationGaps
+                                ? "bg-emerald-50 text-emerald-800 border-emerald-300 ring-1 ring-emerald-300"
+                                : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                            }`}
+                          >
+                            <div className="font-extrabold">✅ Allow Gaps with Max Threshold</div>
+                            <div className="text-[10px] font-normal text-slate-500 mt-0.5">
+                              Allow candidates within specified gap years (e.g. 1 or 2 years)
+                            </div>
+                          </button>
+                        </div>
+                      </div>
+
+                      {formData.allowEducationGaps && (
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                            Maximum Allowed Gap Duration (in Years)
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="5"
+                            value={formData.maxEducationGapYears}
+                            onChange={(e) => setFormData({ ...formData, maxEducationGapYears: e.target.value })}
+                            className="w-full sm:w-48 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
+                            placeholder="e.g. 1"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Custom Application Questions Builder */}
+              <div className="rounded-2xl border border-purple-200 bg-purple-50/30 p-4 space-y-3.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-100 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-purple-100 text-purple-700">
+                      <HelpCircle className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-xs font-bold text-slate-900">
+                          Custom Drive Application Questions
+                        </h4>
+                        <span className="rounded-full bg-purple-100 px-2 py-0.2 text-[10px] font-bold text-purple-800">
+                          {formData.customQuestions?.length || 0}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Ask questions that candidates must answer when submitting their application (relocation, bonds, tech stack, etc.)
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleAddCustomQuestion()}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 text-xs font-bold transition shadow-xs shrink-0"
                   >
-                    <option value="">Select configured session</option>
-                    {sessions.map((session) => (
-                      <option key={session._id} value={session._id}>
-                        {session.name || `Class of ${session.sessionYear}`}
-                      </option>
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Add Question</span>
+                  </button>
+                </div>
+
+                {/* Quick Presets Bar */}
+                <div className="space-y-1">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                    <Sparkles className="h-3 w-3 text-purple-600" />
+                    <span>Quick-Add Popular Questions:</span>
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {QUESTION_PRESETS.map((preset) => (
+                      <button
+                        type="button"
+                        key={preset.id}
+                        onClick={() => handleAddCustomQuestion(preset)}
+                        className="text-[11px] font-medium bg-white hover:bg-purple-50 text-slate-700 hover:text-purple-700 border border-purple-200/80 px-2.5 py-1 rounded-lg transition shadow-2xs"
+                      >
+                        + {preset.question.length > 42 ? preset.question.substring(0, 42) + "..." : preset.question}
+                      </button>
                     ))}
-                  </select>
+                  </div>
+                </div>
+
+                {/* Questions List */}
+                <div className="space-y-3 pt-1">
+                  {(!formData.customQuestions || formData.customQuestions.length === 0) ? (
+                    <div className="py-6 text-center text-xs text-slate-400 bg-white/70 rounded-xl border border-dashed border-purple-200">
+                      No custom questions configured. Candidates will only submit required academic records and resume.
+                    </div>
+                  ) : (
+                    formData.customQuestions.map((q, qIdx) => (
+                      <div
+                        key={q.id || qIdx}
+                        className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-2.5 shadow-2xs transition hover:border-purple-300"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-bold text-purple-900 bg-purple-50 px-2 py-0.5 rounded-md">
+                            Question #{qIdx + 1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveCustomQuestion(qIdx)}
+                            className="text-slate-400 hover:text-rose-600 p-1 rounded-lg hover:bg-rose-50 transition"
+                            title="Remove Question"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                            Question Prompt / Statement <span className="text-rose-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g. Are you willing to relocate to Bengaluru or Hyderabad?"
+                            value={q.question}
+                            onChange={(e) => handleUpdateCustomQuestion(qIdx, "question", e.target.value)}
+                            className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-800 focus:border-purple-500 focus:outline-none"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                              Response Input Type
+                            </label>
+                            <select
+                              value={q.type}
+                              onChange={(e) => handleUpdateCustomQuestion(qIdx, "type", e.target.value)}
+                              className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-800 focus:border-purple-500 focus:outline-none"
+                            >
+                              <option value="text">Short Text Answer</option>
+                              <option value="textarea">Paragraph / Multiline Text</option>
+                              <option value="select">Multiple Choice Dropdown</option>
+                              <option value="boolean">Yes / No Choice</option>
+                            </select>
+                          </div>
+
+                          <div className="flex items-end pb-1.5">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={q.required}
+                                onChange={(e) => handleUpdateCustomQuestion(qIdx, "required", e.target.checked)}
+                                className="rounded text-purple-600 focus:ring-purple-500 h-4 w-4"
+                              />
+                              <span className="text-xs font-bold text-slate-800">
+                                Mandatory / Required to submit
+                              </span>
+                            </label>
+                          </div>
+                        </div>
+
+                        {q.type === "select" && (
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                              Dropdown Options (Comma separated list)
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Python, Java, React, Go, C++"
+                              value={Array.isArray(q.options) ? q.options.join(", ") : (q.options || "")}
+                              onChange={(e) =>
+                                handleUpdateCustomQuestion(
+                                  qIdx,
+                                  "options",
+                                  e.target.value.split(",").map((s) => s.trim()).filter(Boolean)
+                                )
+                              }
+                              className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-800 focus:border-purple-500 focus:outline-none"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
 

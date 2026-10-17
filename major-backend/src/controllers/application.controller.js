@@ -165,7 +165,7 @@ export const evaluateStudentRequirements = (studentProfile, user, requirements) 
 };
 
 // Construct immutable submittedSnapshot from student profile at time of application
-export const buildSubmissionSnapshot = (studentProfile, user, placementDrive) => {
+export const buildSubmissionSnapshot = (studentProfile, user, placementDrive, customAnswers = []) => {
     return {
         studentProfileId: studentProfile._id,
         fullName: user?.fullName || studentProfile.fullName || "",
@@ -195,6 +195,7 @@ export const buildSubmissionSnapshot = (studentProfile, user, placementDrive) =>
         twelfthOrDiplomaDetails: studentProfile.twelfthOrDiplomaDetails || {},
         educationGaps: studentProfile.educationGaps || [],
         hasEducationGap: Boolean(studentProfile.hasEducationGap),
+        customAnswers: customAnswers || [],
         resume: studentProfile.resume || {},
         family: studentProfile.family || {},
         permanentAddress: studentProfile.permanentAddress || {},
@@ -275,7 +276,43 @@ const applyForPlacement = asyncHandler(async (req, res) => {
         }
     }
 
-    const submittedSnapshot = buildSubmissionSnapshot(studentProfile, req.user, placementDrive);
+    // Validate and process drive-specific custom questions
+    let submittedCustomAnswers = req.body.customAnswers;
+    if (typeof submittedCustomAnswers === "string") {
+        try {
+            submittedCustomAnswers = JSON.parse(submittedCustomAnswers);
+        } catch {
+            submittedCustomAnswers = [];
+        }
+    }
+    if (!Array.isArray(submittedCustomAnswers)) submittedCustomAnswers = [];
+
+    const configuredQuestions = Array.isArray(placementDrive.customQuestions) ? placementDrive.customQuestions : [];
+    const missingCustomQuestions = [];
+    const validatedCustomAnswers = configuredQuestions.map((q) => {
+        const userAns = submittedCustomAnswers.find((a) => String(a.questionId) === String(q.id));
+        const rawAnswer = userAns?.answer !== undefined ? userAns.answer : "";
+        const isAnswerEmpty = rawAnswer === null || rawAnswer === undefined || (typeof rawAnswer === "string" && !rawAnswer.trim());
+        if (q.required && isAnswerEmpty) {
+            missingCustomQuestions.push(q.question);
+        }
+        return {
+            questionId: q.id,
+            question: q.question,
+            type: q.type || "text",
+            answer: rawAnswer,
+            required: Boolean(q.required)
+        };
+    });
+
+    if (missingCustomQuestions.length > 0) {
+        throw new ApiError(
+            400,
+            `Please answer all mandatory custom questions: ${missingCustomQuestions.join("; ")}`
+        );
+    }
+
+    const submittedSnapshot = buildSubmissionSnapshot(studentProfile, req.user, placementDrive, validatedCustomAnswers);
 
     // 3. Database Uniqueness Check
     const existingApplication = await Application.findOne({
@@ -289,6 +326,7 @@ const applyForPlacement = asyncHandler(async (req, res) => {
             existingApplication.status = "applied";
             existingApplication.appliedAt = new Date();
             existingApplication.statusUpdatedAt = new Date();
+            existingApplication.customAnswers = validatedCustomAnswers;
             existingApplication.submittedSnapshot = submittedSnapshot;
             if (!existingApplication.statusHistory) existingApplication.statusHistory = [];
             existingApplication.statusHistory.push({
@@ -335,6 +373,7 @@ const applyForPlacement = asyncHandler(async (req, res) => {
     const application = await Application.create({
         student: studentProfile._id,
         placementDrive: placementDrive._id,
+        customAnswers: validatedCustomAnswers,
         submittedSnapshot,
         eligibilitySnapshot: {
             status: evalResult.status,

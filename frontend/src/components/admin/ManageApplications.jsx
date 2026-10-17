@@ -20,6 +20,7 @@ import {
   Eye,
   Layers,
   FolderDown,
+  HelpCircle,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { getResumeViewUrl } from "../../utils/resumeHelper";
@@ -638,6 +639,32 @@ export default function ManageApplications({
             </div>
           </div>
         )}
+
+        {/* Candidate Responses to Custom Drive Screening Questions */}
+        {(() => {
+          const customAns = app.customAnswers || app.submittedSnapshot?.customAnswers || [];
+          if (!customAns || customAns.length === 0) return null;
+          return (
+            <div className="w-full mt-2.5 pt-2.5 border-t border-slate-100">
+              <div className="rounded-xl bg-purple-50/50 border border-purple-100/80 p-3 space-y-2">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-purple-900">
+                  <HelpCircle className="h-3.5 w-3.5 text-purple-600 shrink-0" />
+                  <span>Candidate Screening Responses ({customAns.length}):</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {customAns.map((ans, idx) => (
+                    <div key={idx} className="bg-white rounded-lg p-2.5 border border-purple-100 text-xs shadow-2xs">
+                      <span className="font-semibold text-slate-600 text-[11px] block">{ans.question}</span>
+                      <span className="font-bold text-slate-900 mt-1 block">
+                        {ans.answer === true ? "Yes" : (ans.answer === false ? "No" : (String(ans.answer || "No answer provided")))}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     );
   };
@@ -934,6 +961,30 @@ export default function ManageApplications({
             </div>
 
             <form onSubmit={handleStatusSubmit} className="mt-4 space-y-4">
+              {/* Screening Question Responses Review */}
+              {(() => {
+                const answers = activeModalApp.customAnswers || activeModalApp.submittedSnapshot?.customAnswers || [];
+                if (!answers || answers.length === 0) return null;
+                return (
+                  <div className="rounded-2xl border border-purple-100 bg-purple-50/50 p-3.5 space-y-2">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-purple-900">
+                      <HelpCircle className="h-4 w-4 text-purple-600 shrink-0" />
+                      <span>Candidate Screening Question Responses ({answers.length}):</span>
+                    </div>
+                    <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                      {answers.map((ans, i) => (
+                        <div key={i} className="bg-white rounded-lg p-2 border border-purple-100 text-xs">
+                          <p className="font-semibold text-slate-700 text-[11px]">{ans.question}</p>
+                          <p className="font-bold text-slate-900 mt-0.5">
+                            {ans.answer === true ? "Yes" : (ans.answer === false ? "No" : (String(ans.answer || "No response")))}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Status Selector */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">

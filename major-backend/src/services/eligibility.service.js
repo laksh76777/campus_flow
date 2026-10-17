@@ -64,12 +64,14 @@ export class EligibilityService {
         if (studentActiveBacklogs === null || isNaN(studentActiveBacklogs)) missingFields.push("Backlog Status");
 
         // If drive requires 10th or 12th minimum cutoffs, student MUST have recorded them
-        if (drive.minimumTenthPercentage && Number(drive.minimumTenthPercentage) > 0) {
+        const requiresTenthCheck = drive.checkTenthMarks || (drive.minimumTenthPercentage && Number(drive.minimumTenthPercentage) > 0);
+        if (requiresTenthCheck) {
             if (studentTenth === null || isNaN(studentTenth)) {
                 missingFields.push("10th Standard Percentage");
             }
         }
-        if (drive.minimumTwelfthPercentage && Number(drive.minimumTwelfthPercentage) > 0) {
+        const requiresTwelfthCheck = drive.checkTwelfthMarks || (drive.minimumTwelfthPercentage && Number(drive.minimumTwelfthPercentage) > 0);
+        if (requiresTwelfthCheck) {
             if (studentTwelfth === null || isNaN(studentTwelfth)) {
                 missingFields.push("12th / Diploma Percentage");
             }
@@ -168,42 +170,48 @@ export class EligibilityService {
         }
 
         // 6. CGPA Cutoff Evaluation
+        const shouldCheckCgpa = drive.checkCgpa !== false;
         const minCGPA = Number(drive.minimumCGPA) || 0;
-        const cgpaPassed = studentCGPA >= minCGPA;
+        if (shouldCheckCgpa && minCGPA > 0) {
+            const cgpaPassed = studentCGPA >= minCGPA;
+            criteriaBreakdown.push({
+                criterion: "CGPA Score",
+                required: `>= ${minCGPA.toFixed(2)}`,
+                actual: studentCGPA.toFixed(2),
+                passed: cgpaPassed
+            });
 
-        criteriaBreakdown.push({
-            criterion: "CGPA Score",
-            required: `>= ${minCGPA.toFixed(2)}`,
-            actual: studentCGPA.toFixed(2),
-            passed: cgpaPassed
-        });
-
-        if (!cgpaPassed) {
-            failureReasons.push(
-                `Current CGPA (${studentCGPA.toFixed(2)}) is below minimum required (${minCGPA.toFixed(2)})`
-            );
+            if (!cgpaPassed) {
+                failureReasons.push(
+                    `Current CGPA (${studentCGPA.toFixed(2)}) is below minimum required (${minCGPA.toFixed(2)})`
+                );
+            }
         }
 
         // 7. Active Backlogs Evaluation
-        const maxAllowedBacklogs = Number(drive.maximumBacklogs) || 0;
-        const backlogsPassed = studentActiveBacklogs <= maxAllowedBacklogs;
+        const shouldCheckBacklogs = drive.checkBacklogs !== false;
+        if (shouldCheckBacklogs) {
+            const maxAllowedBacklogs = Number(drive.maximumBacklogs) || 0;
+            const backlogsPassed = studentActiveBacklogs <= maxAllowedBacklogs;
 
-        criteriaBreakdown.push({
-            criterion: "Active Backlogs",
-            required: `<= ${maxAllowedBacklogs} backlogs`,
-            actual: `${studentActiveBacklogs} active backlogs`,
-            passed: backlogsPassed
-        });
+            criteriaBreakdown.push({
+                criterion: "Active Backlogs",
+                required: `<= ${maxAllowedBacklogs} backlogs`,
+                actual: `${studentActiveBacklogs} active backlogs`,
+                passed: backlogsPassed
+            });
 
-        if (!backlogsPassed) {
-            failureReasons.push(
-                `Active backlogs (${studentActiveBacklogs}) exceed maximum allowed (${maxAllowedBacklogs})`
-            );
+            if (!backlogsPassed) {
+                failureReasons.push(
+                    `Active backlogs (${studentActiveBacklogs}) exceed maximum allowed (${maxAllowedBacklogs})`
+                );
+            }
         }
 
-        // 8. 10th Percentage Cutoff (if configured)
-        if (drive.minimumTenthPercentage && Number(drive.minimumTenthPercentage) > 0) {
-            const minTenth = Number(drive.minimumTenthPercentage);
+        // 8. 10th Percentage Cutoff (if configured or enabled)
+        const shouldCheckTenth = drive.checkTenthMarks || (drive.minimumTenthPercentage && Number(drive.minimumTenthPercentage) > 0);
+        if (shouldCheckTenth) {
+            const minTenth = Number(drive.minimumTenthPercentage) || 0;
             const tenthPassed = studentTenth >= minTenth;
 
             criteriaBreakdown.push({
@@ -220,9 +228,10 @@ export class EligibilityService {
             }
         }
 
-        // 9. 12th / Diploma Percentage Cutoff (if configured)
-        if (drive.minimumTwelfthPercentage && Number(drive.minimumTwelfthPercentage) > 0) {
-            const minTwelfth = Number(drive.minimumTwelfthPercentage);
+        // 9. 12th / Diploma Percentage Cutoff (if configured or enabled)
+        const shouldCheckTwelfth = drive.checkTwelfthMarks || (drive.minimumTwelfthPercentage && Number(drive.minimumTwelfthPercentage) > 0);
+        if (shouldCheckTwelfth) {
+            const minTwelfth = Number(drive.minimumTwelfthPercentage) || 0;
             const twelfthPassed = studentTwelfth >= minTwelfth;
 
             criteriaBreakdown.push({
@@ -239,7 +248,54 @@ export class EligibilityService {
             }
         }
 
-        // 10. Historical Backlogs Limit (if configured)
+        // 10. Education Gap Verification (if configured)
+        if (drive.checkEducationGaps) {
+            const studentHasGap = Boolean(
+                student.hasEducationGap ||
+                (Array.isArray(student.educationGaps) && student.educationGaps.length > 0)
+            );
+            let totalGapYears = 0;
+            if (Array.isArray(student.educationGaps) && student.educationGaps.length > 0) {
+                totalGapYears = student.educationGaps.reduce((sum, g) => {
+                    if (g.durationMonths) return sum + (g.durationMonths / 12);
+                    if (g.startYear && g.endYear && g.endYear >= g.startYear) return sum + Math.max(1, g.endYear - g.startYear);
+                    return sum + 1;
+                }, 0);
+                totalGapYears = Math.round(totalGapYears * 10) / 10;
+            } else if (studentHasGap) {
+                totalGapYears = 1;
+            }
+
+            const allowsGaps = drive.allowEducationGaps !== false;
+            const maxAllowedGapYears = Number(drive.maxEducationGapYears) || 0;
+            let gapPassed = true;
+            let gapReason = "";
+
+            if (studentHasGap) {
+                if (!allowsGaps) {
+                    gapPassed = false;
+                    gapReason = "Education gaps are not permitted for this placement drive";
+                } else if (totalGapYears > maxAllowedGapYears) {
+                    gapPassed = false;
+                    gapReason = `Total education gap (${totalGapYears} year(s)) exceeds allowed threshold (${maxAllowedGapYears} year(s))`;
+                }
+            }
+
+            criteriaBreakdown.push({
+                criterion: "Education Gap Check",
+                required: !allowsGaps
+                    ? "No education gaps permitted"
+                    : `Max ${maxAllowedGapYears} year(s) gap allowed`,
+                actual: studentHasGap ? `${totalGapYears} year(s) gap declared` : "No education gaps",
+                passed: gapPassed
+            });
+
+            if (!gapPassed) {
+                failureReasons.push(gapReason);
+            }
+        }
+
+        // 11. Historical Backlogs Limit (if configured)
         if (
             drive.maximumHistoricalBacklogs != null &&
             drive.maximumHistoricalBacklogs >= 0
