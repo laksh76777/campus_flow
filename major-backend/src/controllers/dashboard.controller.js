@@ -246,15 +246,13 @@ const getStudentDashboardStats = asyncHandler(async (req, res) => {
     const studentId = student._id;
     const currentDate = new Date();
 
-    // 1. Calculate Profile Completion Score & Checklist
+    // 1. Calculate Profile Completion Score & Checklist (No skills requirement)
     const profileChecklist = [
-        { field: "Basic Information", completed: Boolean(student.user?.fullName && student.enrollmentNumber), points: 15, hint: "Name & Enrollment number" },
-        { field: "Contact Details", completed: Boolean(student.user?.phone && student.user?.email), points: 10, hint: "Email and Phone number" },
-        { field: "Academic Records", completed: Boolean(student.branch && student.cgpa && student.graduationYear), points: 20, hint: "Branch, CGPA, and Graduation Batch" },
-        { field: "10th & 12th Marks", completed: Boolean(student.tenthPercentage && student.twelfthPercentage), points: 15, hint: "Board exam percentages" },
-        { field: "Technical Skills", completed: Boolean(student.skills && student.skills.length >= 3), points: 15, hint: "Add at least 3 skills" },
-        { field: "Resume Document", completed: Boolean(student.resume && student.resume.url), points: 15, hint: "Uploaded verified resume" },
-        { field: "Profile Avatar", completed: Boolean(student.user?.avatar && student.user.avatar.url), points: 10, hint: "Professional photo" }
+        { field: "Basic Details", completed: Boolean(student.user?.fullName && (student.enrollmentNumber || student.usn)), points: 20, hint: "Name & Enrollment number" },
+        { field: "Contact Info", completed: Boolean((student.user?.phone || student.phone || student.alternatePhone) && (student.user?.email || student.collegeEmail)), points: 15, hint: "Email and Phone number" },
+        { field: "Academic Standing", completed: Boolean((student.branch || student.department) && (student.cgpa != null) && student.graduationYear), points: 25, hint: "Branch, CGPA, and Graduation Batch" },
+        { field: "10th & 12th Marks", completed: Boolean(student.tenthPercentage && student.twelfthPercentage), points: 20, hint: "Board exam percentages" },
+        { field: "Verified Resume", completed: Boolean(student.resume && student.resume.url), points: 20, hint: "Uploaded verified resume" }
     ];
 
     const profileCompletionPercentage = profileChecklist.reduce((acc, item) => {

@@ -30,8 +30,18 @@ export const getMyApplications = async () => {
   return response.data;
 };
 
-// Apply for a specific placement drive
-export const applyForDrive = async (driveId) => {
+// Apply for a specific placement drive (supports optional custom/updated resume file)
+export const applyForDrive = async (driveId, resumeFile = null) => {
+  if (resumeFile) {
+    const formData = new FormData();
+    formData.append("resume", resumeFile);
+    const response = await api.post(`/application/${driveId}/apply`, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+    return response.data;
+  }
   const response = await api.post(`/application/${driveId}/apply`);
   return response.data;
 };
