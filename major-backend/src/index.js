@@ -16,7 +16,7 @@ try {
 } catch (error) {
     const errorCode = error?.code || error?.name || "ConfigurationError";
     console.error(
-        `Server startup failed (${errorCode}). Check required environment settings and MongoDB connectivity.`
+        `Server startup failed (${errorCode}): ${error?.message || error}. Check required environment settings and MongoDB connectivity.`
     );
     process.exitCode = 1;
 }
