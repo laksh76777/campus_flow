@@ -183,6 +183,32 @@ const applicationSchema = new mongoose.Schema(
             }
         ],
 
+        // V2 Phase - Custom Answers submitted for Drive-specific questions
+        customAnswers: [
+            {
+                questionId: {
+                    type: String,
+                    required: true
+                },
+                question: {
+                    type: String,
+                    required: true
+                },
+                type: {
+                    type: String,
+                    default: "text"
+                },
+                answer: {
+                    type: mongoose.Schema.Types.Mixed,
+                    default: ""
+                },
+                required: {
+                    type: Boolean,
+                    default: false
+                }
+            }
+        ],
+
         // V2 Phase - Immutable Application Data Submission Snapshot
         submittedSnapshot: {
             studentProfileId: {
@@ -209,6 +235,7 @@ const applicationSchema = new mongoose.Schema(
             twelfthOrDiplomaDetails: Object,
             educationGaps: Array,
             hasEducationGap: Boolean,
+            customAnswers: Array,
             resume: Object,
             family: Object,
             permanentAddress: Object,

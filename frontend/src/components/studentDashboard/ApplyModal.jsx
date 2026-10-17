@@ -16,6 +16,7 @@ import {
   Clock,
   Briefcase,
   Upload,
+  HelpCircle,
 } from "lucide-react";
 import { getResumeViewUrl } from "../../utils/resumeHelper";
 import { checkDriveEligibility } from "../../services/studentService";
@@ -36,6 +37,21 @@ export default function ApplyModal({
   const [resumeMode, setResumeMode] = useState(hasProfileResume ? "profile" : "custom");
   const [customResumeFile, setCustomResumeFile] = useState(null);
   const [customResumeError, setCustomResumeError] = useState("");
+  const [customAnswers, setCustomAnswers] = useState({});
+  const [customErrors, setCustomErrors] = useState({});
+
+  const customQuestions = Array.isArray(drive?.customQuestions) ? drive.customQuestions : [];
+
+  useEffect(() => {
+    if (drive?.customQuestions) {
+      const initial = {};
+      drive.customQuestions.forEach((q) => {
+        initial[q.id] = q.type === "boolean" ? "" : "";
+      });
+      setCustomAnswers(initial);
+      setCustomErrors({});
+    }
+  }, [drive]);
 
   // Live Centralized Eligibility Engine pre-check
   useEffect(() => {
@@ -95,6 +111,17 @@ export default function ApplyModal({
     setCustomResumeFile(file);
   };
 
+  const handleAnswerChange = (questionId, val) => {
+    setCustomAnswers((prev) => ({ ...prev, [questionId]: val }));
+    if (customErrors[questionId]) {
+      setCustomErrors((prev) => {
+        const copy = { ...prev };
+        delete copy[questionId];
+        return copy;
+      });
+    }
+  };
+
   const handleSubmit = async () => {
     if (!isStarted) {
       return;
@@ -108,9 +135,36 @@ export default function ApplyModal({
       return;
     }
 
+    // Validate required custom questions
+    const errors = {};
+    customQuestions.forEach((q) => {
+      const ans = customAnswers[q.id];
+      const isEmpty = ans === null || ans === undefined || (typeof ans === "string" && !ans.trim());
+      if (q.required && isEmpty) {
+        errors[q.id] = "This question requires an answer";
+      }
+    });
+
+    if (Object.keys(errors).length > 0) {
+      setCustomErrors(errors);
+      return;
+    }
+
+    const formattedAnswers = customQuestions.map((q) => ({
+      questionId: q.id,
+      question: q.question,
+      type: q.type || "text",
+      answer: customAnswers[q.id] !== undefined ? customAnswers[q.id] : "",
+      required: Boolean(q.required),
+    }));
+
     setSubmitting(true);
     try {
-      await onConfirmApply(drive._id, resumeMode === "custom" ? customResumeFile : null);
+      await onConfirmApply(
+        drive._id,
+        resumeMode === "custom" ? customResumeFile : null,
+        formattedAnswers
+      );
       onClose();
     } catch {
       // Handled in parent with toast
@@ -467,6 +521,105 @@ export default function ApplyModal({
             </div>
           )}
         </div>
+
+        {/* Custom Drive Questions Section */}
+        {customQuestions.length > 0 && (
+          <div className="mt-4 rounded-2xl bg-white p-4 border border-slate-200/90 shadow-2xs space-y-3.5">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <HelpCircle className="h-4 w-4 text-purple-600" />
+                <span className="text-xs font-bold text-slate-800">
+                  Drive-Specific Candidate Questions
+                </span>
+              </div>
+              <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
+                {customQuestions.length} {customQuestions.length === 1 ? "Question" : "Questions"}
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              {customQuestions.map((q, idx) => {
+                const error = customErrors[q.id];
+                return (
+                  <div key={q.id || idx} className="space-y-1.5">
+                    <label className="block text-xs font-bold text-slate-700">
+                      <span>{q.question}</span>
+                      {q.required && <span className="text-rose-500 ml-1">*</span>}
+                    </label>
+
+                    {q.type === "textarea" ? (
+                      <textarea
+                        rows={3}
+                        value={customAnswers[q.id] || ""}
+                        onChange={(e) => handleAnswerChange(q.id, e.target.value)}
+                        placeholder={q.placeholder || "Enter your answer here..."}
+                        className={`w-full rounded-xl border p-2.5 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none transition resize-y ${
+                          error
+                            ? "border-rose-400 bg-rose-50/30 focus:border-rose-500 focus:ring-1 focus:ring-rose-200"
+                            : "border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-100"
+                        }`}
+                      />
+                    ) : q.type === "select" ? (
+                      <select
+                        value={customAnswers[q.id] || ""}
+                        onChange={(e) => handleAnswerChange(q.id, e.target.value)}
+                        className={`w-full rounded-xl border px-3 py-2 text-xs text-slate-800 focus:outline-none transition ${
+                          error
+                            ? "border-rose-400 bg-rose-50/30 focus:border-rose-500"
+                            : "border-slate-200 focus:border-blue-500"
+                        }`}
+                      >
+                        <option value="">-- Select an option --</option>
+                        {Array.isArray(q.options) &&
+                          q.options.map((opt, optIdx) => (
+                            <option key={optIdx} value={opt}>
+                              {opt}
+                            </option>
+                          ))}
+                      </select>
+                    ) : q.type === "boolean" ? (
+                      <div className="flex items-center gap-3 pt-0.5">
+                        {["Yes", "No"].map((option) => {
+                          const isChecked = customAnswers[q.id] === option;
+                          return (
+                            <button
+                              type="button"
+                              key={option}
+                              onClick={() => handleAnswerChange(q.id, option)}
+                              className={`px-4 py-1.5 rounded-xl text-xs font-bold border transition ${
+                                isChecked
+                                  ? "bg-purple-600 text-white border-purple-600 shadow-xs"
+                                  : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                              }`}
+                            >
+                              {option}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <input
+                        type="text"
+                        value={customAnswers[q.id] || ""}
+                        onChange={(e) => handleAnswerChange(q.id, e.target.value)}
+                        placeholder={q.placeholder || "Enter your response"}
+                        className={`w-full rounded-xl border px-3 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none transition ${
+                          error
+                            ? "border-rose-400 bg-rose-50/30 focus:border-rose-500 focus:ring-1 focus:ring-rose-200"
+                            : "border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-100"
+                        }`}
+                      />
+                    )}
+
+                    {error && (
+                      <p className="text-[11px] font-semibold text-rose-600">{error}</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Re-apply Notice */}
         {isReapply && (

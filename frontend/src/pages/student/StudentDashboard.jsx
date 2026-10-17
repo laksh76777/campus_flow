@@ -525,9 +525,9 @@ export default function StudentDashboard() {
     setIsApplyModalOpen(true);
   };
 
-  const handleConfirmApply = async (driveId, resumeFile = null) => {
+  const handleConfirmApply = async (driveId, resumeFile = null, customAnswers = []) => {
     try {
-      await applyForDrive(driveId, resumeFile);
+      await applyForDrive(driveId, resumeFile, customAnswers);
       toast.success("Application submitted successfully!");
       loadDashboardData(true);
     } catch (err) {

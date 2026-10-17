@@ -105,6 +105,26 @@ const processJdPdfUpload = async (req) => {
     return jdAttachment;
 };
 
+const sanitizeCustomQuestions = (rawQuestions) => {
+    let questions = rawQuestions;
+    if (typeof questions === "string") {
+        try { questions = JSON.parse(questions); } catch { questions = []; }
+    }
+    if (!Array.isArray(questions)) return [];
+    return questions
+        .map((q, idx) => ({
+            id: String(q.id || `q_${Date.now()}_${idx}`),
+            question: String(q.question || "").trim(),
+            type: ["text", "textarea", "select", "radio", "boolean"].includes(q.type) ? q.type : "text",
+            options: Array.isArray(q.options)
+                ? q.options.map((o) => String(o).trim()).filter(Boolean)
+                : (typeof q.options === "string" ? q.options.split(",").map((o) => o.trim()).filter(Boolean) : []),
+            required: Boolean(q.required),
+            placeholder: String(q.placeholder || "").trim(),
+        }))
+        .filter((q) => q.question.length > 0);
+};
+
 const createPlacementDrive = asyncHandler(async (req, res) => {
     const {
         company,jobTitle,jobDescription,jobType,package: salaryPackage,location,eligibleBranches,eligibleProgramCodes,minimumCGPA,maximumBacklogs,graduationYear,placementSession,applicationStartDate,applicationDeadline,driveDate,venue,applicationLink,
@@ -199,8 +219,16 @@ const createPlacementDrive = asyncHandler(async (req, res) => {
                 : 0,
         graduationYear,
         placementSession: session._id,
+        checkCgpa: req.body.checkCgpa !== undefined ? (String(req.body.checkCgpa) === "true" || req.body.checkCgpa === true) : true,
+        checkBacklogs: req.body.checkBacklogs !== undefined ? (String(req.body.checkBacklogs) === "true" || req.body.checkBacklogs === true) : true,
+        checkTenthMarks: req.body.checkTenthMarks !== undefined ? (String(req.body.checkTenthMarks) === "true" || req.body.checkTenthMarks === true) : false,
         minimumTenthPercentage: minimumTenthPercentage !== undefined ? Number(minimumTenthPercentage) : 0,
+        checkTwelfthMarks: req.body.checkTwelfthMarks !== undefined ? (String(req.body.checkTwelfthMarks) === "true" || req.body.checkTwelfthMarks === true) : false,
         minimumTwelfthPercentage: minimumTwelfthPercentage !== undefined ? Number(minimumTwelfthPercentage) : 0,
+        checkEducationGaps: req.body.checkEducationGaps !== undefined ? (String(req.body.checkEducationGaps) === "true" || req.body.checkEducationGaps === true) : false,
+        allowEducationGaps: req.body.allowEducationGaps !== undefined ? (String(req.body.allowEducationGaps) === "true" || req.body.allowEducationGaps === true) : true,
+        maxEducationGapYears: req.body.maxEducationGapYears !== undefined ? Math.max(0, Number(req.body.maxEducationGapYears)) : 0,
+        customQuestions: sanitizeCustomQuestions(req.body.customQuestions),
         maximumHistoricalBacklogs: maximumHistoricalBacklogs !== undefined && maximumHistoricalBacklogs !== null ? Number(maximumHistoricalBacklogs) : null,
         applicationStartDate: startDate,
         applicationDeadline: deadline,
@@ -432,6 +460,30 @@ const updatePlacementDrive = asyncHandler(async (req, res) => {
     }
     if (minimumTwelfthPercentage !== undefined) {
         placementDrive.minimumTwelfthPercentage = Number(minimumTwelfthPercentage);
+    }
+    if (req.body.checkCgpa !== undefined) {
+        placementDrive.checkCgpa = String(req.body.checkCgpa) === "true" || req.body.checkCgpa === true;
+    }
+    if (req.body.checkBacklogs !== undefined) {
+        placementDrive.checkBacklogs = String(req.body.checkBacklogs) === "true" || req.body.checkBacklogs === true;
+    }
+    if (req.body.checkTenthMarks !== undefined) {
+        placementDrive.checkTenthMarks = String(req.body.checkTenthMarks) === "true" || req.body.checkTenthMarks === true;
+    }
+    if (req.body.checkTwelfthMarks !== undefined) {
+        placementDrive.checkTwelfthMarks = String(req.body.checkTwelfthMarks) === "true" || req.body.checkTwelfthMarks === true;
+    }
+    if (req.body.checkEducationGaps !== undefined) {
+        placementDrive.checkEducationGaps = String(req.body.checkEducationGaps) === "true" || req.body.checkEducationGaps === true;
+    }
+    if (req.body.allowEducationGaps !== undefined) {
+        placementDrive.allowEducationGaps = String(req.body.allowEducationGaps) === "true" || req.body.allowEducationGaps === true;
+    }
+    if (req.body.maxEducationGapYears !== undefined) {
+        placementDrive.maxEducationGapYears = Math.max(0, Number(req.body.maxEducationGapYears));
+    }
+    if (req.body.customQuestions !== undefined) {
+        placementDrive.customQuestions = sanitizeCustomQuestions(req.body.customQuestions);
     }
     if (maximumHistoricalBacklogs !== undefined) {
         placementDrive.maximumHistoricalBacklogs = maximumHistoricalBacklogs !== null ? Number(maximumHistoricalBacklogs) : null;

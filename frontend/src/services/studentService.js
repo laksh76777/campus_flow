@@ -30,11 +30,14 @@ export const getMyApplications = async () => {
   return response.data;
 };
 
-// Apply for a specific placement drive (supports optional custom/updated resume file)
-export const applyForDrive = async (driveId, resumeFile = null) => {
+// Apply for a specific placement drive (supports optional custom/updated resume file and customAnswers)
+export const applyForDrive = async (driveId, resumeFile = null, customAnswers = []) => {
   if (resumeFile) {
     const formData = new FormData();
     formData.append("resume", resumeFile);
+    if (customAnswers && customAnswers.length > 0) {
+      formData.append("customAnswers", JSON.stringify(customAnswers));
+    }
     const response = await api.post(`/application/${driveId}/apply`, formData, {
       headers: {
         "Content-Type": "multipart/form-data",
@@ -42,7 +45,8 @@ export const applyForDrive = async (driveId, resumeFile = null) => {
     });
     return response.data;
   }
-  const response = await api.post(`/application/${driveId}/apply`);
+  const payload = customAnswers && customAnswers.length > 0 ? { customAnswers } : {};
+  const response = await api.post(`/application/${driveId}/apply`, payload);
   return response.data;
 };
 

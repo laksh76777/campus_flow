@@ -109,11 +109,31 @@ const placementDriveSchema = new mongoose.Schema(
             index: true,
         },
 
+        checkCgpa: {
+            type: Boolean,
+            default: true,
+        },
+
+        checkBacklogs: {
+            type: Boolean,
+            default: true,
+        },
+
+        checkTenthMarks: {
+            type: Boolean,
+            default: false,
+        },
+
         minimumTenthPercentage: {
             type: Number,
             default: 0,
             min: 0,
             max: 100,
+        },
+
+        checkTwelfthMarks: {
+            type: Boolean,
+            default: false,
         },
 
         minimumTwelfthPercentage: {
@@ -122,6 +142,55 @@ const placementDriveSchema = new mongoose.Schema(
             min: 0,
             max: 100,
         },
+
+        checkEducationGaps: {
+            type: Boolean,
+            default: false,
+        },
+
+        allowEducationGaps: {
+            type: Boolean,
+            default: true,
+        },
+
+        maxEducationGapYears: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+
+        customQuestions: [
+            {
+                id: {
+                    type: String,
+                    required: true,
+                    trim: true,
+                },
+                question: {
+                    type: String,
+                    required: true,
+                    trim: true,
+                },
+                type: {
+                    type: String,
+                    enum: ["text", "textarea", "select", "radio", "boolean"],
+                    default: "text",
+                },
+                options: {
+                    type: [String],
+                    default: [],
+                },
+                required: {
+                    type: Boolean,
+                    default: false,
+                },
+                placeholder: {
+                    type: String,
+                    trim: true,
+                    default: "",
+                },
+            },
+        ],
 
         maximumHistoricalBacklogs: {
             type: Number,
