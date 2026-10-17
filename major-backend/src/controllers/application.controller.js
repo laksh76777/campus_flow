@@ -9,6 +9,7 @@ import { Notification } from "../models/notification.model.js";
 import { sendApplicationStatusEmail } from "../utils/mailService.js";
 import { EligibilityService } from "../services/eligibility.service.js";
 import { resolveStudentProgram } from "../constants/programCatalog.js";
+import { uploadOnCloudinary } from "../utils/cloudinary.js";
 
 // Legal status transitions state machine
 const LEGAL_TRANSITIONS = {
@@ -250,6 +251,28 @@ const applyForPlacement = asyncHandler(async (req, res) => {
             403,
             `Cannot apply: This placement drive requires mandatory student details that are currently missing from your profile: ${reqResult.missingFields.join(", ")}`
         );
+    }
+
+    // Check if custom / updated resume file was uploaded with this drive application
+    if (req.file && req.file.path) {
+        try {
+            const uploadedResume = await uploadOnCloudinary(req.file.path, {
+                folder: "resumes",
+                resource_type: "raw"
+            });
+            if (uploadedResume && uploadedResume.url) {
+                const newResumeObj = {
+                    url: uploadedResume.url,
+                    publicId: uploadedResume.public_id || "",
+                    originalName: req.file.originalname,
+                    uploadedAt: new Date()
+                };
+                studentProfile.resume = newResumeObj;
+                await studentProfile.save();
+            }
+        } catch (uploadErr) {
+            console.error("Custom resume upload for drive application failed:", uploadErr);
+        }
     }
 
     const submittedSnapshot = buildSubmissionSnapshot(studentProfile, req.user, placementDrive);

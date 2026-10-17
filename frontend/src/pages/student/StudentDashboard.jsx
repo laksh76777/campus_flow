@@ -28,6 +28,8 @@ import {
   AlertTriangle,
   Home,
   Users as UsersIcon,
+  Lock,
+  Phone,
 } from "lucide-react";
 
 import StudentSidebar from "../../components/studentDashboard/StudentSidebar";
@@ -37,6 +39,7 @@ import RecentDrives from "../../components/studentDashboard/RecentDrives";
 import RecentApplications from "../../components/studentDashboard/RecentApplications";
 import ApplyModal from "../../components/studentDashboard/ApplyModal";
 import ProfileDrawer from "../../components/studentDashboard/ProfileDrawer";
+import ProfileModificationModal from "../../components/studentDashboard/ProfileModificationModal";
 
 import {
   getStudentDashboardStats,
@@ -93,10 +96,15 @@ export default function StudentDashboard() {
   const [isProfileDrawerOpen, setIsProfileDrawerOpen] = useState(false);
   const [drawerSection, setDrawerSection] = useState("academic");
   const [drawerEditing, setDrawerEditing] = useState(false);
+  const [isModModalOpen, setIsModModalOpen] = useState(false);
+
+  const isProfileLocked = Boolean(
+    studentProfile?.isProfileLocked && studentProfile?.verificationStatus !== "REVERIFICATION_REQUESTED"
+  );
 
   const handleOpenProfileToSection = (section = "academic", edit = true) => {
     setDrawerSection(section);
-    setDrawerEditing(edit);
+    setDrawerEditing(edit && !isProfileLocked);
     setIsProfileDrawerOpen(true);
   };
 
@@ -517,9 +525,9 @@ export default function StudentDashboard() {
     setIsApplyModalOpen(true);
   };
 
-  const handleConfirmApply = async (driveId) => {
+  const handleConfirmApply = async (driveId, resumeFile = null) => {
     try {
-      await applyForDrive(driveId);
+      await applyForDrive(driveId, resumeFile);
       toast.success("Application submitted successfully!");
       loadDashboardData(true);
     } catch (err) {
@@ -837,9 +845,15 @@ export default function StudentDashboard() {
                             <button
                               key={item.field}
                               type="button"
-                              onClick={() => handleOpenProfileToSection(targetSection, true)}
+                              onClick={() => {
+                                if (isProfileLocked) {
+                                  setIsModModalOpen(true);
+                                } else {
+                                  handleOpenProfileToSection(targetSection, true);
+                                }
+                              }}
                               className="group inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50/90 px-2.5 py-1 text-xs font-semibold text-amber-800 shadow-2xs hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 transition active:scale-95 cursor-pointer"
-                              title={`Click to fill ${item.field}`}
+                              title={isProfileLocked ? `Request modification for ${item.field}` : `Click to fill ${item.field}`}
                             >
                               <Plus className="h-3 w-3 text-amber-600 group-hover:text-blue-600 transition" />
                               <span>Fill {item.field}</span>
@@ -862,14 +876,25 @@ export default function StudentDashboard() {
                           style={{ width: `${profileScore.percentage}%` }}
                         />
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleOpenProfileToSection("academic", true)}
-                        className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
-                      >
-                        <span>Edit Full Profile</span>
-                        <ArrowRight className="h-3 w-3" />
-                      </button>
+                      {isProfileLocked ? (
+                        <button
+                          type="button"
+                          onClick={() => setIsModModalOpen(true)}
+                          className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-800 hover:text-amber-950 cursor-pointer"
+                        >
+                          <Lock className="h-3.5 w-3.5 text-amber-600" />
+                          <span>Request TPO Modification</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenProfileToSection("academic", true)}
+                          className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
+                        >
+                          <span>Edit Full Profile</span>
+                          <ArrowRight className="h-3 w-3" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -972,12 +997,28 @@ export default function StudentDashboard() {
                     Your verified credentials used for campus placements
                   </p>
                 </div>
-                <button
-                  onClick={() => setIsProfileDrawerOpen(true)}
-                  className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-blue-700"
-                >
-                  Edit Portfolio
-                </button>
+                {isProfileLocked ? (
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-900">
+                      <Lock className="h-3.5 w-3.5 text-amber-700" />
+                      <span>Record Locked</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsModModalOpen(true)}
+                      className="rounded-xl bg-orange-600 px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:bg-orange-700 transition"
+                    >
+                      Request Modification
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => handleOpenProfileToSection("all", true)}
+                    className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-blue-700"
+                  >
+                    Edit Portfolio
+                  </button>
+                )}
               </div>
 
               {/* Stats overview */}
@@ -1021,24 +1062,51 @@ export default function StudentDashboard() {
                 <h4 className="font-bold text-slate-900 uppercase tracking-wider text-[11px]">
                   Personal & Program Information
                 </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 pt-2">
                   <div>
-                    <span className="text-slate-400">Full Name: </span>
-                    <strong className="text-slate-800">{studentName}</strong>
+                    <span className="text-slate-400 block text-[11px]">Full Name: </span>
+                    <strong className="text-slate-800 text-xs">{studentName}</strong>
                   </div>
                   <div>
-                    <span className="text-slate-400">Email Address: </span>
-                    <strong className="text-slate-800">{user?.email || "student@college.edu"}</strong>
+                    <span className="text-slate-400 block text-[11px]">Email Address: </span>
+                    <strong className="text-slate-800 text-xs">{user?.email || "student@college.edu"}</strong>
                   </div>
                   <div>
-                    <span className="text-slate-400">Enrollment ID: </span>
-                    <strong className="text-slate-800">
-                      {studentProfile?.enrollmentNumber || "ENR-2022-CS01"}
+                    <span className="text-slate-400 block text-[11px]">Mobile / Phone Number: </span>
+                    <strong className="text-blue-800 text-xs flex items-center gap-1 font-mono">
+                      <Phone className="h-3 w-3 text-blue-600 shrink-0" />
+                      <span>{studentProfile?.alternatePhone || studentProfile?.phone || user?.phone || "No phone recorded"}</span>
                     </strong>
                   </div>
                   <div>
-                    <span className="text-slate-400">Department: </span>
-                    <strong className="text-slate-800">{studentBranch}</strong>
+                    <span className="text-slate-400 block text-[11px]">Enrollment ID (USN): </span>
+                    <strong className="text-slate-800 text-xs font-mono">
+                      {studentProfile?.enrollmentNumber || studentProfile?.usn || "ENR-2022-CS01"}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Department / Branch: </span>
+                    <strong className="text-slate-800 text-xs">{studentBranch}</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Gender: </span>
+                    <strong className="text-slate-800 text-xs">{studentProfile?.gender || "Not specified"}</strong>
+                  </div>
+                  {studentProfile?.dob && (
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Date of Birth: </span>
+                      <strong className="text-slate-800 text-xs">
+                        {new Date(studentProfile.dob).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                      </strong>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Current Semester: </span>
+                    <strong className="text-slate-800 text-xs">Semester {studentProfile?.semester ?? 6}</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Batch: </span>
+                    <strong className="text-slate-800 text-xs">Class of {graduationYear}</strong>
                   </div>
                 </div>
               </div>
@@ -1050,12 +1118,18 @@ export default function StudentDashboard() {
                     <Award className="h-4 w-4 text-emerald-600" />
                     <span>Secondary & Higher Secondary Records</span>
                   </h4>
-                  <button
-                    onClick={() => handleOpenProfileToSection("secondary", true)}
-                    className="text-xs font-bold text-blue-600 hover:text-blue-800"
-                  >
-                    Edit Records
-                  </button>
+                  {isProfileLocked ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-400">
+                      <Lock className="h-3 w-3" /> Record Locked
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => handleOpenProfileToSection("secondary", true)}
+                      className="text-xs font-bold text-blue-600 hover:text-blue-800"
+                    >
+                      Edit Records
+                    </button>
+                  )}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                   {/* 10th Record */}
@@ -1181,8 +1255,14 @@ export default function StudentDashboard() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                   <div className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-1">
                     <span className="text-[11px] text-slate-400 font-bold block">Parents</span>
-                    <p className="font-bold text-slate-800">Father: {studentProfile?.family?.fatherName || "Not entered"}</p>
-                    <p className="font-bold text-slate-800">Mother: {studentProfile?.family?.motherName || "Not entered"}</p>
+                    <p className="font-bold text-slate-800">
+                      Father: {studentProfile?.family?.fatherName || "Not entered"}
+                      {studentProfile?.family?.fatherPhone ? ` (${studentProfile.family.fatherPhone})` : ""}
+                    </p>
+                    <p className="font-bold text-slate-800">
+                      Mother: {studentProfile?.family?.motherName || "Not entered"}
+                      {studentProfile?.family?.motherPhone ? ` (${studentProfile.family.motherPhone})` : ""}
+                    </p>
                   </div>
                   <div className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-1">
                     <span className="text-[11px] text-slate-400 font-bold block">Current Address</span>
@@ -1203,12 +1283,18 @@ export default function StudentDashboard() {
                     <FileText className="h-4 w-4 text-blue-600" />
                     <span>Master Placement Resume</span>
                   </h4>
-                  <button
-                    onClick={() => handleOpenProfileToSection("resume", true)}
-                    className="text-xs font-bold text-blue-600 hover:text-blue-800"
-                  >
-                    Upload / Replace
-                  </button>
+                  {isProfileLocked ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-400">
+                      <Lock className="h-3 w-3" /> Record Locked
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => handleOpenProfileToSection("resume", true)}
+                      className="text-xs font-bold text-blue-600 hover:text-blue-800"
+                    >
+                      Upload / Replace
+                    </button>
+                  )}
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl border border-slate-200 bg-white">
                   <div className="flex items-center gap-2.5">
@@ -1558,6 +1644,15 @@ export default function StudentDashboard() {
         }
         onConfirmApply={handleConfirmApply}
         onOpenProfileSettings={() => handleOpenProfileToSection("academic", true)}
+      />
+
+      {/* Profile Modification Request Modal */}
+      <ProfileModificationModal
+        isOpen={isModModalOpen}
+        onClose={() => setIsModModalOpen(false)}
+        studentProfile={studentProfile || {}}
+        user={user || {}}
+        onRequestSubmitted={() => loadDashboardData(true)}
       />
 
       {/* Selected Notification Reading Modal with Full Day, Date, Time */}

@@ -15,6 +15,7 @@ import {
   Calendar,
   Clock,
   Briefcase,
+  Upload,
 } from "lucide-react";
 import { getResumeViewUrl } from "../../utils/resumeHelper";
 import { checkDriveEligibility } from "../../services/studentService";
@@ -31,6 +32,10 @@ export default function ApplyModal({
   const [submitting, setSubmitting] = useState(false);
   const [eligibilityData, setEligibilityData] = useState(null);
   const [evaluating, setEvaluating] = useState(true);
+  const hasProfileResume = !!studentProfile?.resume?.url;
+  const [resumeMode, setResumeMode] = useState(hasProfileResume ? "profile" : "custom");
+  const [customResumeFile, setCustomResumeFile] = useState(null);
+  const [customResumeError, setCustomResumeError] = useState("");
 
   // Live Centralized Eligibility Engine pre-check
   useEffect(() => {
@@ -75,13 +80,37 @@ export default function ApplyModal({
   const isExpired = deadlineDate && now > deadlineDate;
   const isWindowOpen = isStarted && !isExpired;
 
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.name.match(/\.(pdf|docx)$/i)) {
+      setCustomResumeError("Only PDF and DOCX files are allowed");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setCustomResumeError("File size must be under 5MB");
+      return;
+    }
+    setCustomResumeError("");
+    setCustomResumeFile(file);
+  };
+
   const handleSubmit = async () => {
     if (!isStarted) {
       return;
     }
+    if (resumeMode === "custom" && !customResumeFile) {
+      setCustomResumeError("Please choose an updated resume file to attach");
+      return;
+    }
+    if (resumeMode === "profile" && !hasProfileResume) {
+      setCustomResumeError("No profile resume found. Please upload a resume file.");
+      return;
+    }
+
     setSubmitting(true);
     try {
-      await onConfirmApply(drive._id);
+      await onConfirmApply(drive._id, resumeMode === "custom" ? customResumeFile : null);
       onClose();
     } catch {
       // Handled in parent with toast
@@ -336,23 +365,106 @@ export default function ApplyModal({
           )}
         </div>
 
-        {/* Resume Note */}
-        <div className="mt-4 flex items-center justify-between rounded-xl bg-blue-50/70 p-3 border border-blue-100 text-xs">
-          <div className="flex items-center gap-2">
-            <FileText className="h-4 w-4 text-blue-600" />
-            <span className="text-blue-900 font-medium">
-              {hasResume ? "Verified profile resume attached" : "College profile resume will be attached"}
-            </span>
+        {/* Resume Selection Card */}
+        <div className="mt-4 rounded-2xl bg-white p-4 border border-slate-200/90 shadow-2xs space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <FileText className="h-4 w-4 text-blue-600" />
+              <span className="text-xs font-bold text-slate-800">Resume Attached for this Drive</span>
+            </div>
+            <span className="text-[11px] font-semibold text-slate-400">PDF or DOCX</span>
           </div>
-          {hasResume && (
-            <a
-              href={getResumeViewUrl(studentProfile.resume.url)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-700 font-semibold underline text-[11px]"
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setResumeMode("profile");
+                setCustomResumeError("");
+              }}
+              disabled={!hasProfileResume}
+              className={`p-3 rounded-xl border text-left transition flex flex-col justify-between ${
+                resumeMode === "profile"
+                  ? "border-blue-600 bg-blue-50/50 ring-1 ring-blue-600 text-blue-900"
+                  : !hasProfileResume
+                  ? "opacity-50 cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400"
+                  : "border-slate-200 hover:border-slate-300 bg-white text-slate-700"
+              }`}
             >
-              View Resume
-            </a>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-bold">Profile Resume</span>
+                  {resumeMode === "profile" && <CheckCircle2 className="h-3.5 w-3.5 text-blue-600" />}
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  {hasProfileResume ? "Use standard profile resume" : "No resume uploaded yet"}
+                </p>
+              </div>
+              {hasProfileResume && (
+                <a
+                  href={getResumeViewUrl(studentProfile.resume.url)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-blue-700 font-semibold underline text-[11px] mt-2 inline-flex items-center gap-1"
+                >
+                  <span>Preview Profile Resume</span>
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setResumeMode("custom")}
+              className={`p-3 rounded-xl border text-left transition flex flex-col justify-between ${
+                resumeMode === "custom"
+                  ? "border-blue-600 bg-blue-50/50 ring-1 ring-blue-600 text-blue-900"
+                  : "border-slate-200 hover:border-slate-300 bg-white text-slate-700"
+              }`}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-bold">Upload Custom Resume</span>
+                  {resumeMode === "custom" && <CheckCircle2 className="h-3.5 w-3.5 text-blue-600" />}
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Upload updated or drive-specific resume
+                </p>
+              </div>
+              {customResumeFile && (
+                <span className="text-xs font-semibold text-emerald-700 truncate mt-2 inline-flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{customResumeFile.name}</span>
+                </span>
+              )}
+            </button>
+          </div>
+
+          {resumeMode === "custom" && (
+            <div className="pt-2 border-t border-slate-100">
+              <label className="flex flex-col items-center justify-center border-2 border-dashed border-blue-200 hover:border-blue-400 bg-blue-50/30 rounded-xl p-3 cursor-pointer transition">
+                <input
+                  type="file"
+                  accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+                <div className="flex items-center gap-2 text-xs font-bold text-blue-700">
+                  <Upload className="h-4 w-4" />
+                  <span>{customResumeFile ? "Change uploaded resume file" : "Click to select updated resume file (PDF/DOCX)"}</span>
+                </div>
+                <span className="text-[10px] text-slate-400 mt-0.5">
+                  {customResumeFile ? `${(customResumeFile.size / 1024).toFixed(1)} KB selected` : "Max file size: 5MB"}
+                </span>
+              </label>
+              {customResumeError && (
+                <p className="text-rose-600 text-xs mt-1.5 font-medium">{customResumeError}</p>
+              )}
+              <p className="text-[11px] text-slate-500 mt-1.5">
+                ℹ️ This updated resume will be saved with your application and directly visible to TPO & recruiters.
+              </p>
+            </div>
           )}
         </div>
 

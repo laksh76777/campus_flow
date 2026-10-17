@@ -25,9 +25,11 @@ const MODIFIABLE_FIELDS = [
   { id: "semester", label: "Current Semester", key: "semester" },
   { id: "admissionYear", label: "Admission Year", key: "admissionYear" },
   { id: "graduationYear", label: "Graduation Year (Batch)", key: "graduationYear" },
+  { id: "gender", label: "Gender", key: "gender" },
   { id: "fatherName", label: "Father's Full Name", key: "fatherName" },
   { id: "motherName", label: "Mother's Full Name", key: "motherName" },
   { id: "parentPhone", label: "Parent Mobile Contact", key: "parentPhone" },
+  { id: "educationGaps", label: "Education & Year Gaps", key: "educationGaps" },
   { id: "other", label: "Other Academic or Personal Detail", key: "other" }
 ];
 
@@ -70,12 +72,16 @@ export default function ProfileModificationModal({
         return String(studentProfile.admissionYear ?? "");
       case "graduationYear":
         return String(studentProfile.graduationYear ?? "");
+      case "gender":
+        return String(studentProfile.gender || "Prefer not to say");
       case "fatherName":
         return String(studentProfile.family?.fatherName || "");
       case "motherName":
         return String(studentProfile.family?.motherName || "");
       case "parentPhone":
         return String(studentProfile.family?.fatherPhone || studentProfile.family?.parentPhone || "");
+      case "educationGaps":
+        return studentProfile.hasEducationGap ? `${studentProfile.educationGaps?.length || 1} Period(s)` : "None";
       default:
         return "Not specified";
     }
