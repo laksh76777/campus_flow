@@ -10,6 +10,10 @@ import { sendApplicationStatusEmail } from "../utils/mailService.js";
 import { EligibilityService } from "../services/eligibility.service.js";
 import { resolveStudentProgram } from "../constants/programCatalog.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import {
+    buildCompanyApplicantExportFields,
+    getCompanyApplicantExportValue
+} from "../services/companyApplicantExport.service.js";
 
 // Legal status transitions state machine
 const LEGAL_TRANSITIONS = {
@@ -1006,49 +1010,16 @@ const exportDriveApplicants = asyncHandler(async (req, res) => {
         ? placementDrive.studentRequirements
         : DEFAULT_STUDENT_REQUIREMENTS;
 
-    // Filter permitted fields for company export
-    let permittedFields = driveRequirements.filter((r) => r.shareWithCompany === true);
-    if (!includeSensitiveFamily) {
-        permittedFields = permittedFields.filter((r) => r.category !== "family_address");
-    }
-
-    if (Array.isArray(selectedFields) && selectedFields.length > 0) {
-        const allowedSet = new Set(permittedFields.map((p) => p.fieldKey));
-        // If TPO explicitly selects family details, verify permission
-        if (includeSensitiveFamily) {
-            allowedSet.add("familyDetails");
-            allowedSet.add("permanentAddress");
-            allowedSet.add("currentAddress");
-        }
-        permittedFields = driveRequirements.filter((r) => allowedSet.has(r.fieldKey) && selectedFields.includes(r.fieldKey));
-    }
-
-    // Always include standard identification columns
+    const permittedFields = buildCompanyApplicantExportFields(driveRequirements, {
+        selectedFields,
+        includeSensitiveFamily
+    });
     const columns = [
         { key: "sno", label: "S.No" },
-        { key: "fullName", label: "Candidate Name" },
-        { key: "usn", label: "USN / Enrollment ID" },
-        { key: "email", label: "Email Address" },
-        { key: "phone", label: "Contact Number" },
-        { key: "branch", label: "Academic Program" },
-        { key: "programCode", label: "Program Code" },
-        { key: "graduationYear", label: "Batch Year" },
-        { key: "cgpa", label: "Overall CGPA" },
-        { key: "activeBacklogs", label: "Active Backlogs" },
-        { key: "tenthPercentage", label: "Class 10 (%)" },
-        { key: "twelfthOrDiploma", label: "Class 12 / Diploma (%)" },
         { key: "applicationStatus", label: "Application Status" },
         { key: "appliedDate", label: "Applied Date" },
-        { key: "resumeLink", label: "Resume URL" }
+        ...permittedFields.map(({ key, label }) => ({ key, label }))
     ];
-
-    if (includeSensitiveFamily) {
-        columns.push(
-            { key: "fatherName", label: "Father Name" },
-            { key: "motherName", label: "Mother Name" },
-            { key: "guardianPhone", label: "Guardian Contact" }
-        );
-    }
 
     // Audit log this export
     await ExportLog.create({
@@ -1069,57 +1040,19 @@ const exportDriveApplicants = asyncHandler(async (req, res) => {
     };
 
     const rows = applications.map((app, index) => {
-        // Prefer immutable snapshot first, fallback to populated student
         const snap = app.submittedSnapshot || {};
         const student = app.student || {};
-        const user = student.user || {};
-
-        const fullName = snap.fullName || user.fullName || student.fullName || "";
-        const usn = snap.usn || student.enrollmentNumber || student.usn || "";
-        const email = snap.email || user.email || student.collegeEmail || "";
-        const phone = snap.phone || user.phone || student.alternatePhone || "";
-        const program = resolveStudentProgram({
-            programCode: snap.programCode || student.programCode,
-            course: snap.course || student.course,
-            branch: snap.branch || snap.department || student.branch || student.department
-        });
-        const branch = program?.name || snap.branch || snap.department || student.branch || student.department || "";
-        const programCode = program?.code || snap.programCode || student.programCode || "";
-        const gradYear = snap.graduationYear || student.graduationYear || "";
-        const cgpa = snap.cgpa ?? student.verifiedCGPA ?? student.cgpa ?? "";
-        const activeBacklogs = snap.activeBacklogs ?? student.activeBacklogs ?? student.backlogs ?? 0;
-        const tenth = snap.tenthDetails?.percentage ?? student.tenthDetails?.percentage ?? student.tenthPercentage ?? "";
-        const twelfth = snap.twelfthOrDiplomaDetails?.percentage ?? student.twelfthOrDiplomaDetails?.percentage ?? student.twelfthPercentage ?? "";
-        const resumeUrl = snap.resume?.url || student.resume?.url || student.resumeUrl || "";
         const appliedDate = app.appliedAt ? new Date(app.appliedAt).toISOString().slice(0, 10) : "";
-
         const row = [
             index + 1,
-            escapeCsv(fullName),
-            escapeCsv(usn),
-            escapeCsv(email),
-            escapeCsv(phone),
-            escapeCsv(branch),
-            escapeCsv(programCode),
-            escapeCsv(gradYear),
-            escapeCsv(cgpa),
-            escapeCsv(activeBacklogs),
-            escapeCsv(tenth),
-            escapeCsv(twelfth),
             escapeCsv(app.status),
             escapeCsv(appliedDate),
-            escapeCsv(resumeUrl)
+            ...permittedFields.map((field) => escapeCsv(getCompanyApplicantExportValue(field, {
+                application: app,
+                snapshot: snap,
+                student
+            })))
         ];
-
-        if (includeSensitiveFamily) {
-            const family = snap.family || student.family || {};
-            row.push(
-                escapeCsv(family.fatherName || ""),
-                escapeCsv(family.motherName || ""),
-                escapeCsv(family.guardianPhone || family.fatherPhone || "")
-            );
-        }
-
         return row.join(",");
     });
 
