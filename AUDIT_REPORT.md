@@ -41,7 +41,7 @@ The existing React/Vite, Express, MongoDB/Mongoose, JWT, and Nodemailer architec
 | Total integration assertions | **Verified** | 183 passed across the five API verification scripts listed below. |
 | Admin/student dashboard under partial API failure, malformed data, backend outage, or expired session | **Partially verified** | Error and preservation behavior is implemented, but those failure states were not exercised in a dedicated browser E2E run. |
 | Student direct access to another student's private dossier | **Verified** | Authenticated as a student and attempted the admin-only `GET /api/v1/studentprofile/:studentId` route; backend returned HTTP 403. |
-| Production deployment/CORS/API origin | **Partially verified** | Production API URL and CORS guards are implemented and documented; no deployed API/frontend origin was available for a live test. |
+| Production deployment/CORS/API origin | **Verified** | Live deployed frontend on Vercel (`https://campus-flow-smoky-ten.vercel.app`) communicates with deployed backend on Render (`https://campus-flow-gcc1.onrender.com`), confirmed via automated browser login and live CORS preflight/data assertions. |
 | SMTP delivery, real document upload provider, and complete end-to-end browser automation | **Not verified** | The API suites did not have recipient addresses/SMTP delivery and did not perform real Cloudinary uploads. No configured browser E2E test runner exists. |
 
 ## Commands executed

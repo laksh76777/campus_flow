@@ -9,6 +9,16 @@
   <img src="https://img.shields.io/badge/Tests-47%20Passing-brightgreen?style=for-the-badge" alt="Tests" />
 </p>
 
+## 🌐 Live Production Deployment
+
+| Service | Hosting Platform | Production URL | Status |
+| :--- | :--- | :--- | :--- |
+| **Frontend Web App** | **Vercel** | [https://campus-flow-smoky-ten.vercel.app](https://campus-flow-smoky-ten.vercel.app) | 🟢 Live & Operational |
+| **Backend REST API** | **Render** | [https://campus-flow-gcc1.onrender.com](https://campus-flow-gcc1.onrender.com) | 🟢 Live (`/health`, `/ready`) |
+| **Database** | **MongoDB Atlas** | `Place-on` Cluster (AWS Mumbai) | 🟢 Connected |
+
+---
+
 CampusFlow V2 is an enterprise-grade placement management platform engineered to automate collegiate recruitment operations. Built with a high-performance **React + Vite** client and a scalable **Node.js + Express + MongoDB** backend, it manages academic cohorts, multi-criteria drive eligibility, immutable application snapshots, Excel migration preview/commit workflows, background deadline notifications, and live placement analytics.
 
 ---

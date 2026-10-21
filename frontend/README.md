@@ -1,5 +1,9 @@
 # CampusFlow Frontend
 
+## 🌐 Live Deployments
+- **Frontend (Vercel):** [https://campus-flow-smoky-ten.vercel.app](https://campus-flow-smoky-ten.vercel.app)
+- **Backend API (Render):** [https://campus-flow-gcc1.onrender.com](https://campus-flow-gcc1.onrender.com)
+
 CampusFlow uses React and Vite. From this folder, run:
 
 ```powershell

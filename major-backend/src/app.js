@@ -29,19 +29,26 @@ const isOriginAllowed = (origin) => {
     // Allow non-browser requests or requests without Origin header (e.g. Postman, mobile apps, server-to-server)
     if (!origin) return true;
 
-    const normalizedOrigin = origin.replace(/\/$/, "");
+    const normalizedOrigin = origin.replace(/\/+$/, "");
+
+    // Dynamically read configured origins on each request
+    const envOrigins = (process.env.CORS_ORIGIN || "")
+        .split(",")
+        .map((o) => o.trim().replace(/\/+$/, ""))
+        .filter(Boolean);
 
     if (
-        configuredOrigins.includes(normalizedOrigin) ||
-        deployedFrontendOrigins.includes(normalizedOrigin)
+        envOrigins.includes("*") ||
+        envOrigins.includes(normalizedOrigin) ||
+        deployedFrontendOrigins.includes(normalizedOrigin) ||
+        /^https:\/\/campus-flow[a-z0-9-]*\.vercel\.app$/i.test(normalizedOrigin)
     ) {
         return true;
     }
 
     if (
-        process.env.NODE_ENV !== "production" &&
-        (defaultAllowedOrigins.includes(normalizedOrigin) ||
-            /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalizedOrigin))
+        defaultAllowedOrigins.includes(normalizedOrigin) ||
+        /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalizedOrigin)
     ) {
         return true;
     }
