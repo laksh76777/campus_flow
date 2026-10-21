@@ -47,11 +47,14 @@ export default function ManageSessions({ onSessionChanged }) {
   // Inspect Session Modal State
   const [inspectedSession, setInspectedSession] = useState(null);
 
-  // Form State
-  const [sessionBatch, setSessionBatch] = useState("2024-2028");
-  const [sessionYear, setSessionYear] = useState("2028");
-  const [sessionName, setSessionName] = useState("Session 2024-2028 (Class of 2028)");
-  const [academicYear, setAcademicYear] = useState("2024-2028");
+  // Form State with Custom Program & Session Duration support
+  const [programType, setProgramType] = useState("UG"); // "UG" | "PG" | "LATERAL" | "CUSTOM"
+  const [courseDuration, setCourseDuration] = useState(4);
+  const [admissionStartYear, setAdmissionStartYear] = useState(2023);
+  const [sessionBatch, setSessionBatch] = useState("2023-2027");
+  const [sessionYear, setSessionYear] = useState("2027");
+  const [sessionName, setSessionName] = useState("Placement Session 2023-2027 (Class of 2027)");
+  const [academicYear, setAcademicYear] = useState("2023-2027");
   const [targetPercentage, setTargetPercentage] = useState(90);
   const [description, setDescription] = useState("");
   const [makeActive, setMakeActive] = useState(false);
@@ -75,61 +78,132 @@ export default function ManageSessions({ onSessionChanged }) {
     fetchSessions();
   }, []);
 
-  const handleSelectPreset = (presetRange) => {
+  const updateDurationAndYears = (newDuration, startYr, pType = programType) => {
+    const dur = Math.max(1, Math.min(6, parseInt(newDuration, 10) || 4));
+    const sYr = parseInt(startYr, 10) || 2023;
+    const gYr = sYr + dur;
+    const batch = `${sYr}-${gYr}`;
+    const pPrefix = pType === "PG" ? "PG " : pType === "LATERAL" ? "Lateral " : "";
+
+    setCourseDuration(dur);
+    setAdmissionStartYear(sYr);
+    setSessionYear(String(gYr));
+    setAcademicYear(batch);
+    setSessionBatch(batch);
+    setSessionName(`${pPrefix}Placement Session ${batch} (Class of ${gYr})`);
+  };
+
+  const handleProgramTypeChange = (type) => {
+    setProgramType(type);
+    if (type === "UG") {
+      updateDurationAndYears(4, admissionStartYear, "UG");
+    } else if (type === "PG") {
+      updateDurationAndYears(2, admissionStartYear, "PG");
+    } else if (type === "LATERAL") {
+      updateDurationAndYears(3, admissionStartYear, "LATERAL");
+    } else {
+      updateDurationAndYears(courseDuration, admissionStartYear, "CUSTOM");
+    }
+  };
+
+  const handleStartYearChange = (startYr) => {
+    setAdmissionStartYear(startYr);
+    const sYr = parseInt(startYr, 10);
+    if (sYr && !isNaN(sYr)) {
+      const gYr = sYr + courseDuration;
+      const batch = `${sYr}-${gYr}`;
+      const pPrefix = programType === "PG" ? "PG " : programType === "LATERAL" ? "Lateral " : "";
+      setSessionYear(String(gYr));
+      setAcademicYear(batch);
+      setSessionBatch(batch);
+      setSessionName(`${pPrefix}Placement Session ${batch} (Class of ${gYr})`);
+    }
+  };
+
+  const handleGradYearChange = (gradYr) => {
+    setSessionYear(gradYr);
+    const gYr = parseInt(gradYr, 10);
+    if (gYr && !isNaN(gYr)) {
+      const sYr = gYr - courseDuration;
+      const batch = `${sYr}-${gYr}`;
+      const pPrefix = programType === "PG" ? "PG " : programType === "LATERAL" ? "Lateral " : "";
+      setAdmissionStartYear(sYr);
+      setAcademicYear(batch);
+      setSessionBatch(batch);
+      setSessionName(`${pPrefix}Placement Session ${batch} (Class of ${gYr})`);
+    }
+  };
+
+  const handleSelectPreset = (presetRange, dur = 4, type = "UG") => {
     const parts = presetRange.split("-");
     const startYr = parseInt(parts[0], 10);
     const gradYr = parseInt(parts[1], 10);
+    const calculatedDur = gradYr - startYr;
+    setProgramType(type);
+    setCourseDuration(calculatedDur);
+    setAdmissionStartYear(startYr);
     setSessionBatch(presetRange);
     setSessionYear(String(gradYr));
     setAcademicYear(presetRange);
-    setSessionName(`Session ${presetRange} (Class of ${gradYr})`);
+    const pPrefix = type === "PG" ? "PG " : "";
+    setSessionName(`${pPrefix}Placement Session ${presetRange} (Class of ${gradYr})`);
   };
 
   const handleCreateSession = async (e) => {
     e.preventDefault();
     let yearNum = parseInt(sessionYear, 10);
-    let acadYr = academicYear?.trim() || "";
-
-    if (!acadYr && sessionBatch) {
-      acadYr = sessionBatch.trim();
-    }
-
-    if (acadYr && isNaN(yearNum)) {
-      const parts = acadYr.match(/\b(20\d\d)\b/g);
-      if (parts && parts.length >= 2) {
-        yearNum = parseInt(parts[1], 10);
-      }
-    }
+    let startYr = parseInt(admissionStartYear, 10) || (yearNum - courseDuration);
+    let acadYr = academicYear?.trim() || `${startYr}-${yearNum}`;
 
     if (!yearNum || isNaN(yearNum)) {
       toast.error("Please enter a valid graduating cohort year (e.g. 2027, 2028)");
       return;
     }
 
+    // Dynamic admission year mapping based on program type & duration
+    let mapping;
+    if (programType === "PG" || courseDuration === 2) {
+      mapping = [
+        { course: "MBA", courseDurationYears: 2, admissionYear: startYr },
+        { course: "MCA", courseDurationYears: 2, admissionYear: startYr },
+        { course: "M.Tech", courseDurationYears: 2, admissionYear: startYr }
+      ];
+    } else if (programType === "LATERAL" || courseDuration === 3) {
+      mapping = [
+        { course: "B.E. (Lateral)", courseDurationYears: 3, admissionYear: startYr },
+        { course: "B.Tech (Lateral)", courseDurationYears: 3, admissionYear: startYr }
+      ];
+    } else if (programType === "UG" || courseDuration === 4) {
+      mapping = [
+        { course: "B.E.", courseDurationYears: 4, admissionYear: startYr },
+        { course: "B.Tech", courseDurationYears: 4, admissionYear: startYr },
+        { course: "MBA", courseDurationYears: 2, admissionYear: yearNum - 2 },
+        { course: "MCA", courseDurationYears: 2, admissionYear: yearNum - 2 },
+        { course: "M.Tech", courseDurationYears: 2, admissionYear: yearNum - 2 }
+      ];
+    } else {
+      mapping = [
+        { course: `Cohort (${courseDuration}Y)`, courseDurationYears: courseDuration, admissionYear: startYr }
+      ];
+    }
+
     setSubmitting(true);
     try {
       await createPlacementSession({
         sessionYear: yearNum,
-        name: sessionName || `Session ${acadYr || `${yearNum - 4}-${yearNum}`} (Class of ${yearNum})`,
-        academicYear: acadYr || `${yearNum - 4}-${yearNum}`,
+        name: sessionName || `Placement Session ${acadYr} (Class of ${yearNum})`,
+        academicYear: acadYr,
         targetPlacementPercentage: Number(targetPercentage) || 90,
         description,
         isActive: makeActive,
-        admissionYearMapping: [
-          { course: "B.E.", courseDurationYears: 4, admissionYear: yearNum - 4 },
-          { course: "B.Tech", courseDurationYears: 4, admissionYear: yearNum - 4 },
-          { course: "MBA", courseDurationYears: 2, admissionYear: yearNum - 2 },
-          { course: "MCA", courseDurationYears: 2, admissionYear: yearNum - 2 },
-          { course: "M.Tech", courseDurationYears: 2, admissionYear: yearNum - 2 }
-        ]
+        admissionYearMapping: mapping
       });
 
-      toast.success(`Placement session for ${acadYr || `Class of ${yearNum}`} created!`);
+      toast.success(`Placement session for ${acadYr} (Class of ${yearNum}) created!`);
       setIsCreateOpen(false);
       fetchSessions();
       if (onSessionChanged) onSessionChanged();
     } catch (err) {
-
       const msg = err.response?.data?.message || err.message || "Failed to create session";
       toast.error(msg);
     } finally {
@@ -303,12 +377,32 @@ export default function ManageSessions({ onSessionChanged }) {
               >
                 <div>
                   {/* Top Status Badges */}
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono text-2xl font-black text-slate-900 tracking-tight">
-                      Class of {sess.sessionYear}
-                    </span>
+                  {/* Top Status & Cohort Duration Badges */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-2xl font-black text-slate-900 tracking-tight">
+                          {sess.academicYear || `${sess.sessionYear - 4}-${sess.sessionYear}`}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-xs font-bold border border-blue-100">
+                          Class of {sess.sessionYear}
+                        </span>
+                        <span className="text-[11px] font-medium text-slate-400">
+                          • {(() => {
+                            const match = (sess.academicYear || "").match(/^(\d{4})-(\d{4})$/);
+                            if (match) {
+                              const diff = parseInt(match[2], 10) - parseInt(match[1], 10);
+                              return `${diff}-Year Cohort`;
+                            }
+                            return "4-Year Cohort";
+                          })()}
+                        </span>
+                      </div>
+                    </div>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       {isActive ? (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-black border border-emerald-200">
                           <CheckCircle2 className="h-3 w-3" />
@@ -332,14 +426,12 @@ export default function ManageSessions({ onSessionChanged }) {
                     </div>
                   </div>
 
-                  <h3 className="text-sm font-bold text-slate-800 mt-2 truncate">
+                  <h3 className="text-sm font-bold text-slate-800 mt-3 truncate" title={sess.name}>
                     {sess.name}
                   </h3>
-                  {sess.academicYear && (
-                    <p className="text-xs text-slate-400 font-medium">
-                      Academic Year: {sess.academicYear}
-                    </p>
-                  )}
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    Academic Batch: <span className="font-semibold text-slate-700">{sess.academicYear || `${sess.sessionYear - 4}-${sess.sessionYear}`}</span>
+                  </p>
 
                   {/* Metrics strip */}
                   <div className="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-slate-100 text-center">
@@ -600,79 +692,167 @@ export default function ManageSessions({ onSessionChanged }) {
               </div>
             </div>
 
-            {/* Quick Presets */}
+            {/* Program Type & Session Duration Options */}
             <div className="mb-4">
               <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
-                Quick Select Batch Session:
+                Program Cohort Type & Duration:
               </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {["2023-2027", "2024-2028", "2025-2029", "2026-2030"].map((preset) => (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+                {[
+                  { type: "UG", label: "UG Engineering", sub: "4 Years (B.E./B.Tech)", dur: 4 },
+                  { type: "PG", label: "PG Programs", sub: "2 Years (MBA/MCA/M.Tech)", dur: 2 },
+                  { type: "LATERAL", label: "Lateral Entry", sub: "3 Years (Diploma Entry)", dur: 3 },
+                  { type: "CUSTOM", label: "Custom Duration", sub: "Customizable Years", dur: courseDuration }
+                ].map((item) => (
                   <button
-                    key={preset}
+                    key={item.type}
                     type="button"
-                    onClick={() => handleSelectPreset(preset)}
-                    className={`rounded-xl border py-2 px-2.5 text-xs font-bold transition text-center ${
-                      sessionBatch === preset
-                        ? "border-blue-600 bg-blue-50 text-blue-700 shadow-xs"
+                    onClick={() => handleProgramTypeChange(item.type)}
+                    className={`rounded-2xl border p-2.5 text-left transition flex flex-col justify-between ${
+                      programType === item.type
+                        ? "border-blue-600 bg-blue-50/80 text-blue-900 shadow-xs ring-1 ring-blue-500/20"
+                        : "border-slate-200 bg-slate-50/60 text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    <span className="text-xs font-black block">{item.label}</span>
+                    <span className="text-[10px] text-slate-500 font-medium mt-0.5">{item.sub}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Custom Duration Input when Custom selected */}
+              {programType === "CUSTOM" && (
+                <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between mb-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-800 block">Custom Program Duration (Years):</label>
+                    <span className="text-[10px] text-slate-400">Total course length from admission to graduation</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="1"
+                      max="6"
+                      value={courseDuration}
+                      onChange={(e) => updateDurationAndYears(e.target.value, admissionStartYear, "CUSTOM")}
+                      className="w-20 rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-center text-sm font-bold text-slate-900 outline-none focus:border-blue-500"
+                    />
+                    <span className="text-xs font-bold text-slate-600">Years</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Quick Presets */}
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  Quick Select Batch Presets:
+                </label>
+                <span className="text-[10px] text-slate-400 font-medium">Auto-fills 4-Year UG / 2-Year PG</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { range: "2022-2026", dur: 4, type: "UG", tag: "UG 4Y" },
+                  { range: "2023-2027", dur: 4, type: "UG", tag: "UG 4Y" },
+                  { range: "2024-2028", dur: 4, type: "UG", tag: "UG 4Y" },
+                  { range: "2025-2029", dur: 4, type: "UG", tag: "UG 4Y" },
+                  { range: "2024-2026", dur: 2, type: "PG", tag: "PG 2Y" },
+                  { range: "2025-2027", dur: 2, type: "PG", tag: "PG 2Y" }
+                ].map((preset) => (
+                  <button
+                    key={preset.range}
+                    type="button"
+                    onClick={() => handleSelectPreset(preset.range, preset.dur, preset.type)}
+                    className={`rounded-xl border py-1.5 px-2.5 text-xs font-bold transition flex items-center gap-1.5 ${
+                      sessionBatch === preset.range && programType === preset.type
+                        ? "border-blue-600 bg-blue-600 text-white shadow-xs"
                         : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
                     }`}
                   >
-                    {preset}
+                    <span>{preset.range}</span>
+                    <span className={`text-[10px] px-1 py-0.2 rounded font-black ${
+                      sessionBatch === preset.range && programType === preset.type
+                        ? "bg-white/20 text-white"
+                        : "bg-slate-200 text-slate-600"
+                    }`}>
+                      {preset.tag}
+                    </span>
                   </button>
                 ))}
               </div>
             </div>
 
             <form onSubmit={handleCreateSession} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Academic Session *
+                    Admission Year *
                   </label>
                   <input
-                    type="text"
+                    type="number"
                     required
-                    value={academicYear}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setAcademicYear(val);
-                      setSessionBatch(val);
-                      const parts = val.match(/\b(20\d\d)\b/g);
-                      if (parts && parts.length >= 2) {
-                        setSessionYear(parts[1]);
-                        setSessionName(`Session ${val} (Class of ${parts[1]})`);
-                      }
-                    }}
-                    placeholder="e.g. 2024-2028"
+                    min="2018"
+                    max="2035"
+                    value={admissionStartYear}
+                    onChange={(e) => handleStartYearChange(e.target.value)}
+                    placeholder="e.g. 2023"
                     className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm font-bold text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                   />
-                  <p className="mt-1 text-[10px] text-slate-400">e.g. 2023-2027 or 2024-2028</p>
+                  <p className="mt-1 text-[10px] text-slate-400">Year of admission</p>
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Graduation Year (Class Of) *
+                    Duration
+                  </label>
+                  <div className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-sm font-bold text-slate-700 flex items-center justify-between">
+                    <span>{courseDuration} Years</span>
+                    <span className="text-[10px] uppercase font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
+                      {programType}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[10px] text-slate-400">Span of program</p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Graduation (Class Of) *
                   </label>
                   <input
                     type="number"
                     required
                     min="2020"
-                    max="2035"
+                    max="2040"
                     value={sessionYear}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setSessionYear(val);
-                      const yr = parseInt(val, 10);
-                      if (yr && !isNaN(yr)) {
-                        setAcademicYear(`${yr - 4}-${yr}`);
-                        setSessionName(`Session ${yr - 4}-${yr} (Class of ${yr})`);
-                      }
-                    }}
-                    placeholder="e.g. 2028"
+                    onChange={(e) => handleGradYearChange(e.target.value)}
+                    placeholder="e.g. 2027"
                     className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm font-bold text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                   />
-                  <p className="mt-1 text-[10px] text-slate-400">Final year of course</p>
+                  <p className="mt-1 text-[10px] text-slate-400">Year of passout</p>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Academic Session Batch Format *
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    required
+                    value={academicYear}
+                    onChange={(e) => {
+                      setAcademicYear(e.target.value);
+                      setSessionBatch(e.target.value);
+                    }}
+                    placeholder="e.g. 2023-2027"
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm font-bold text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 font-mono"
+                  />
+                  <span className="shrink-0 text-xs font-bold text-blue-700 bg-blue-50 px-3 py-2 rounded-xl border border-blue-100">
+                    {courseDuration}-Year Batch
+                  </span>
+                </div>
+                <p className="mt-1 text-[10px] text-slate-400">Admitted {admissionStartYear} → Passout {sessionYear} (displayed as {academicYear})</p>
               </div>
 
               <div>
@@ -683,7 +863,7 @@ export default function ManageSessions({ onSessionChanged }) {
                   type="text"
                   value={sessionName}
                   onChange={(e) => setSessionName(e.target.value)}
-                  placeholder={`Session ${academicYear || `${sessionYear - 4}-${sessionYear}`} (Class of ${sessionYear})`}
+                  placeholder={`Placement Session ${academicYear} (Class of ${sessionYear})`}
                   className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"
                 />
               </div>
@@ -707,19 +887,23 @@ export default function ManageSessions({ onSessionChanged }) {
                 <div className="rounded-2xl border border-blue-200 bg-blue-50/70 p-3.5 text-xs text-blue-900">
                   <div className="flex items-center gap-1.5 font-bold text-blue-800 mb-1">
                     <Sparkles className="h-4 w-4 text-blue-600" />
-                    <span>Automatic Student Registration Mapping</span>
+                    <span>Automatic Student Registration & Eligibility Mapping</span>
                   </div>
                   <p className="text-[11px] text-blue-700 mb-2">
-                    Creating this session automatically enables these admission years on the student registration form:
+                    Creating this session ({academicYear}) will link students joining in {admissionStartYear} with passout year {sessionYear}:
                   </p>
                   <div className="grid grid-cols-2 gap-2 text-[11px]">
-                    <div className="rounded-lg bg-white/80 p-2 border border-blue-100">
-                      <span className="font-bold text-slate-700 block">4-Year Degree (B.E./B.Tech):</span>
-                      <span className="text-emerald-700 font-extrabold">Admission Year {parseInt(sessionYear, 10) - 4}</span>
+                    <div className="rounded-xl bg-white/90 p-2.5 border border-blue-100">
+                      <span className="font-bold text-slate-700 block">{programType === "PG" ? "Postgraduate (PG)" : "Undergraduate (UG)"}:</span>
+                      <span className="text-emerald-700 font-extrabold block mt-0.5">
+                        Admission Year {admissionStartYear} ({courseDuration} Years)
+                      </span>
                     </div>
-                    <div className="rounded-lg bg-white/80 p-2 border border-blue-100">
-                      <span className="font-bold text-slate-700 block">2-Year PG (MBA/MCA/M.Tech):</span>
-                      <span className="text-emerald-700 font-extrabold">Admission Year {parseInt(sessionYear, 10) - 2}</span>
+                    <div className="rounded-xl bg-white/90 p-2.5 border border-blue-100">
+                      <span className="font-bold text-slate-700 block">Graduation Cohort:</span>
+                      <span className="text-blue-700 font-extrabold block mt-0.5">
+                        Class of {sessionYear} ({academicYear})
+                      </span>
                     </div>
                   </div>
                 </div>

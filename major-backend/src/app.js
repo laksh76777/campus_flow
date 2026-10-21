@@ -66,6 +66,7 @@ const corsOptions = {
 
 import { securityHeaders, generalApiLimiter } from "./middlewares/security.middleware.js";
 
+app.set("trust proxy", 1);
 app.use(cors(corsOptions));
 app.use(securityHeaders);
 app.use(express.json({ limit: "16kb" }));
@@ -90,6 +91,18 @@ app.get("/health", (req, res) => {
     const databaseReady = mongoose.connection.readyState === 1;
     const body = {
         status: databaseReady ? "ok" : "unavailable",
+        database: databaseReady ? "connected" : "disconnected"
+    };
+    if (databaseReady) {
+        body.databaseName = mongoose.connection.name;
+    }
+    return res.status(databaseReady ? 200 : 503).json(body);
+});
+
+app.get("/ready", (req, res) => {
+    const databaseReady = mongoose.connection.readyState === 1;
+    const body = {
+        status: databaseReady ? "ready" : "unavailable",
         database: databaseReady ? "connected" : "disconnected"
     };
     if (databaseReady) {

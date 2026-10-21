@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Backend-Node.js_%7C_Express-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node.js" />
   <img src="https://img.shields.io/badge/Database-MongoDB_%7C_Mongoose-47A248?style=for-the-badge&logo=mongodb&logoColor=white" alt="MongoDB" />
   <img src="https://img.shields.io/badge/Styling-Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind CSS" />
-  <img src="https://img.shields.io/badge/Tests-44%20Passing-brightgreen?style=for-the-badge" alt="Tests" />
+  <img src="https://img.shields.io/badge/Tests-47%20Passing-brightgreen?style=for-the-badge" alt="Tests" />
 </p>
 
 CampusFlow V2 is an enterprise-grade placement management platform engineered to automate collegiate recruitment operations. Built with a high-performance **React + Vite** client and a scalable **Node.js + Express + MongoDB** backend, it manages academic cohorts, multi-criteria drive eligibility, immutable application snapshots, Excel migration preview/commit workflows, background deadline notifications, and live placement analytics.
@@ -331,5 +331,99 @@ npm run build
 
 ---
 
+## 🚢 Production Deployment Guide
+
+CampusFlow V2 is architected for zero-downtime production deployment with the frontend on **Vercel**, the backend API on **Render**, and the database on **MongoDB Atlas**.
+
+### Architectural Overview
+- **Frontend:** Vercel (Single Page Application with Vite + React 19)
+- **Backend API:** Render Web Service (Node.js runtime listening on `process.env.PORT`, bound to `0.0.0.0`)
+- **Database:** MongoDB Atlas (Replica Set cluster hosting `Place-on`)
+- **Security:** Strict HTTPS CORS, rate limiting, trust proxy configuration, and role-based JWT authentication.
+
+---
+
+### Step 1: MongoDB Atlas Configuration
+1. **Network Access:** In MongoDB Atlas > **Network Access**, ensure Render services can connect:
+   - Add IP Access List entry: `0.0.0.0/0` (Allow access from anywhere, protected by your strong database user password).
+2. **Database User:** Under **Database Access**, create a user with `readWrite` access to the `Place-on` database.
+3. **Connection String:** Under **Clusters** > **Connect** > **Drivers**, copy the SRV connection URI:
+   ```
+   mongodb+srv://<username>:<password>@<cluster-host>/Place-on?retryWrites=true&w=majority
+   ```
+4. **Data Preservation:** **Do NOT** drop, reset, or run seed wipe scripts on production collections. Existing student accounts, placement sessions, and placement drives will remain intact.
+
+---
+
+### Step 2: Deploy Backend on Render
+1. Sign in to [Render](https://render.com) and click **New +** > **Web Service**.
+2. Connect your GitHub repository: `https://github.com/laksh76777/campus_flow.git`.
+3. Configure service settings:
+   - **Name:** `campusflow-backend` (or your choice)
+   - **Root Directory:** `major-backend`
+   - **Environment:** `Node`
+   - **Build Command:** `npm install`
+   - **Start Command:** `npm start`
+   - **Health Check Path:** `/health`
+4. In **Advanced** > **Environment Variables**, add:
+   | Key | Value / Instructions |
+   |---|---|
+   | `NODE_ENV` | `production` |
+   | `MONGODB_URI` | Your full MongoDB Atlas connection string |
+   | `ACCESS_TOKEN_SECRET` | Strong random 256-bit string |
+   | `ACCESS_TOKEN_EXPIRY` | `1d` |
+   | `REFRESH_TOKEN_SECRET` | Strong random 256-bit string |
+   | `REFRESH_TOKEN_EXPIRY` | `10d` |
+   | `ADMIN_SECRET_KEY` | Your secure TPO administrative signup passkey |
+   | `CORS_ORIGIN` | Your Vercel frontend URL (e.g. `https://campus-flow.vercel.app`, set once Vercel is deployed) |
+   | `CLOUDINARY_*` | *(Optional)* Cloudinary CDN keys if document storage is enabled |
+   | `SMTP_*` | *(Optional)* SMTP credentials for transactional emails |
+5. Click **Create Web Service**. Wait for the build and deployment to succeed.
+6. Verify backend liveness: Open `https://<your-render-backend-url>/health` in your browser. It should return:
+   ```json
+   { "status": "ok", "database": "connected", "databaseName": "Place-on" }
+   ```
+
+---
+
+### Step 3: Deploy Frontend on Vercel
+1. Sign in to [Vercel](https://vercel.com) and click **Add New...** > **Project**.
+2. Import your GitHub repository: `https://github.com/laksh76777/campus_flow.git`.
+3. Configure project settings:
+   - **Framework Preset:** `Vite`
+   - **Root Directory:** Click Edit and select `frontend`
+   - **Build Command:** `npm run build`
+   - **Output Directory:** `dist`
+4. Expand **Environment Variables** and add:
+   | Key | Value |
+   |---|---|
+   | `VITE_API_URL` | `https://<your-render-backend-url>/api/v1` |
+5. Click **Deploy**. Vercel will build the frontend and deploy to a production URL (e.g. `https://campus-flow.vercel.app`).
+6. Single Page Application (SPA) routing is pre-configured via [`frontend/vercel.json`](frontend/vercel.json) to handle nested routes and browser refreshes seamlessly.
+
+---
+
+### Step 4: Finalize CORS Synchronization
+1. Copy your live Vercel production domain (e.g., `https://campus-flow.vercel.app`).
+2. Go back to **Render** > your backend service > **Environment**.
+3. Set `CORS_ORIGIN` to your exact Vercel URL without trailing slash:
+   ```
+   CORS_ORIGIN=https://campus-flow.vercel.app
+   ```
+4. Click **Save Changes**; Render will automatically redeploy the backend with the new allowed origin.
+
+---
+
+### Post-Deployment Verification Checklist
+- [ ] Visit frontend at `https://campus-flow.vercel.app` and verify the home page loads over HTTPS.
+- [ ] Test student sign in using registered credentials.
+- [ ] Verify student dashboard displays academic profile data and eligible placement drives.
+- [ ] Test admin sign in and verify the TPO analytics dashboard loads live statistics.
+- [ ] In Automated Placement Drives, open an active drive workspace and verify candidate pipeline and roster export.
+- [ ] Test direct URL refresh on a nested route (e.g., `/student` or `/admin`) to confirm SPA routing works without 404s.
+
+---
+
 ## 📄 License
 This repository is developed for collegiate placement management and recruitment automation.
+

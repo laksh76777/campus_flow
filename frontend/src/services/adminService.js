@@ -160,6 +160,11 @@ export const commitCompanyResults = async (driveId, commitData) => {
   return response.data;
 };
 
+export const enrollEligibleStudents = async (driveId) => {
+  const response = await api.post(`/placementdrive/${driveId}/enroll-eligible-students`);
+  return response.data;
+};
+
 // Student Profile Locking & Modification Requests
 export const getModificationRequests = async () => {
   const response = await api.get("/studentprofile/modification-requests");

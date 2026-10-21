@@ -5,6 +5,9 @@ import zlib from "zlib";
 import { PlacementDrive, DEFAULT_SELECTION_ROUNDS, DEFAULT_STUDENT_REQUIREMENTS } from "../models/placementDrive.model.js";
 import { Application } from "../models/application.model.js";
 import { StudentProfile } from "../models/studentProfile.model.js";
+import { Company } from "../models/company.model.js";
+import { User } from "../models/user.models.js";
+import { PlacementSession } from "../models/placementSession.model.js";
 import { ImportBatch } from "../models/importBatch.model.js";
 import { Notification } from "../models/notification.model.js";
 import { sanitizeFormula } from "./excelImportExport.service.js";
@@ -410,28 +413,31 @@ export const parseCompanyResultFile = async (fileBuffer, originalFilename = "") 
         const worksheet = workbook.worksheets[0];
 
         if (worksheet) {
-            let colMap = { usn: 1, name: 2, email: 3, status: 4 };
+            let colMap = { usn: -1, name: -1, email: -1, status: -1 };
             // Check header row 1
             const hRow = worksheet.getRow(1);
             hRow.eachCell((cell, colNum) => {
                 const val = String(cell.value || "").trim().toLowerCase();
-                if (/usn|seat|reg/i.test(val)) colMap.usn = colNum;
-                else if (/name/i.test(val)) colMap.name = colNum;
-                else if (/email/i.test(val)) colMap.email = colNum;
-                else if (/status|result/i.test(val)) colMap.status = colNum;
+                if (/usn|seat|reg|roll|id/i.test(val) && colMap.usn === -1) colMap.usn = colNum;
+                else if (/name|candidate/i.test(val) && colMap.name === -1) colMap.name = colNum;
+                else if (/email|mail/i.test(val) && colMap.email === -1) colMap.email = colNum;
+                else if (/status|result|outcome|decision|selection/i.test(val) && colMap.status === -1) colMap.status = colNum;
             });
+
+            // Default USN column to 1 if no header explicitly named USN
+            if (colMap.usn === -1) colMap.usn = 1;
 
             for (let r = 2; r <= worksheet.rowCount; r++) {
                 const row = worksheet.getRow(r);
-                const rawUSN = String(row.getCell(colMap.usn).value || "");
+                const rawUSN = colMap.usn !== -1 ? String(row.getCell(colMap.usn).value || "") : "";
                 const cleanUSN = normalizeUSN(rawUSN);
                 if (cleanUSN) {
                     parsedRows.push({
                         usn: cleanUSN,
                         rawUSN: rawUSN.trim(),
-                        name: String(row.getCell(colMap.name).value || "").trim(),
-                        email: String(row.getCell(colMap.email).value || "").trim(),
-                        status: String(row.getCell(colMap.status).value || "").trim(),
+                        name: colMap.name !== -1 ? String(row.getCell(colMap.name).value || "").trim() : "",
+                        email: colMap.email !== -1 ? String(row.getCell(colMap.email).value || "").trim() : "",
+                        status: colMap.status !== -1 ? String(row.getCell(colMap.status).value || "").trim() : "",
                         rowNumber: r,
                     });
                 }
@@ -1245,3 +1251,98 @@ export const commitRoundResults = async ({
             : `${roundName} results applied successfully! ${advancedTotal} candidate(s) advanced to Round ${currentRoundNum + 1}.`,
     };
 };
+
+/**
+ * Enroll all eligible cohort students into a drive who have not yet applied
+ */
+export const enrollEligibleStudentsForDrive = async (driveId, adminUserId = null) => {
+    const drive = await PlacementDrive.findById(driveId).populate("placementSession");
+    if (!drive) {
+        throw new Error("Placement drive not found.");
+    }
+
+    const filter = {};
+
+    // 1. Graduation year / Placement session cohort
+    const gradYear = drive.placementSession?.sessionYear || drive.placementSession?.graduationYear || drive.graduationYear;
+    if (gradYear) {
+        filter.graduationYear = Number(gradYear);
+    }
+
+    // 2. Department / Eligible branches
+    if (drive.eligibleBranches && drive.eligibleBranches.length > 0) {
+        const branches = drive.eligibleBranches.map((b) => b.trim());
+        const hasAll = branches.some((b) => b.toLowerCase() === "all");
+        if (!hasAll) {
+            const escapedRegexes = branches.map(
+                (b) => new RegExp(`^${b.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i")
+            );
+            filter.$or = [
+                { branch: { $in: escapedRegexes } },
+                { department: { $in: escapedRegexes } },
+            ];
+        }
+    }
+
+    // 3. Minimum CGPA
+    if (drive.minimumCGPA && Number(drive.minimumCGPA) > 0) {
+        filter.cgpa = { $gte: Number(drive.minimumCGPA) };
+    }
+
+    // 4. Maximum backlogs
+    if (typeof drive.maximumBacklogs === "number" && drive.maximumBacklogs >= 0) {
+        filter.activeBacklogs = { $lte: Number(drive.maximumBacklogs) };
+    }
+
+    // Find all matching student profiles
+    const eligibleStudents = await StudentProfile.find(filter)
+        .populate("user", "fullName email")
+        .select("_id user usn enrollmentNumber branch department cgpa graduationYear");
+
+    // Existing applications for this drive
+    const existingApps = await Application.find({ placementDrive: drive._id }).select("student");
+    const existingStudentIds = new Set(existingApps.map((a) => a.student.toString()));
+
+    const toEnroll = eligibleStudents.filter((s) => !existingStudentIds.has(s._id.toString()));
+
+    if (toEnroll.length > 0) {
+        const newApps = toEnroll.map((student) => ({
+            student: student._id,
+            placementDrive: drive._id,
+            status: "applied",
+            currentRound: 1,
+            submittedSnapshot: {
+                fullName: student.user?.fullName || "",
+                email: student.user?.email || "",
+                usn: student.usn || student.enrollmentNumber || "",
+                branch: student.branch || student.department || "",
+                cgpa: student.cgpa || 0,
+                graduationYear: student.graduationYear || gradYear,
+            },
+            timeline: [
+                {
+                    status: "applied",
+                    updatedAt: new Date(),
+                    remarks: "Eligible candidate enrolled into placement drive",
+                },
+            ],
+            interviewRounds: [],
+        }));
+
+        await Application.insertMany(newApps);
+    }
+
+    const totalApplicants = await Application.countDocuments({ placementDrive: drive._id });
+
+    return {
+        success: true,
+        enrolledCount: toEnroll.length,
+        totalApplicants,
+        eligiblePoolSize: eligibleStudents.length,
+        message:
+            toEnroll.length > 0
+                ? `Enrolled ${toEnroll.length} eligible student(s) into this drive.`
+                : `All ${eligibleStudents.length} eligible students are already enrolled.`,
+    };
+};
+

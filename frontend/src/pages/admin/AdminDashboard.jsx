@@ -222,15 +222,15 @@ export default function AdminDashboard({ initialTab = "overview" }) {
     if (!activeSessionObj) return drives;
     return drives.filter((d) => {
       const dSessId = d.placementSession?._id || d.placementSession;
-      return dSessId === activeSessionObj._id || d.graduationYear === activeSessionObj.sessionYear;
+      return String(dSessId) === String(activeSessionObj._id) || Number(d.graduationYear) === Number(activeSessionObj.sessionYear);
     });
   }, [drives, activeSessionObj]);
 
   const scopedApplications = useMemo(() => {
     if (!activeSessionObj) return applications;
-    const scopedDriveIds = new Set(scopedDrives.map((d) => d._id));
+    const scopedDriveIds = new Set(scopedDrives.map((d) => String(d._id)));
     return applications.filter((app) => {
-      const driveId = app.drive?._id || app.drive;
+      const driveId = String(app.placementDrive?._id || app.placementDrive || app.drive?._id || app.drive || "");
       return scopedDriveIds.has(driveId);
     });
   }, [applications, scopedDrives, activeSessionObj]);

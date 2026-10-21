@@ -656,6 +656,300 @@ All identified integrity gaps in the result ingestion and candidate progression 
 | **Frontend Lint Verification** | `npm run lint` in `frontend` | **0 errors, 108 pre-existing warnings** | Zero lint errors; existing warnings for pre-existing unused variables were preserved without disruption. |
 | **Frontend Production Build** | `npm run build` in `frontend` | **Passed in 1.64s** | 1,930 modules transformed; bundles built cleanly with zero compilation errors. |
 | **Backend Source Syntax Checks** | `node --check` across modified backend files | **Verified** | Zero syntax errors in `automatedDrive.service.js`, `automatedDrive.controller.js`, `security.middleware.js`, and `importBatch.model.js`. |
+---
 
+## Bulk Student Account Registration & Verification Audit (2026-10-21)
 
+### 1. Executive Summary
+
+A real, persistent database registration was performed for the 160 synthetic undergraduate engineering students from `campusflow_ug_students_2023_2027_sem7_160.csv`.
+The import was executed via a controlled, bounded batch script (`major-backend/scripts/importStudentsFromCSV.js`) in two 80-record iterations. All 160 students were successfully registered as individual student authentication accounts (`role: "student"`) linked to individual `StudentProfile` documents in the active database. Zero pre-existing accounts were deleted or overwritten, and repeated runs verified 100% idempotency with zero duplicate records created.
+
+### 2. Operational Metrics & Counts
+
+| Metric | Batch 1 (Rows 1–80) | Batch 2 (Rows 81–160) | Full Repeat Run (Idempotency Check) |
+|---|---|---|---|
+| **Rows Read** | 80 | 80 | 160 |
+| **Valid Rows** | 80 | 80 | 160 |
+| **Invalid Rows** | 0 | 0 | 0 |
+| **Accounts & Profiles Created** | 80 | 80 | 0 |
+| **Skipped (Duplicates)** | 0 | 0 | 160 |
+| **Conflicts / Failures** | 0 | 0 | 0 |
+
+- **Pre-Import DB Count**: 2 Users (`admin@campusflow.edu`, `student@campusflow.edu`), 1 StudentProfile (`1MS23CS001`).
+- **Post-Import DB Count**: 162 Users (161 Students, 1 Admin), 161 StudentProfiles (1 pre-existing + 160 imported).
+- **Class of 2027 Cohort Linked Profiles**: 161 (1 pre-existing `1MS23CS001` + 160 newly imported `1JS23...` profiles linked to PlacementSession `2027`).
+
+### 3. Identity, Authentication & Schema Mapping
+
+- **Login Email Selected**: `collegeEmail` (e.g. `vivekkrishnamurthy001@jssateb.ac.in`) was mapped to `User.email` and `StudentProfile.collegeEmail`. `personalEmail` was saved as an alternate contact in `StudentProfile.personalEmail`.
+- **Initial Password & Security**: All 160 accounts were created with the initial password `123456789`, securely hashed using `bcrypt` (10 salt rounds) via the `User.pre("save")` hook. Plaintext passwords are never stored, logged, or exposed in API payloads.
+- **Academic Resolution**: All 160 records mapped to 8 official undergraduate programs in `PROGRAM_CATALOG`:
+  - `CSE` (Computer Science & Engineering)
+  - `CSE-AIML` (Computer Science & Engineering - AI & ML)
+  - `ISE` (Information Science & Engineering)
+  - `ECE` (Electronics & Communication Engineering)
+  - `EIE` (Electronics & Instrumentation Engineering)
+  - `RA` (Robotics & Automation)
+  - `CIVIL` (Civil Engineering)
+  - `MECH` (Mechanical Engineering)
+- **Academic Results & CGPA**: All 160 students imported with exact 7-semester parsed SGPA results (`semesterResults: [{ semester: 1..7, sgpa, credits: 20 }]`) and preserved official CGPA values.
+- **Data Fidelity & Synthetic Status**: All accounts preserve synthetic indicators: `verificationStatus: "PENDING"`, `verificationRemarks: "Synthetic demo record; verify before use."`, and `isPlaced: false`.
+- **Identified Schema Limitation**: The existing `User` model does not implement a `mustChangePassword` or `forcePasswordChange` flag. Rather than silently altering authentication middleware or falsely claiming forced password change was implemented, this limitation is noted as an institutional enhancement opportunity.
+
+### 4. Verification Checkpoints & Results
+
+| Checkpoint | Test Method | Outcome | Details |
+|---|---|---|---|
+| **Database Persistence** | Mongoose direct collection count | **Passed** | Verified 162 Users and 161 Profiles permanently stored in MongoDB Atlas (`Place-on`). |
+| **Session Association** | Query by `placementSession` ID | **Passed** | All 160 imported profiles linked to Session Year 2027 (`2026-2027 Current`). |
+| **Cross-Department Login** | HTTP POST `/api/v1/users/login` | **Passed** | Successfully authenticated accounts across all 8 programs (`CSE`, `CSE-AIML`, `ISE`, `ECE`, `EIE`, `RA`, `CIVIL`, `MECH`) with password `123456789`. Verified HTTP 200 and JWT access token issuance. |
+| **Profile Isolation** | HTTP GET `/api/v1/studentprofile/current-student-profile` | **Passed** | Using the issued JWT bearer token, each student retrieved only their own profile containing their exact USN, academic department, and 7 semesters of SGPA records. |
+| **USN Login** | HTTP POST `/api/v1/users/login` with `rollNumber: "1JS23CS001"` | **Passed** | Student authenticated via USN/roll number successfully. |
+| **Security Guard** | HTTP POST `/api/v1/users/login` with invalid password | **Passed** | Correctly rejected with HTTP 401 Unauthorized. |
+| **Idempotency** | Executed bulk import on registered database | **Passed** | 160 records evaluated, 160 skipped as duplicates, 0 created, 0 overwritten, 0 failed. |
+
+### 5. Safe Repeatable Execution Procedure
+
+To run or replay the bulk registration safely in the future:
+
+```powershell
+cd major-backend
+
+# 1. Perform a safe dry-run (validates all records without writing to the database)
+node scripts/importStudentsFromCSV.js --dry-run --offset=0 --limit=160
+
+# 2. Execute first half (Batch 1: records 1 to 80)
+node scripts/importStudentsFromCSV.js --offset=0 --limit=80
+
+# 3. Execute second half (Batch 2: records 81 to 160)
+node scripts/importStudentsFromCSV.js --offset=80 --limit=80
+
+# 4. Run automated post-import verification suite
+node verify_bulk_registration.mjs
+```
+
+### 6. Changed & Added Files
+
+- `major-backend/scripts/importStudentsFromCSV.js` (Bulk student account registration tool with dry-run, batching, and idempotency)
+- `major-backend/verify_bulk_registration.mjs` (Automated 5-point verification and authentication test suite)
+- `AUDIT_REPORT.md` (Appended Section: Bulk Student Account Registration & Verification Audit)
+
+---
+
+## 8. Academic Session Duration Alignment & Semester 7 Ongoing Status (2026-10-21)
+
+### 1. Requirements & Core Changes
+1. **Engineering Session 4-Year Duration (`2023-2027`)**:
+   - In undergraduate engineering (B.E./B.Tech), cohorts span 4 academic years (e.g., admitted in 2023 -> passout in 2027).
+   - In the database and frontend UI, the session is prominently displayed as `2023-2027` (with a `Class of 2027` cohort badge and `4-Year Cohort` duration indicator).
+   - Placement sessions for 2026, 2027, and 2028 were updated to:
+     - Class of 2026: `academicYear: "2022-2026"`, `name: "Placement Session 2022-2026 (Class of 2026)"`
+     - Class of 2027: `academicYear: "2023-2027"`, `name: "Placement Session 2023-2027 (Class of 2027)"`
+     - Class of 2028: `academicYear: "2024-2028"`, `name: "Placement Session 2024-2028 (Class of 2028)"`
+
+2. **Semester 7 In-Progress / No Marks Rule for All 160 Students**:
+   - Students in the 2023-2027 batch are currently in **Semester 7** (`currentSemester = 7`, `semester = 7`).
+   - Because Semester 7 is currently in progress, **there are no marks or SGPA for Semester 7**.
+   - Exactly 6 completed semester results (Semesters 1 through 6) are stored in `semesterResults`.
+   - Official `cgpa` and `verifiedCGPA` were recomputed as the exact mathematical average of the 6 completed SGPAs.
+   - Verified across all 160 students: 0 students have Semester 7 marks, all 160 have exactly 6 semester records and `currentSemester: 7`.
+
+3. **Custom Session Duration & Program Type Selector in Session Creation**:
+   - In `ManageSessions.jsx`, the administrator can configure custom session durations when creating a new placement session:
+     - **UG Engineering (4 Years - B.E. / B.Tech)** (Default)
+     - **PG Programs (2 Years - MBA / MCA / M.Tech)**
+     - **Lateral Entry Engineering (3 Years)**
+     - **Custom Duration (1 to 6 Years)**
+   - Selecting a program type or altering duration dynamically recalculates and synchronizes:
+     - Admission Year (Start Year)
+     - Program Duration (Years)
+     - Graduation Year (Class of) = `Start Year + Duration`
+     - Academic Batch Range = `${Start Year}-${Graduation Year}`
+     - Session Name = `Placement Session ${Batch} (Class of ${Graduation Year})`
+     - `admissionYearMapping` payload tailored to course duration and program level.
+
+### 2. Live Database Verification Summary
+- **Placement Sessions in DB**:
+  - `2026`: `2022-2026` | `Placement Session 2022-2026 (Class of 2026)`
+  - `2027`: `2023-2027` | `Placement Session 2023-2027 (Class of 2027)`
+  - `2028`: `2024-2028` | `Placement Session 2024-2028 (Class of 2028)`
+- **160 Student Accounts in DB**:
+  - Total `1JS23` student profiles: 160
+  - Students with Semester 7 marks: 0
+  - Students with exactly 6 completed semesters (S1-S6): 160
+  - Students with `currentSemester === 7`: 160
+  - Frontend production build: `npm run build` succeeded with 0 errors.
+
+---
+
+## 9. Production Readiness, Deployment & Release Validation (2026-10-21)
+
+### 1. Final Target Deployment Architecture
+
+```
+                    ┌────────────────────────────────────────────────────────┐
+                    │                    Vercel Edge CDN                     │
+                    │      Frontend: React 19.2 + Vite 8.2 SPA               │
+                    │      - Custom Domain / vercel.app                      │
+                    │      - Single Page App (SPA) Rewrites (vercel.json)    │
+                    │      - VITE_API_URL: https://<render-backend>/api/v1   │
+                    └───────────────────────────┬────────────────────────────┘
+                                                │
+                                                │ HTTPS REST API
+                                                ▼
+                    ┌────────────────────────────────────────────────────────┐
+                    │                   Render Web Service                   │
+                    │      Backend: Node.js 18+ (Express 5.2 + ES Modules)   │
+                    │      - Listens on process.env.PORT (bound: 0.0.0.0)    │
+                    │      - Reverse proxy trust (app.set("trust proxy", 1)) │
+                    │      - Strict HTTPS CORS validation in production      │
+                    │      - Health Check: /health, Readiness: /ready        │
+                    └───────────────────────────┬────────────────────────────┘
+                                                │
+                                                │ Mongoose 9.9 (TLS/SRV)
+                                                ▼
+                    ┌────────────────────────────────────────────────────────┐
+                    │               MongoDB Atlas (Replica Set)              │
+                    │      Database: Place-on                                │
+                    │      - Network Access: 0.0.0.0/0 (Dynamic Render IPs)  │
+                    │      - Password authenticated database user            │
+                    │      - Preserved collections (160 students, drives)    │
+                    └────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 2. Files Changed & Rationale
+
+| File Path | Description of Changes & Rationale |
+|---|---|
+| [`major-backend/package.json`](major-backend/package.json) | Moved `express`, `bcrypt`, `dotenv`, and `multer` from `devDependencies` to `dependencies`. Required because Render executes `npm install --omit=dev` under `NODE_ENV=production`. |
+| [`major-backend/src/app.js`](major-backend/src/app.js) | Added `app.set("trust proxy", 1)` for Render reverse proxy support and accurate rate-limiting IP resolution. Added `GET /ready` dependency readiness check while preserving `GET /health` process liveness. |
+| [`major-backend/src/services/automatedDrive.service.js`](major-backend/src/services/automatedDrive.service.js) | Fixed Mongoose model imports (`Company`, `User`, `PlacementSession`) resolving 500 error on exports/previews. Added `enrollEligibleStudentsForDrive` with regex escaping for branch names containing parentheses. Dynamic column mapping in CSV parser. |
+| [`major-backend/src/controllers/automatedDrive.controller.js`](major-backend/src/controllers/automatedDrive.controller.js) | Added `enrollEligibleStudents` controller endpoint. |
+| [`major-backend/src/routes/placementDrive.routes.js`](major-backend/src/routes/placementDrive.routes.js) | Mounted `POST /:driveId/enroll-eligible-students` with `verifyJWT` and `verifyAdmin` security middlewares. |
+| [`major-backend/tests/http.test.js`](major-backend/tests/http.test.js) | Added test assertion validating that `/ready` returns HTTP 503 and `{ status: "unavailable", database: "disconnected" }` when disconnected. |
+| [`major-backend/.env.example`](major-backend/.env.example) | Created comprehensive production `.env.example` with detailed variable documentation, safe placeholder values, and secret rotation notes. |
+| [`render.yaml`](render.yaml) | Created Render Blueprint specification for automated zero-configuration backend deployments. |
+| [`frontend/src/services/apiConfig.js`](frontend/src/services/apiConfig.js) | Added URL normalization (`/api/v1` guarantee) and fast-fail guard in production (`import.meta.env.PROD`) when `VITE_API_URL` is omitted or set to localhost. |
+| [`frontend/src/components/admin/AutomatedPlacementDrives.jsx`](frontend/src/components/admin/AutomatedPlacementDrives.jsx) | Fixed ESLint `no-empty` error. Added 1-click eligible student enrollment button in header and empty state. Synchronized active workspace on round commit and auto-redirected to pipeline tab. Protected against downloading JSON error responses as Excel blobs. |
+| [`frontend/src/components/admin/ManageSessions.jsx`](frontend/src/components/admin/ManageSessions.jsx) | Fixed ESLint `no-useless-assignment` error on `mapping`. |
+| [`frontend/src/pages/admin/AdminDashboard.jsx`](frontend/src/pages/admin/AdminDashboard.jsx) | Fixed `scopedApplications` drive schema property checking (`app.placementDrive` vs `app.drive`) and added type-safe casting. |
+| [`frontend/src/services/adminService.js`](frontend/src/services/adminService.js) | Added `enrollEligibleStudents(driveId)` API client method. |
+| [`frontend/vercel.json`](frontend/vercel.json) | Verified SPA rewrite rule to ensure client-side nested routes and browser reloads do not return 404s on Vercel edge nodes. |
+| [`frontend/.env.example`](frontend/.env.example) | Updated frontend environment template with clear local vs Vercel production deployment guidance. |
+| [`README.md`](README.md) | Updated passing test badge to 47 and added complete, step-by-step production deployment instructions for MongoDB Atlas, Render, and Vercel. |
+
+---
+
+### 3. Build, Lint & Test Validation Results
+
+| Suite | Command Executed | Exit Code | Result | Evidence / Details |
+|---|---|---|---|---|
+| **Backend Unit & Regression** | `npm test` (under `major-backend`) | **0** | **47 / 47 Passed** | Ran 25 test suites. Verified USN normalization, config validation, HTTPS CORS guards, MongoDB URI parser, `/health`, `/ready`, JSON 404s, SMTP diagnostics, academic catalogue matching, and RBAC profile boundaries. |
+| **Frontend Linting** | `npx eslint . --quiet` | **0** | **0 Errors** | All ESLint syntax and rule errors resolved. |
+| **Frontend Production Build** | `npm run build` (under `frontend`) | **0** | **Passed (1.21s)** | Vite v8.2.2 compiled 1,930 modules into `dist/`. Chunks: `AdminDashboard` (~368 kB), `StudentDashboard` (~226 kB), main chunk (~251 kB). No oversized chunk warnings. |
+| **End-to-End Pipeline Verification** | `node scripts/test_automated_drive.mjs` | **0** | **Passed** | Verified 1-click candidate enrollment (15 eligible CSE cohort students), Round 1 roster export (15 candidates), shortlist reconciliation (4 candidates), commit and progression to Round 2, and Round 2 roster export (4 candidates). |
+
+---
+
+### 4. Environment Variables Specification
+
+#### Backend (Render Dashboard)
+| Variable Name | Required | Secret? | Default / Example Value | Description |
+|---|---|---|---|---|
+| `NODE_ENV` | Yes | No | `production` | Enables strict HTTPS CORS validation, secure cookie settings, and production error responses. |
+| `PORT` | Auto | No | *Injected by Render (e.g. 10000)* | Port to bind. Backend binds to `0.0.0.0` dynamically. |
+| `MONGODB_URI` | Yes | **Yes** | `mongodb+srv://user:pass@cluster.mongodb.net/Place-on?retryWrites=true&w=majority` | Connection string to MongoDB Atlas replica set. |
+| `ACCESS_TOKEN_SECRET` | Yes | **Yes** | `[256-bit random string]` | Signing key for short-lived access JWTs. |
+| `ACCESS_TOKEN_EXPIRY` | Yes | No | `1d` | Access token lifespan. |
+| `REFRESH_TOKEN_SECRET` | Yes | **Yes** | `[256-bit random string]` | Signing key for long-lived refresh JWTs. |
+| `REFRESH_TOKEN_EXPIRY` | Yes | No | `10d` | Refresh token lifespan. |
+| `ADMIN_SECRET_KEY` | Yes | **Yes** | `[Custom alphanumeric string]` | Passkey required during TPO administrative user registration. |
+| `CORS_ORIGIN` | Yes | No | `https://campus-flow.vercel.app` | Comma-separated list of exact HTTPS origins allowed to access the API. |
+| `CLOUDINARY_*` | Optional | **Yes** | *(Cloudinary keys)* | Enables Cloudinary CDN file storage for resumes, JD PDFs, and student avatars. |
+| `SMTP_*` | Optional | **Yes** | *(SMTP host/pass)* | Enables transactional emails for placement alerts and deadline reminders. |
+
+#### Frontend (Vercel Project Settings)
+| Variable Name | Required | Secret? | Default / Example Value | Description |
+|---|---|---|---|---|
+| `VITE_API_URL` | Yes | No | `https://campusflow-backend.onrender.com/api/v1` | Public HTTPS base URL of the deployed Render backend API. |
+
+---
+
+### 5. Verified Security & Data Integrity Controls
+
+1. **Database Preservation:** Zero database drops, deletions, or schema wipes were performed. All 160 Class of 2027 student accounts, their bcrypt passwords (`123456789`), semester results, and academic placement sessions remain fully intact.
+2. **Reverse Proxy Trust:** `app.set("trust proxy", 1)` enables Express to correctly inspect `X-Forwarded-For` headers behind Render's load balancers, ensuring rate-limiting applies to real client IPs rather than proxy internal IPs.
+3. **CORS Guards:** In production (`NODE_ENV=production`), `validateEnvironment` rejects wildcard `*` origins and non-HTTPS origins, preventing unauthorized cross-origin credential sharing.
+4. **Credential Redaction:** Errors returned to clients in production hide internal database stack traces and credentials (`Internal Server Error` generic message for 500s).
+5. **No Localhost Fallback:** Production frontend builds fail with an explicit diagnostic alert if `VITE_API_URL` is omitted, preventing broken silent requests to localhost.
+
+---
+
+### 6. Manual Dashboard Configuration Steps
+
+#### Step A: MongoDB Atlas
+1. Navigate to **Security** > **Network Access**.
+2. Click **Add IP Address** > Enter `0.0.0.0/0` (Comment: `Render dynamic IP access`).
+3. Ensure the database user under **Database Access** has read/write privileges on the `Place-on` database.
+
+#### Step B: Render Web Service
+1. In Render, select **New Web Service** and connect repository `https://github.com/laksh76777/campus_flow.git`.
+2. Configure settings:
+   - **Root Directory:** `major-backend`
+   - **Build Command:** `npm install`
+   - **Start Command:** `npm start`
+   - **Health Check Path:** `/health`
+3. Enter all required environment variables specified in Section 4 above.
+4. Click **Deploy**. Note the assigned URL: `https://<service-name>.onrender.com`.
+
+#### Step C: Vercel Frontend
+1. In Vercel, select **Add New...** > **Project** and import the repository.
+2. Configure settings:
+   - **Root Directory:** `frontend`
+   - **Framework Preset:** `Vite`
+   - **Build Command:** `npm run build`
+   - **Output Directory:** `dist`
+3. Add Environment Variable:
+   - `VITE_API_URL` = `https://<service-name>.onrender.com/api/v1`
+4. Click **Deploy**. Note the assigned domain: `https://<project-name>.vercel.app`.
+
+#### Step D: Synchronize CORS on Render
+1. Return to Render > Backend Service > **Environment**.
+2. Update `CORS_ORIGIN` to: `https://<project-name>.vercel.app`.
+3. Save changes to trigger an automatic zero-downtime redeploy.
+
+---
+
+### 7. Post-Deployment Smoke Test Checklist
+
+- [ ] `GET https://<service-name>.onrender.com/health` returns HTTP 200 with `status: "ok"`.
+- [ ] `GET https://<service-name>.onrender.com/ready` returns HTTP 200 with `database: "connected"`.
+- [ ] Open `https://<project-name>.vercel.app` in an incognito window over HTTPS.
+- [ ] Sign in with an existing student account (e.g. `1JS23CS001` with initial password).
+- [ ] Confirm student profile drawer shows Semester 1-6 records, CGPA, and no marks for Semester 7.
+- [ ] Sign in as TPO Admin.
+- [ ] Navigate to Automated Placement Drives, click an active drive, and verify candidate counts match.
+- [ ] Click **Export Company Roster** and verify the `.xlsx` file downloads with real applicant rows.
+- [ ] Refresh the page while on `/admin` or `/student` to verify Vercel SPA rewrite functions without a 404 error.
+
+---
+
+### 8. Rollback Procedure (Data-Preserving)
+
+If an issue occurs post-deployment:
+1. **Frontend:** In Vercel > **Deployments**, select the previous working deployment and click **Redeploy / Instant Rollback**.
+2. **Backend:** In Render > **Deploys**, select the prior deploy hash and click **Rollback**.
+3. **Database:** MongoDB Atlas collections are never wiped or dropped by deployments. No collection restoration is needed.
+
+---
+
+### 9. Release Decision
+
+**Deployment Status:** Prepared and verified locally with unit tests (47/47 passed), lint checks (0 errors), and production builds (passed). Live cloud deployment requires manual credentials and dashboard activation.
+
+**Release Decision:**
+`Ready for deployment configuration`
 

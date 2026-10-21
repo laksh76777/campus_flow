@@ -37,6 +37,7 @@ import {
   exportCompanyRoster,
   previewCompanyResults,
   commitCompanyResults,
+  enrollEligibleStudents,
 } from "../../services/adminService";
 import { getResumeViewUrl } from "../../utils/resumeHelper";
 import StudentDetailModal from "./StudentDetailModal";
@@ -77,6 +78,7 @@ export default function AutomatedPlacementDrives({
 
   // Export Roster State
   const [exportingRoster, setExportingRoster] = useState(false);
+  const [enrollingCandidates, setEnrollingCandidates] = useState(false);
 
   // Applicant Review & Shortlisting state within Automated Drive Workspace
   const [candidateSearchTerm, setCandidateSearchTerm] = useState("");
@@ -179,8 +181,11 @@ export default function AutomatedPlacementDrives({
       const res = await getAutomatedDriveWorkspace(driveId);
       if (res?.data) {
         setWorkspaceData(res.data);
-        setSelectedRoundNumber(res.data.drive?.currentRoundNumber || 1);
-        setCustomRounds(res.data.drive?.selectionRounds || []);
+        if (res.data.drive) {
+          setActiveDriveWorkspace(res.data.drive);
+          setSelectedRoundNumber(res.data.drive.currentRoundNumber || 1);
+          setCustomRounds(res.data.drive.selectionRounds || []);
+        }
       }
     } catch (err) {
       console.error("Failed to load workspace details:", err);
@@ -199,6 +204,23 @@ export default function AutomatedPlacementDrives({
     loadWorkspaceDetails(drive._id);
   };
 
+  // 1-Click Cohort Student Auto-Enrollment into Drive
+  const handleEnrollEligibleCandidates = async () => {
+    if (!activeDriveWorkspace) return;
+    try {
+      setEnrollingCandidates(true);
+      const res = await enrollEligibleStudents(activeDriveWorkspace._id);
+      toast.success(res?.message || "Eligible cohort candidates enrolled successfully!");
+      await loadWorkspaceDetails(activeDriveWorkspace._id);
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      console.error("Enroll error:", err);
+      toast.error(err.response?.data?.message || "Failed to enroll eligible candidates");
+    } finally {
+      setEnrollingCandidates(false);
+    }
+  };
+
   // Export Company Roster Action
   const handleExportRoster = async (format = "xlsx") => {
     if (!activeDriveWorkspace) return;
@@ -209,6 +231,19 @@ export default function AutomatedPlacementDrives({
         selectedRoundNumber,
         format
       );
+
+      // Check if blob is actually a JSON error response
+      if (blob?.type && blob.type.includes("application/json")) {
+        const text = await blob.text();
+        try {
+          const errData = JSON.parse(text);
+          toast.error(errData.message || "Failed to export company roster");
+          return;
+        } catch (parseErr) {
+          console.warn("Non-JSON roster blob response:", parseErr);
+        }
+      }
+
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -221,7 +256,7 @@ export default function AutomatedPlacementDrives({
       toast.success(`Company roster downloaded (${format.toUpperCase()})`);
     } catch (err) {
       console.error("Export error:", err);
-      toast.error("Failed to export company roster");
+      toast.error(err.response?.data?.message || "Failed to export company roster");
     } finally {
       setExportingRoster(false);
     }
@@ -309,9 +344,10 @@ export default function AutomatedPlacementDrives({
       const res = await commitCompanyResults(activeDriveWorkspace._id, payload);
       toast.success(res?.message || "Round results applied and candidate pool progressed!");
 
-      // Refresh data
+      // Refresh data and return to pipeline view
       setPreviewData(null);
       setSelectedFile(null);
+      setActiveWorkspaceTab("pipeline");
       await loadWorkspaceDetails(activeDriveWorkspace._id);
       if (onRefresh) onRefresh();
     } catch (err) {
@@ -778,6 +814,17 @@ export default function AutomatedPlacementDrives({
 
                 <button
                   type="button"
+                  onClick={handleEnrollEligibleCandidates}
+                  disabled={enrollingCandidates}
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition shadow-xs cursor-pointer"
+                  title="Automatically enroll all eligible cohort candidates into this drive"
+                >
+                  <Users className="h-3.5 w-3.5 text-indigo-600" />
+                  <span>{enrollingCandidates ? "Enrolling..." : "Enroll Eligible"}</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => handleExportRoster("xlsx")}
                   disabled={exportingRoster}
                   className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition shadow-xs cursor-pointer"
@@ -1011,10 +1058,31 @@ export default function AutomatedPlacementDrives({
                         <tbody className="divide-y divide-slate-100 bg-white">
                           {filteredDriveApplications.length === 0 ? (
                             <tr>
-                              <td colSpan={7} className="py-10 text-center text-slate-400 font-medium">
-                                {candidateSearchTerm || candidateStatusFilter !== "all"
-                                  ? "No candidate applications match your search or filter."
-                                  : "No student applications submitted for this placement drive yet."}
+                              <td colSpan={7} className="py-12 text-center text-slate-400">
+                                {candidateSearchTerm || candidateStatusFilter !== "all" ? (
+                                  <div className="font-medium text-xs">No candidate applications match your search or filter.</div>
+                                ) : (
+                                  <div className="flex flex-col items-center justify-center gap-3 py-2">
+                                    <div className="h-10 w-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                                      <Users className="h-5 w-5" />
+                                    </div>
+                                    <div className="max-w-md">
+                                      <div className="text-sm font-bold text-slate-800">No applicants in candidate pool yet</div>
+                                      <p className="text-[11px] text-slate-500 mt-1">
+                                        Eligible cohort students (matching graduation year, department, and CGPA criteria) can be enrolled with one click so you can export the roster and conduct selection rounds.
+                                      </p>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={handleEnrollEligibleCandidates}
+                                      disabled={enrollingCandidates}
+                                      className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer mt-1"
+                                    >
+                                      <Users className="h-4 w-4" />
+                                      <span>{enrollingCandidates ? "Enrolling..." : "Enroll All Eligible Students Now"}</span>
+                                    </button>
+                                  </div>
+                                )}
                               </td>
                             </tr>
                           ) : (

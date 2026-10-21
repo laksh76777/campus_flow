@@ -22,6 +22,13 @@ test("HTTP readiness, root health, and JSON 404 behavior", async () => {
         database: "disconnected"
     });
 
+    const readyResponse = await fetch(`${baseUrl}/ready`);
+    assert.equal(readyResponse.status, 503);
+    assert.deepEqual(await readyResponse.json(), {
+        status: "unavailable",
+        database: "disconnected"
+    });
+
     const rootResponse = await fetch(`${baseUrl}/`);
     assert.equal(rootResponse.status, 503);
     assert.equal(await rootResponse.text(), "backend database unavailable");

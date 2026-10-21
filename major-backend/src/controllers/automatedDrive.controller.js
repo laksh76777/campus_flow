@@ -7,6 +7,7 @@ import {
     generateCompanyRosterWorkbook,
     previewRoundResults,
     commitRoundResults,
+    enrollEligibleStudentsForDrive,
 } from "../services/automatedDrive.service.js";
 
 /**
@@ -137,3 +138,21 @@ export const commitCompanyResults = asyncHandler(async (req, res) => {
         new ApiResponse(200, result, result.message)
     );
 });
+
+/**
+ * 6. Enroll eligible cohort students into placement drive
+ * POST /api/v1/placementdrive/:driveId/enroll-eligible-students
+ */
+export const enrollEligibleStudents = asyncHandler(async (req, res) => {
+    const { driveId } = req.params;
+    if (!driveId) {
+        throw new ApiError(400, "Placement drive ID is required.");
+    }
+
+    const result = await enrollEligibleStudentsForDrive(driveId, req.user?._id);
+
+    return res.status(200).json(
+        new ApiResponse(200, result, result.message)
+    );
+});
+

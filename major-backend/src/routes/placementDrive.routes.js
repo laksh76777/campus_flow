@@ -26,7 +26,8 @@ import {
     configureSelectionRounds,
     exportCompanyRoster,
     previewCompanyResults,
-    commitCompanyResults
+    commitCompanyResults,
+    enrollEligibleStudents
 } from "../controllers/automatedDrive.controller.js";
 
 
@@ -173,6 +174,14 @@ router
         verifyJWT,
         verifyAdmin,
         commitCompanyResults
+    );
+
+router
+    .route("/:driveId/enroll-eligible-students")
+    .post(
+        verifyJWT,
+        verifyAdmin,
+        enrollEligibleStudents
     );
 
 export default router;
