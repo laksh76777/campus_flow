@@ -24,8 +24,10 @@ class InMemoryRateLimiter {
 
     middleware() {
         return (req, res, next) => {
+            // Respect Express trust proxy setting via req.ip; fallback safely to socket remoteAddress
             const clientIp =
-                req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
+                req.ip ||
+                (req.app?.get?.("trust proxy") ? req.headers["x-forwarded-for"]?.split(",")[0]?.trim() : null) ||
                 req.socket?.remoteAddress ||
                 "unknown_ip";
 

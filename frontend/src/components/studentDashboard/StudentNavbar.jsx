@@ -56,12 +56,13 @@ export default function StudentNavbar({
     }
   }, []);
 
-  // Initial fetch and auto-polling every 25 seconds
+  // Initial fetch and auto-polling (only when not managed by parent StudentDashboard)
   useEffect(() => {
     fetchNotifications();
+    if (onRefreshNotifications) return;
     const interval = setInterval(fetchNotifications, 25000);
     return () => clearInterval(interval);
-  }, [fetchNotifications]);
+  }, [fetchNotifications, onRefreshNotifications]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -194,7 +195,11 @@ export default function StudentNavbar({
         {/* Notification Bell Dropdown */}
         <div className="relative" ref={notificationRef}>
           <button
-            onClick={() => setShowNotifications(!showNotifications)}
+            onClick={() => {
+              const nextState = !showNotifications;
+              setShowNotifications(nextState);
+              if (nextState) fetchNotifications();
+            }}
             className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-blue-600 transition active:scale-95"
             aria-label="Notifications"
           >

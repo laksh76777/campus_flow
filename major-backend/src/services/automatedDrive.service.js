@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import ExcelJS from "exceljs";
 import { Readable } from "stream";
 import zlib from "zlib";
@@ -7,6 +8,20 @@ import { StudentProfile } from "../models/studentProfile.model.js";
 import { ImportBatch } from "../models/importBatch.model.js";
 import { Notification } from "../models/notification.model.js";
 import { sanitizeFormula } from "./excelImportExport.service.js";
+
+// Legal status transitions state machine
+export const LEGAL_TRANSITIONS = {
+    applied: ["shortlisted", "interview", "selected", "rejected", "on_hold", "withdrawn"],
+    shortlisted: ["applied", "interview", "selected", "rejected", "on_hold", "withdrawn"],
+    interview: ["interview", "shortlisted", "selected", "rejected", "on_hold"],
+    on_hold: ["applied", "shortlisted", "interview", "selected", "rejected", "withdrawn"],
+    selected: ["offer_received", "offer_accepted", "offer_declined", "rejected", "interview", "shortlisted"],
+    offer_received: ["offer_accepted", "offer_declined", "rejected", "selected"],
+    offer_accepted: ["offer_declined", "rejected", "selected"],
+    offer_declined: ["offer_accepted", "selected", "rejected"],
+    rejected: ["shortlisted", "interview", "applied", "on_hold"],
+    withdrawn: ["applied"]
+};
 
 /**
  * Normalizes USN by trimming, uppercasing, and removing internal whitespace / hyphens.
@@ -464,6 +479,7 @@ export const previewRoundResults = async ({
     fileBuffer,
     originalFilename,
     mode = "shortlist_only", // "shortlist_only" | "complete_results"
+    adminUserId,
 }) => {
     const drive = await PlacementDrive.findById(driveId);
     if (!drive) {
@@ -594,7 +610,6 @@ export const previewRoundResults = async ({
         if (row.name && actualName) {
             const n1 = normalizeName(row.name);
             const n2 = normalizeName(actualName);
-            // If neither contains the other and length > 3, flag for review
             if (n1.length > 3 && n2.length > 3 && !n1.includes(n2) && !n2.includes(n1)) {
                 identityMismatch = true;
                 mismatchReason = `Name in file "${row.name}" differs from enrolled record "${actualName}".`;
@@ -678,7 +693,65 @@ export const previewRoundResults = async ({
             remarks: `Not present in company shortlist for ${roundName}`,
         }));
 
+    // Persist preview/import batch record for audit history
+    const batchId = `BATCH_DRIVE_${drive._id}_R${currentRoundNum}_${Date.now()}`;
+    let batchDoc = null;
+    if (adminUserId) {
+        try {
+            batchDoc = await ImportBatch.create({
+                batchId,
+                importType: "automated_drive_results",
+                placementDrive: drive._id,
+                placementSession: drive.placementSession,
+                roundNumber: currentRoundNum,
+                originalFilename: originalFilename || `results_round_${currentRoundNum}.xlsx`,
+                initiatedBy: adminUserId,
+                status: "PREVIEWED",
+                totalRows: rawRows.length,
+                validRows: proposedAdvances.length + proposedRejections.length,
+                invalidRows: exceptions.length,
+                conflictRows: exceptions.filter((e) => e.type === "IDENTITY_MISMATCH" || e.type === "DUPLICATE_USN_IN_FILE").length,
+                previewResults: [
+                    ...proposedAdvances.map((p, idx) => ({
+                        rowNumber: idx + 1,
+                        identifier: p.usn,
+                        name: p.name,
+                        status: "VALID",
+                        action: "ADVANCE",
+                        proposedAction: p.proposedStatus,
+                        details: { applicationId: p.applicationId, status: p.proposedStatus },
+                        reason: p.remarks,
+                    })),
+                    ...proposedRejections.map((p, idx) => ({
+                        rowNumber: idx + 1 + proposedAdvances.length,
+                        identifier: p.usn,
+                        name: p.name,
+                        status: "VALID",
+                        action: "REJECT",
+                        proposedAction: "rejected",
+                        details: { applicationId: p.applicationId, status: "rejected" },
+                        reason: p.remarks,
+                    })),
+                    ...exceptions.map((e, idx) => ({
+                        rowNumber: e.rowNumber || (idx + 1 + proposedAdvances.length + proposedRejections.length),
+                        identifier: e.usn,
+                        name: e.uploadedName || "",
+                        status: "ERROR",
+                        action: "ERROR",
+                        proposedAction: "NONE",
+                        details: { type: e.type, canResolve: e.canResolve },
+                        reason: e.message,
+                    })),
+                ],
+                summary: `Previewed ${rawRows.length} rows for Round ${currentRoundNum}: ${proposedAdvances.length} proposed advances, ${proposedRejections.length} proposed rejections, ${exceptions.length} exceptions.`,
+            });
+        } catch (batchErr) {
+            console.warn("ImportBatch preview persist notice:", batchErr.message);
+        }
+    }
+
     return {
+        batchId: batchDoc ? batchDoc.batchId : batchId,
         roundNumber: currentRoundNum,
         roundName,
         isFinalRound,
@@ -707,6 +780,7 @@ export const commitRoundResults = async ({
     confirmedAdvances = [],
     confirmedRejections = [],
     confirmedExceptionResolutions = [],
+    batchId,
     adminUserId,
 }) => {
     const drive = await PlacementDrive.findById(driveId).populate("company", "companyName");
@@ -721,9 +795,18 @@ export const commitRoundResults = async ({
         throw new Error("This placement drive is already completed and closed. No further round results can be imported.");
     }
 
-    if (drive.currentRoundNumber && currentRoundNum < drive.currentRoundNumber) {
+    const currentRoundObj = drive.selectionRounds?.find((r) => r.roundNumber === currentRoundNum);
+    const isAlreadyCompleted = currentRoundObj && currentRoundObj.status === "completed";
+
+    if (drive.currentRoundNumber && currentRoundNum < drive.currentRoundNumber && !isAlreadyCompleted) {
         throw new Error(
             `Cannot import results for Round ${currentRoundNum}. The drive has already progressed to Round ${drive.currentRoundNumber}. Earlier-round imports cannot overwrite later-round results.`
+        );
+    }
+
+    if (drive.currentRoundNumber && currentRoundNum > drive.currentRoundNumber) {
+        throw new Error(
+            `Cannot import results for Round ${currentRoundNum}. Drive is currently at Round ${drive.currentRoundNumber}. Round skipping is prohibited.`
         );
     }
 
@@ -732,160 +815,419 @@ export const commitRoundResults = async ({
     const totalRounds = drive.selectionRounds?.length || 5;
     const isFinalRound = currentRoundNum >= totalRounds;
 
-    // Build consolidated list of updates
-    const updatesToApply = [];
+    // 1. Fetch current applications and candidate pool
+    const allDriveApplications = await Application.find({ placementDrive: driveId })
+        .populate({
+            path: "student",
+            populate: { path: "user", select: "fullName email" },
+        });
 
-    // Advances
+    let candidatePool = [];
+    if (currentRoundNum <= 1) {
+        candidatePool = allDriveApplications.filter((app) => app.status !== "withdrawn" && app.status !== "rejected");
+    } else {
+        const prevRoundNum = currentRoundNum - 1;
+        candidatePool = allDriveApplications.filter((app) => {
+            const hasClearedPrev = app.interviewRounds?.some(
+                (ir) => ir.roundNumber === prevRoundNum && ir.status === "cleared"
+            );
+            const isManuallyAdvanced = (currentRoundNum === 2 && ["shortlisted", "interview"].includes(app.status)) ||
+                                       (currentRoundNum > 2 && app.status === "interview");
+            return (hasClearedPrev || isManuallyAdvanced) && app.status !== "rejected" && app.status !== "withdrawn";
+        });
+    }
+
+    // Maps for revalidation
+    const poolAppMap = new Map(candidatePool.map((a) => [a._id.toString(), a]));
+    const allDriveAppMap = new Map(allDriveApplications.map((a) => [a._id.toString(), a]));
+
+    // Priority 2: Prevent empty imports from completing a round or closing a drive
+    const hasAnyAdvance = confirmedAdvances.length > 0;
+    const hasAnyReject = confirmedRejections.length > 0;
+    const hasAnyResolution = confirmedExceptionResolutions.length > 0;
+
+    if (candidatePool.length > 0 && !hasAnyAdvance && !hasAnyReject && (!autoRejectAbsent || !hasAnyResolution)) {
+        throw new Error("Cannot commit empty results. No candidate advances or rejections were provided for this round.");
+    }
+
+    // Deduplicate and aggregate candidate updates
+    const seenAppIds = new Set();
+    const candidateActions = new Map(); // appId -> { applicationId, action, targetStatus, remarks }
+
+    const targetAdvanceStatus = isFinalRound ? "selected" : (currentRoundNum === 1 ? "shortlisted" : "interview");
+
     for (const item of confirmedAdvances) {
-        updatesToApply.push({
-            applicationId: item.applicationId,
+        if (!item || !item.applicationId) {
+            throw new Error("Every confirmed advance must contain a valid applicationId.");
+        }
+        const appId = String(item.applicationId);
+        if (seenAppIds.has(appId)) {
+            throw new Error(`Duplicate entry for application ID ${appId} in commit payload.`);
+        }
+        seenAppIds.add(appId);
+        candidateActions.set(appId, {
+            applicationId: appId,
             action: "advance",
-            targetStatus: isFinalRound ? "selected" : (currentRoundNum === 1 ? "shortlisted" : "interview"),
+            targetStatus: targetAdvanceStatus,
             remarks: item.remarks || (isFinalRound ? `Placed at ${drive.company?.companyName}` : `Cleared ${roundName}`),
         });
     }
 
-    // Explicit rejections
     for (const item of confirmedRejections) {
-        updatesToApply.push({
-            applicationId: item.applicationId,
+        if (!item || !item.applicationId) {
+            throw new Error("Every confirmed rejection must contain a valid applicationId.");
+        }
+        const appId = String(item.applicationId);
+        if (seenAppIds.has(appId)) {
+            throw new Error(`Conflicting or duplicate outcome for application ID ${appId}. A candidate cannot be both advanced and rejected.`);
+        }
+        seenAppIds.add(appId);
+        candidateActions.set(appId, {
+            applicationId: appId,
             action: "reject",
             targetStatus: "rejected",
             remarks: item.remarks || `Not selected in ${roundName}`,
         });
     }
 
-    // Auto-rejected absent candidates if confirmed
-    if (autoRejectAbsent && Array.isArray(confirmedExceptionResolutions)) {
+    // Exception resolutions / absent rejections
+    if (Array.isArray(confirmedExceptionResolutions)) {
         for (const item of confirmedExceptionResolutions) {
+            if (!item || !item.applicationId) continue;
+            const appId = String(item.applicationId);
+            if (seenAppIds.has(appId)) continue; // Already explicitly accounted for
             if (item.action === "reject_absent") {
-                updatesToApply.push({
-                    applicationId: item.applicationId,
+                seenAppIds.add(appId);
+                candidateActions.set(appId, {
+                    applicationId: appId,
                     action: "reject",
                     targetStatus: "rejected",
                     remarks: `Eliminated after ${roundName} (absent from shortlist)`,
                 });
             } else if (item.action === "force_advance") {
-                updatesToApply.push({
-                    applicationId: item.applicationId,
+                seenAppIds.add(appId);
+                candidateActions.set(appId, {
+                    applicationId: appId,
                     action: "advance",
-                    targetStatus: isFinalRound ? "selected" : (currentRoundNum === 1 ? "shortlisted" : "interview"),
+                    targetStatus: targetAdvanceStatus,
                     remarks: `TPO approved match: cleared ${roundName}`,
                 });
             }
         }
     }
 
-    let advancedTotal = 0;
-    let rejectedTotal = 0;
-    const notificationsToCreate = [];
-
-    // Apply updates to Application collection
-    for (const update of updatesToApply) {
-        const app = await Application.findById(update.applicationId).populate({
-            path: "student",
-            populate: { path: "user", select: "fullName email" }
+    // Priority 3: Check Idempotency for repeated submissions
+    if (isAlreadyCompleted) {
+        // Check if all candidates are already in targetStatus
+        const allMatch = Array.from(candidateActions.values()).every((item) => {
+            const app = allDriveAppMap.get(item.applicationId);
+            return app && app.status === item.targetStatus;
         });
-
-        if (!app) continue;
-
-        const prevStatus = app.status;
-        app.status = update.targetStatus;
-        app.statusUpdatedAt = new Date();
-
-        // Add to round ledger
-        app.interviewRounds = app.interviewRounds || [];
-        // Remove prior entry for same roundNumber if exists (idempotency)
-        app.interviewRounds = app.interviewRounds.filter((ir) => ir.roundNumber !== currentRoundNum);
-        app.interviewRounds.push({
-            roundNumber: currentRoundNum,
-            roundName,
-            scheduledAt: new Date(),
-            status: update.action === "advance" ? "cleared" : "failed",
-            feedback: update.remarks,
-        });
-
-        // Add to status transition history
-        app.statusHistory = app.statusHistory || [];
-        app.statusHistory.push({
-            fromStatus: prevStatus,
-            toStatus: update.targetStatus,
-            remarks: update.remarks,
-            updatedBy: adminUserId,
-            updatedAt: new Date(),
-        });
-
-        // Handle final round offer details
-        if (isFinalRound && update.action === "advance") {
-            app.offeredPackage = drive.package;
-            app.offerDetails = {
-                offeredAt: new Date(),
-                offeredPackage: drive.package,
-                designation: drive.jobTitle,
-                joiningDate: drive.driveDate,
-                studentDecision: "pending",
-                decisionAt: null
+        if (allMatch) {
+            return {
+                success: true,
+                driveId: drive._id,
+                roundNumber: currentRoundNum,
+                roundName,
+                isFinalRound,
+                isPlacementCompleted: drive.isPlacementCompleted,
+                advancedCount: currentRoundObj.advancedCount || 0,
+                rejectedCount: currentRoundObj.rejectedCount || 0,
+                idempotent: true,
+                message: isFinalRound
+                    ? `Final selection completed! ${currentRoundObj.advancedCount || 0} candidate(s) selected and offered. Drive is now completed and closed.`
+                    : `${roundName} results applied successfully! ${currentRoundObj.advancedCount || 0} candidate(s) advanced to Round ${currentRoundNum + 1}.`,
             };
         }
-
-        await app.save();
-
-        if (update.action === "advance") {
-            advancedTotal++;
-            // Queue congratulatory in-app notification
-            const studentUserId = app.student?.user?._id;
-            if (studentUserId) {
-                notificationsToCreate.push({
-                    user: studentUserId,
-                    type: isFinalRound ? "offer" : "status_update",
-                    title: isFinalRound 
-                        ? `🎉 Congratulations! Selected at ${drive.company?.companyName}` 
-                        : `Advanced to Next Stage: ${drive.company?.companyName}`,
-                    message: isFinalRound
-                        ? `You have cleared the final round of ${drive.company?.companyName} (${drive.jobTitle}) and received a placement offer! Please review and accept or decline your offer in your dashboard.`
-                        : `You have cleared ${roundName} for ${drive.company?.companyName} and advanced to the next selection stage.`,
-                    priority: "high",
-                    relatedDrive: drive._id,
-                    application: app._id,
-                });
-            }
-        } else {
-            rejectedTotal++;
+        if (drive.currentRoundNumber && currentRoundNum < drive.currentRoundNumber) {
+            throw new Error(
+                `Cannot import results for Round ${currentRoundNum}. The drive has already progressed to Round ${drive.currentRoundNumber}. Earlier-round imports cannot overwrite later-round results.`
+            );
         }
     }
 
-    // Update Drive Selection Round metadata
-    if (drive.selectionRounds && drive.selectionRounds.length > 0) {
-        const roundIdx = drive.selectionRounds.findIndex((r) => r.roundNumber === currentRoundNum);
-        if (roundIdx !== -1) {
+    // Priority 1: Secure result commits - Server-side revalidation of every submitted application ID FIRST
+    for (const [appId, actionItem] of candidateActions.entries()) {
+        const poolApp = poolAppMap.get(appId);
+        if (!poolApp) {
+            // Check if application belongs to this drive at all
+            const driveApp = allDriveAppMap.get(appId);
+            if (driveApp) {
+                throw new Error(
+                    `Application ${appId} (${driveApp.submittedSnapshot?.usn || "Candidate"}) is not in the active candidate pool for ${roundName} (current status: ${driveApp.status}). Commits for out-of-round candidates are rejected.`
+                );
+            }
+            // Check if it belongs to another drive or doesn't exist
+            const otherApp = await Application.findById(appId);
+            if (!otherApp) {
+                throw new Error(`Application ${appId} not found.`);
+            }
+            if (otherApp.placementDrive?.toString() !== driveId.toString()) {
+                throw new Error(
+                    `Application ${appId} belongs to another placement drive (${otherApp.placementDrive}). Cross-drive application commits are strictly rejected.`
+                );
+            }
+            throw new Error(`Application ${appId} is not in the active candidate pool for ${roundName}.`);
+        }
+
+        // Validate status transition
+        const currentStatus = poolApp.status;
+        const targetStatus = actionItem.targetStatus;
+        if (currentStatus !== targetStatus) {
+            const allowed = LEGAL_TRANSITIONS[currentStatus] || [];
+            if (!allowed.includes(targetStatus)) {
+                throw new Error(
+                    `Invalid status transition from "${currentStatus}" to "${targetStatus}" for candidate ${poolApp.submittedSnapshot?.usn || appId}.`
+                );
+            }
+        }
+    }
+
+    // If autoRejectAbsent is confirmed in shortlist_only mode, any pool candidate not in seenAppIds is auto-rejected
+    if (autoRejectAbsent && mode === "shortlist_only") {
+        for (const poolApp of candidatePool) {
+            const pId = poolApp._id.toString();
+            if (!seenAppIds.has(pId)) {
+                seenAppIds.add(pId);
+                candidateActions.set(pId, {
+                    applicationId: pId,
+                    action: "reject",
+                    targetStatus: "rejected",
+                    remarks: `Eliminated after ${roundName} (absent from shortlist)`,
+                });
+            }
+        }
+    }
+
+    // Priority 2: Safe round completion & required outcomes
+    // Ensure no candidates in candidatePool are left unresolved
+    const unresolvedCandidates = candidatePool.filter((app) => !candidateActions.has(app._id.toString()));
+    if (unresolvedCandidates.length > 0) {
+        const unresolvedList = unresolvedCandidates.map((a) => a.submittedSnapshot?.usn || a._id).slice(0, 5).join(", ");
+        throw new Error(
+            `Cannot complete ${roundName}: ${unresolvedCandidates.length} candidate(s) in the round candidate pool have unresolved outcomes (${unresolvedList}...). Explicit confirmation is required to reject absent candidates or resolve all outcomes before completing the round.`
+        );
+    }
+
+    // Priority 3: Database transactions with fallback recoverable strategy
+    let session = null;
+    let useTransaction = false;
+    if (mongoose.connection?.readyState === 1) {
+        try {
+            session = await mongoose.startSession();
+            session.startTransaction();
+            useTransaction = true;
+        } catch {
+            session = null;
+            useTransaction = false;
+        }
+    }
+
+    const appliedSnapshots = [];
+    const notificationsToCreate = [];
+    let advancedTotal = 0;
+    let rejectedTotal = 0;
+
+    try {
+        for (const [appId, actionItem] of candidateActions.entries()) {
+            const app = await Application.findById(appId).session(session || undefined);
+            if (!app) continue;
+
+            // Save snapshot for rollback if non-transactional failure occurs
+            appliedSnapshots.push({
+                app,
+                originalStatus: app.status,
+                originalStatusUpdatedAt: app.statusUpdatedAt,
+                originalInterviewRounds: JSON.parse(JSON.stringify(app.interviewRounds || [])),
+                originalStatusHistory: JSON.parse(JSON.stringify(app.statusHistory || [])),
+                originalOfferedPackage: app.offeredPackage,
+                originalOfferDetails: app.offerDetails ? JSON.parse(JSON.stringify(app.offerDetails)) : undefined,
+            });
+
+            const prevStatus = app.status;
+            app.status = actionItem.targetStatus;
+            app.statusUpdatedAt = new Date();
+
+            // Update round ledger (idempotent: replace prior entry for same roundNumber)
+            app.interviewRounds = (app.interviewRounds || []).filter((ir) => ir.roundNumber !== currentRoundNum);
+            app.interviewRounds.push({
+                roundNumber: currentRoundNum,
+                roundName,
+                scheduledAt: new Date(),
+                status: actionItem.action === "advance" ? "cleared" : "failed",
+                feedback: actionItem.remarks,
+            });
+
+            // Prevent duplicate status history entries
+            const historyList = app.statusHistory || [];
+            const lastHist = historyList[historyList.length - 1];
+            const isDuplicateHistory = lastHist &&
+                lastHist.fromStatus === prevStatus &&
+                lastHist.toStatus === actionItem.targetStatus &&
+                lastHist.remarks === actionItem.remarks;
+
+            if (!isDuplicateHistory && prevStatus !== actionItem.targetStatus) {
+                historyList.push({
+                    fromStatus: prevStatus,
+                    toStatus: actionItem.targetStatus,
+                    remarks: actionItem.remarks,
+                    updatedBy: adminUserId,
+                    updatedAt: new Date(),
+                });
+                app.statusHistory = historyList;
+            }
+
+            // Final round offer details (preserve distinction: NOT placed until student accepts!)
+            if (isFinalRound && actionItem.action === "advance") {
+                app.offeredPackage = drive.package;
+                app.offerDetails = {
+                    offeredAt: new Date(),
+                    offeredPackage: drive.package,
+                    designation: drive.jobTitle,
+                    joiningDate: drive.driveDate,
+                    studentDecision: "pending",
+                    decisionAt: null,
+                };
+            }
+
+            await app.save({ session: session || undefined });
+
+            if (actionItem.action === "advance") {
+                advancedTotal++;
+                const studentUserId = app.student?.user?._id || app.student?.user;
+                if (studentUserId) {
+                    const notifTitle = isFinalRound
+                        ? `🎉 Congratulations! Selected at ${drive.company?.companyName}`
+                        : `Advanced to Next Stage: ${drive.company?.companyName}`;
+
+                    // Check if duplicate notification already queued
+                    const alreadyQueued = notificationsToCreate.some(
+                        (n) => n.user?.toString() === studentUserId.toString() && n.application?.toString() === app._id.toString()
+                    );
+                    if (!alreadyQueued) {
+                        notificationsToCreate.push({
+                            user: studentUserId,
+                            type: isFinalRound ? "offer" : "status_update",
+                            title: notifTitle,
+                            message: isFinalRound
+                                ? `You have cleared the final round of ${drive.company?.companyName} (${drive.jobTitle}) and received a placement offer! Please review and accept or decline your offer in your dashboard.`
+                                : `You have cleared ${roundName} for ${drive.company?.companyName} and advanced to the next selection stage.`,
+                            priority: "high",
+                            relatedDrive: drive._id,
+                            application: app._id,
+                        });
+                    }
+                }
+            } else {
+                rejectedTotal++;
+            }
+        }
+
+        // Update Drive Selection Round metadata
+        const roundIdx = drive.selectionRounds?.findIndex((r) => r.roundNumber === currentRoundNum);
+        if (roundIdx !== -1 && roundIdx !== undefined) {
             drive.selectionRounds[roundIdx].status = "completed";
             drive.selectionRounds[roundIdx].conductedAt = new Date();
             drive.selectionRounds[roundIdx].advancedCount = advancedTotal;
             drive.selectionRounds[roundIdx].rejectedCount = rejectedTotal;
         }
 
-        // Advance to next round or complete drive
         if (isFinalRound) {
             drive.isPlacementCompleted = true;
             drive.completedAt = new Date();
             drive.isActive = false; // Drive successfully closed
         } else {
-            const nextRoundIdx = drive.selectionRounds.findIndex((r) => r.roundNumber === currentRoundNum + 1);
-            if (nextRoundIdx !== -1) {
+            const nextRoundIdx = drive.selectionRounds?.findIndex((r) => r.roundNumber === currentRoundNum + 1);
+            if (nextRoundIdx !== -1 && nextRoundIdx !== undefined) {
                 drive.selectionRounds[nextRoundIdx].status = "in_progress";
                 drive.currentRoundNumber = currentRoundNum + 1;
             }
         }
 
-        await drive.save();
+        // Persist ImportBatch audit log
+        const actualBatchId = batchId || `BATCH_DRIVE_${drive._id}_R${currentRoundNum}_${Date.now()}`;
+        const committedBatch = await ImportBatch.findOneAndUpdate(
+            { batchId: actualBatchId },
+            {
+                $set: {
+                    batchId: actualBatchId,
+                    importType: "automated_drive_results",
+                    placementDrive: drive._id,
+                    placementSession: drive.placementSession,
+                    roundNumber: currentRoundNum,
+                    initiatedBy: adminUserId,
+                    status: "COMMITTED",
+                    totalRows: candidateActions.size,
+                    validRows: candidateActions.size,
+                    invalidRows: 0,
+                    insertedRows: 0,
+                    updatedRows: candidateActions.size,
+                    completedAt: new Date(),
+                    summary: `${roundName} results committed: ${advancedTotal} advanced, ${rejectedTotal} rejected.`,
+                }
+            },
+            { upsert: true, new: true, session: session || undefined }
+        );
+
+        if (roundIdx !== -1 && roundIdx !== undefined) {
+            drive.selectionRounds[roundIdx].batchId = committedBatch.batchId;
+        }
+
+        await drive.save({ session: session || undefined });
+
+        if (useTransaction && session) {
+            await session.commitTransaction();
+            session.endSession();
+        }
+    } catch (procErr) {
+        if (useTransaction && session) {
+            await session.abortTransaction();
+            session.endSession();
+        } else {
+            // Recoverable strategy: rollback applied applications to previous states
+            for (const snap of appliedSnapshots) {
+                try {
+                    snap.app.status = snap.originalStatus;
+                    snap.app.statusUpdatedAt = snap.originalStatusUpdatedAt;
+                    snap.app.interviewRounds = snap.originalInterviewRounds;
+                    snap.app.statusHistory = snap.originalStatusHistory;
+                    snap.app.offeredPackage = snap.originalOfferedPackage;
+                    snap.app.offerDetails = snap.originalOfferDetails;
+                    await snap.app.save();
+                } catch (rollbackErr) {
+                    console.error("Rollback error for app:", snap.app._id, rollbackErr.message);
+                }
+            }
+            if (batchId) {
+                await ImportBatch.findOneAndUpdate(
+                    { batchId },
+                    { $set: { status: "FAILED", summary: `Commit failed: ${procErr.message}. All partial updates rolled back.` } }
+                ).catch(() => {});
+            }
+        }
+        throw new Error(`Failed to commit round results: ${procErr.message}. Batch processing halted; no partial outcomes committed.`);
     }
 
-    // Dispatch queued notifications safely
+    // Safely dispatch notifications without duplicates
     if (notificationsToCreate.length > 0) {
         try {
-            await Notification.insertMany(notificationsToCreate);
+            // Check for existing notifications in DB to ensure idempotency
+            const filteredNotifs = [];
+            for (const notif of notificationsToCreate) {
+                const existing = await Notification.findOne({
+                    user: notif.user,
+                    application: notif.application,
+                    title: notif.title,
+                });
+                if (!existing) {
+                    filteredNotifs.push(notif);
+                }
+            }
+            if (filteredNotifs.length > 0) {
+                await Notification.insertMany(filteredNotifs);
+            }
         } catch (notifErr) {
-            console.warn("Notification dispatch warning:", notifErr.message);
+            console.warn("Notification dispatch notice:", notifErr.message);
         }
     }
 
@@ -899,7 +1241,7 @@ export const commitRoundResults = async ({
         advancedCount: advancedTotal,
         rejectedCount: rejectedTotal,
         message: isFinalRound
-            ? `Final selection completed! ${advancedTotal} candidate(s) marked Placed. Drive is now successfully completed and closed.`
+            ? `Final selection completed! ${advancedTotal} candidate(s) selected and offered. Drive is now completed and closed.`
             : `${roundName} results applied successfully! ${advancedTotal} candidate(s) advanced to Round ${currentRoundNum + 1}.`,
     };
 };

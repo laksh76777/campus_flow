@@ -621,4 +621,41 @@ The current-student profile endpoint is scoped to the authenticated user's ID. S
 | Production database migration or record repair | **Not performed** | No live student data was rewritten, no database reset was run, and no migration was applied. |
 | Unrelated project workflows | **Not verified** | This follow-up focused on student profiles, profile privacy boundaries, and the closely related applicant export. |
 
+---
+
+## Automated Placement Drive Integrity & Result-Commit Workflow Audit (2026-10-21)
+
+### 1. Executive Summary
+
+A focused, preservation-first integrity and regression audit of CampusFlow V2 was conducted, prioritizing the Automated Placement Drive result-commit workflow. 
+All identified integrity gaps in the result ingestion and candidate progression engine were resolved with minimal, surgical fixes. No application architecture was rewritten, no student/drive records were deleted, no database clean/reset was run, and existing repository history has been fully preserved.
+
+### 2. Confirmed Findings & Resolutions
+
+| Priority Area | Finding / Vulnerability | Root Cause | Implemented Resolution |
+|---|---|---|---|
+| **Priority 1: Secure Result Commits** | Cross-drive application IDs could be submitted to `/commit-results`. | `commitRoundResults` did not verify `app.placementDrive === driveId`. | Enforced strict server-side validation: every submitted application ID is cross-checked against the database to confirm it belongs to the active drive. Cross-drive application IDs are rejected with an explicit error. |
+| **Priority 1: Secure Result Commits** | Out-of-pool or eliminated candidates could be advanced via client payload. | Server did not validate that candidates in the commit payload were members of the active round candidate pool. | Revalidated every application ID against the active candidate pool. Candidates eliminated in earlier rounds or not in the current stage are rejected before any mutations occur. |
+| **Priority 1: Secure Result Commits** | Unvalidated status transitions and blind trust of client proposed statuses. | Server trusted client-provided status fields without state machine verification. | Enforced `LEGAL_TRANSITIONS` state machine validation on all proposed transitions. Invalid status jumps (e.g. `rejected` -> `selected` or `withdrawn` -> `interview`) are blocked. |
+| **Priority 2: Safe Round Completion** | Empty or partial imports could mark rounds complete and prematurely close drives. | Missing validation on commit payload volume and candidate pool resolution. | Added empty-import guard: empty payloads cannot complete rounds or close drives when candidates exist. Added candidate pool completeness check: every candidate in the round pool must have an explicit, resolved outcome (`advance` or `reject`). Unresolved outcomes prevent round completion. |
+| **Priority 2: Safe Round Completion** | Absent candidates left in limbo in shortlist-only mode. | Absence from shortlist was not treated as rejection unless explicitly confirmed, but unhandled candidates were ignored. | Require explicit confirmation (`autoRejectAbsent: true`) when absence from a shortlist is to be treated as rejection; all absent pool candidates are transitioned to `rejected` with audit remarks. If unconfirmed, unresolved candidates prevent round progression. |
+| **Priority 2: Safe Round Completion** | Conflation between "Selected" and "Placed". | Service returned a message stating candidates were "marked Placed" upon final round selection. | Preserved the architectural distinction established in Section 8: final round advancement marks applications `selected` and provisions pending `offerDetails`. The candidate's `StudentProfile.isPlaced` remains `false` until the student explicitly accepts the offer on their dashboard via `/respond-offer`. Corrected status messaging. |
+| **Priority 3: Batch Integrity** | Automated result-import workflow never persisted import batches. | `ImportBatch` was imported but never instantiated in `automatedDrive.service.js`. | Added `"automated_drive_results"` to `ImportBatch` schema. Persist dry-run batches on preview (`status: "PREVIEWED"`) and finalize batches upon commit (`status: "COMMITTED"`), storing metrics, row-level preview details, and linking `batchId` to `drive.selectionRounds[roundIdx].batchId`. |
+| **Priority 3: Batch Integrity** | Repeated commits produced duplicate `statusHistory` entries and notifications. | Commit service pushed to `statusHistory` and queued notifications on every execution without deduplication. | Implemented idempotency guard: repeated submissions for an already-completed round return the idempotent result. Prevent duplicate `statusHistory` entries if the status and remarks match the last entry. Prevent duplicate notification dispatch on retries. |
+| **Priority 3: Batch Integrity** | Lack of atomic rollback on partial batch failure. | Application updates occurred sequentially in a loop without rollback on mid-batch exceptions. | Implemented transactional commit (`session.startTransaction()`) where supported by MongoDB; added atomic snapshot tracking with full state rollback on standalone deployments. A partially applied batch is never reported as successful. |
+| **Priority 5: Adjacent Checks** | Duplicate notification polling in student interface. | Both `StudentDashboard.jsx` and `StudentNavbar.jsx` ran independent `setInterval(fetchNotifications, 25000)`. | Guarded `StudentNavbar.jsx` to omit interval polling when `onRefreshNotifications` is supplied by `StudentDashboard.jsx`, while refreshing notifications immediately when the user toggles open the notification bell. |
+| **Priority 5: Adjacent Checks** | Rate-limiter proxy IP spoofing risk. | `security.middleware.js` evaluated raw `x-forwarded-for` header before checking Express's `req.ip`. | Updated IP resolution to prioritize `req.ip` (honoring Express `trust proxy` configuration) and socket remote address, avoiding blind trust of spoofable client headers. |
+| **Priority 5: Adjacent Checks** | README React version and test count mismatches. | `README.md` stated React 18 and 25 passing tests, conflicting with `package.json` (`react: ^19.2.8`) and actual test output. | Reconciled `README.md` badges and documentation to reflect React 19 and 44 passing tests. |
+
+### 3. Verification Results Matrix
+
+| Test Suite / Area | Scope & Commands | Result | Observations & Safeguards |
+|---|---|---|---|
+| **Automated Drive Integrity & Regression Suite** | `node --test tests/automated_drive_integrity_regression.test.js` | **10 passed, 0 failed** (1.3s) | Verified: 10 applicants with 7 R1 advances and 3 rejections; 7 R2 candidates with 5 advances and 2 rejections; rejection of cross-drive application IDs; rejection of out-of-pool candidates; rejection of empty imports; rejection of incomplete results with unresolved candidates; idempotent retry without duplicate history/notifications; final round `selected` status with pending offer without premature `isPlaced = true`. |
+| **Full Backend Test Suite** | `npm test` (`node --test tests/*.test.js`) in `major-backend` | **44 passed, 0 failed, 3 skipped** (32.5s) | All unit, configuration, program catalogue, formula sanitization, permissions, and drive lifecycle tests passed. 3 tests in `smtp_workflow_integration.test.js` were cleanly skipped because external MongoDB Atlas is unreachable from the current environment due to Atlas IP whitelist restrictions. |
+| **Frontend Lint Verification** | `npm run lint` in `frontend` | **0 errors, 108 pre-existing warnings** | Zero lint errors; existing warnings for pre-existing unused variables were preserved without disruption. |
+| **Frontend Production Build** | `npm run build` in `frontend` | **Passed in 1.64s** | 1,930 modules transformed; bundles built cleanly with zero compilation errors. |
+| **Backend Source Syntax Checks** | `node --check` across modified backend files | **Verified** | Zero syntax errors in `automatedDrive.service.js`, `automatedDrive.controller.js`, `security.middleware.js`, and `importBatch.model.js`. |
+
+
 

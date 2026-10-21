@@ -93,6 +93,7 @@ export const previewCompanyResults = asyncHandler(async (req, res) => {
         fileBuffer: req.file.buffer,
         originalFilename: req.file.originalname,
         mode,
+        adminUserId: req.user?._id,
     });
 
     return res.status(200).json(
@@ -113,6 +114,7 @@ export const commitCompanyResults = asyncHandler(async (req, res) => {
         confirmedAdvances = [],
         confirmedRejections = [],
         confirmedExceptionResolutions = [],
+        batchId,
     } = req.body;
 
     if (!Array.isArray(confirmedAdvances)) {
@@ -127,6 +129,7 @@ export const commitCompanyResults = asyncHandler(async (req, res) => {
         confirmedAdvances,
         confirmedRejections: Array.isArray(confirmedRejections) ? confirmedRejections : [],
         confirmedExceptionResolutions: Array.isArray(confirmedExceptionResolutions) ? confirmedExceptionResolutions : [],
+        batchId,
         adminUserId: req.user._id,
     });
 

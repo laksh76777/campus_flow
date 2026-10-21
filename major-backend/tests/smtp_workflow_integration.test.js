@@ -18,9 +18,18 @@ let server;
 let API_BASE;
 let adminToken;
 let studentToken;
+let dbAvailable = null;
 
 async function setup() {
-    await connectDB();
+    if (dbAvailable === false) return false;
+    try {
+        await connectDB();
+        dbAvailable = true;
+    } catch (err) {
+        console.warn("MongoDB Atlas unreachable for smtp_workflow_integration.test.js:", err.message);
+        dbAvailable = false;
+        return false;
+    }
     server = app.listen(0);
     const port = server.address().port;
     API_BASE = `http://localhost:${port}/api/v1`;
@@ -42,10 +51,17 @@ async function setup() {
     });
     const studentData = await studentRes.json();
     studentToken = studentData.data?.accessToken;
+    return true;
 }
 
-test("12. Unauthorized access to diagnostic and test-email endpoints is strictly blocked", async () => {
-    if (!server) await setup();
+test("12. Unauthorized access to diagnostic and test-email endpoints is strictly blocked", async (t) => {
+    if (!server) {
+        const ok = await setup();
+        if (!ok) {
+            t.skip("MongoDB Atlas cluster is unreachable in this environment (IP whitelist restriction)");
+            return;
+        }
+    }
 
     // Anonymous request (no token) -> 401
     const unauthStatus = await fetch(`${API_BASE}/notifications/smtp-status`);
@@ -84,8 +100,14 @@ test("12. Unauthorized access to diagnostic and test-email endpoints is strictly
     assert.ok(statusData.data?.verification !== undefined);
 });
 
-test("9. Announcement email failure while in-app delivery succeeds reports partial/failure truthfully", async () => {
-    if (!server) await setup();
+test("9. Announcement email failure while in-app delivery succeeds reports partial/failure truthfully", async (t) => {
+    if (!server) {
+        const ok = await setup();
+        if (!ok) {
+            t.skip("MongoDB Atlas cluster is unreachable in this environment (IP whitelist restriction)");
+            return;
+        }
+    }
 
     // Mock transporter that rejects all emails
     resetTransporterForTesting({
@@ -121,8 +143,14 @@ test("9. Announcement email failure while in-app delivery succeeds reports parti
     resetTransporterForTesting(null);
 });
 
-test("10 & 11. Reminder email failure, safe retry behavior, and NO duplicate in-app alerts on retries", async () => {
-    if (!server) await setup();
+test("10 & 11. Reminder email failure, safe retry behavior, and NO duplicate in-app alerts on retries", async (t) => {
+    if (!server) {
+        const ok = await setup();
+        if (!ok) {
+            t.skip("MongoDB Atlas cluster is unreachable in this environment (IP whitelist restriction)");
+            return;
+        }
+    }
 
     // Find student and company
     const studentUser = await User.findOne({ email: "student@campusflow.edu" });
@@ -241,6 +269,8 @@ after(async () => {
     if (server) {
         await new Promise((resolve) => server.close(resolve));
     }
-    await mongoose.connection.close();
+    if (dbAvailable) {
+        await mongoose.connection.close();
+    }
 });
 

@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import {
-  Building2,
   User,
   Mail,
   Lock,
@@ -339,47 +338,63 @@ export default function Signup() {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 px-4 py-10 sm:px-6 lg:px-8">
-      {/* Dynamic ambient background glow circles */}
-      <div className="pointer-events-none absolute -top-40 -right-40 h-96 w-96 rounded-full bg-blue-600/20 blur-3xl filter" />
-      <div className="pointer-events-none absolute -bottom-40 -left-40 h-96 w-96 rounded-full bg-indigo-600/20 blur-3xl filter" />
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-[#FFF5EA] via-[#FAF1E4] to-[#F5E6D3] px-4 py-8 font-sans selection:bg-orange-500 selection:text-white sm:px-6 lg:px-8">
+      {/* Soft warm light ambient glowing background shades */}
+      <div className="pointer-events-none absolute -top-24 -right-24 h-96 w-96 rounded-full bg-gradient-to-br from-amber-400/25 via-orange-300/20 to-transparent blur-3xl filter" />
+      <div className="pointer-events-none absolute -bottom-24 -left-24 h-96 w-96 rounded-full bg-gradient-to-tl from-orange-400/25 via-amber-300/20 to-transparent blur-3xl filter" />
+      <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[500px] w-[500px] rounded-full bg-amber-300/15 blur-[120px]" />
 
       <div className="relative z-10 w-full max-w-xl">
         {/* Brand Header */}
         <div className="mb-5 text-center">
           <Link
             to="/"
-            className="inline-flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-2 text-white shadow-xl backdrop-blur-md transition hover:border-blue-500/50"
+            className="group inline-flex items-center gap-3.5 rounded-2xl border border-slate-200/90 bg-white/95 px-4 py-2.5 text-slate-800 shadow-md shadow-slate-200/50 backdrop-blur-sm transition-all duration-200 hover:border-orange-300 hover:shadow-lg hover:shadow-orange-100"
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 font-bold text-white shadow-md shadow-blue-500/20">
-              <Building2 className="h-5 w-5" />
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white p-1 border border-orange-200 shadow-xs transition-transform duration-300 group-hover:scale-105">
+              <img
+                src="/images/jssateb/college-logo.png"
+                alt="JSSATEB Logo"
+                className="h-full w-full object-contain"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                }}
+              />
             </div>
             <div className="text-left">
-              <span className="block text-sm font-bold tracking-tight text-white">
-                CampusFlow Portal
-              </span>
-              <span className="block text-[11px] font-medium text-slate-400">
-                Official Student Registration
+              <div className="flex items-center gap-1.5">
+                <span className="text-base font-black tracking-tight text-slate-900">
+                  CampusFlow
+                </span>
+                <span className="rounded-md bg-orange-100 px-1.5 py-0.2 text-[10px] font-extrabold text-orange-900 border border-orange-200">
+                  JSSATEB
+                </span>
+              </div>
+              <span className="block text-[11px] font-medium text-slate-500">
+                Official Student Registration Portal
               </span>
             </div>
           </Link>
         </div>
 
-        {/* Card */}
-        <div className="rounded-3xl border border-slate-800 bg-slate-900/90 p-6 shadow-2xl backdrop-blur-xl sm:p-8">
+        {/* Main Card (Light Theme) */}
+        <div className="rounded-3xl border border-slate-200/90 bg-white/95 p-6 shadow-xl shadow-slate-200/60 backdrop-blur-sm sm:p-8">
           {/* Header Title & Subtitle */}
           <div className="text-center">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1 text-xs font-semibold text-blue-400">
-              <Sparkles className="h-3 w-3" /> Step {currentStep} of 4:{" "}
-              {currentStep === 1 && "Account Credentials"}
-              {currentStep === 2 && "Department & Degree"}
-              {currentStep === 3 && "Cohort & Placement Session"}
-              {currentStep === 4 && "Review & Declarations"}
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-800 shadow-xs">
+              <Sparkles className="h-3 w-3 text-orange-600" />
+              <span>
+                Step {currentStep} of 4:{" "}
+                {currentStep === 1 && "Account Credentials"}
+                {currentStep === 2 && "Department & Degree"}
+                {currentStep === 3 && "Cohort & Placement Session"}
+                {currentStep === 4 && "Review & Declarations"}
+              </span>
             </span>
-            <h2 className="mt-2 text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
+            <h2 className="mt-2.5 text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
               Student Registration
             </h2>
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 text-xs text-slate-500">
               Register with verified academic credentials to link your placement session
             </p>
           </div>
@@ -393,21 +408,23 @@ export default function Signup() {
                 { step: 3, label: "Session" },
                 { step: 4, label: "Consent" },
               ].map((s) => (
-                <div key={s.step} className="flex flex-col items-center gap-1">
+                <div key={s.step} className="flex flex-col items-center gap-1.5">
                   <div
                     className={`h-1.5 w-full rounded-full transition-all duration-300 ${
-                      currentStep >= s.step
-                        ? "bg-gradient-to-r from-blue-500 to-indigo-500"
-                        : "bg-slate-800"
+                      currentStep > s.step
+                        ? "bg-gradient-to-r from-orange-600 to-rose-600"
+                        : currentStep === s.step
+                        ? "bg-gradient-to-r from-orange-500 via-rose-500 to-indigo-600 shadow-sm shadow-orange-500/30"
+                        : "bg-slate-200"
                     }`}
                   />
                   <span
-                    className={`text-[10px] font-semibold tracking-wider uppercase ${
+                    className={`text-[10px] font-bold tracking-wider uppercase transition-colors ${
                       currentStep === s.step
-                        ? "text-blue-400"
+                        ? "text-orange-600"
                         : currentStep > s.step
-                        ? "text-slate-300"
-                        : "text-slate-600"
+                        ? "text-slate-700"
+                        : "text-slate-400"
                     }`}
                   >
                     {s.label}
@@ -419,8 +436,8 @@ export default function Signup() {
 
           {/* Error Alert */}
           {error && (
-            <div className="mb-5 flex items-start gap-2.5 rounded-2xl border border-rose-500/30 bg-rose-500/10 p-3.5 text-xs text-rose-300">
-              <AlertCircle className="h-4 w-4 shrink-0 text-rose-400 mt-0.5" />
+            <div className="mb-5 flex items-start gap-2.5 rounded-2xl border border-rose-200 bg-rose-50 p-3.5 text-xs text-rose-700 animate-in fade-in">
+              <AlertCircle className="h-4 w-4 shrink-0 text-rose-500 mt-0.5" />
               <div className="flex-1">{error}</div>
             </div>
           )}
@@ -432,8 +449,8 @@ export default function Signup() {
             {currentStep === 1 && (
               <div className="space-y-3.5 animate-in fade-in-50">
                 {/* Avatar Upload */}
-                <div className="flex items-center gap-3.5 rounded-2xl border border-slate-800/80 bg-slate-950/60 p-3">
-                  <div className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-700 bg-slate-800 text-slate-400">
+                <div className="flex items-center gap-3.5 rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
+                  <div className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-100 text-slate-400">
                     {avatarPreview ? (
                       <img
                         src={avatarPreview}
@@ -441,18 +458,18 @@ export default function Signup() {
                         className="h-full w-full object-cover"
                       />
                     ) : (
-                      <User className="h-5 w-5 text-slate-500" />
+                      <User className="h-5 w-5 text-slate-400" />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <label className="block text-xs font-medium text-slate-200">
+                    <label className="block text-xs font-semibold text-slate-700">
                       Profile Photo (Optional)
                     </label>
                     <p className="text-[10px] text-slate-500">
                       JPG, PNG up to 5MB
                     </p>
-                    <label className="mt-1 inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1 text-[10px] font-medium text-slate-300 transition hover:bg-slate-700">
-                      <Upload className="h-3 w-3" />
+                    <label className="mt-1.5 inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-slate-700 transition hover:bg-slate-50 hover:border-orange-300 shadow-2xs">
+                      <Upload className="h-3 w-3 text-orange-600" />
                       <span>Upload Avatar</span>
                       <input
                         type="file"
@@ -467,11 +484,11 @@ export default function Signup() {
 
                 {/* Full Name */}
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-300">
-                    Full Name <span className="text-rose-400">*</span>
+                  <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                    Full Name <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative">
-                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
                       <User className="h-4 w-4" />
                     </div>
                     <input
@@ -481,7 +498,7 @@ export default function Signup() {
                       placeholder="e.g. Akash Verma"
                       value={formData.fullName}
                       onChange={handleChange}
-                      className="w-full rounded-xl border border-slate-800 bg-slate-950/80 py-2.5 pr-4 pl-10 text-sm text-white placeholder-slate-600 transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50/60 py-2.5 pr-4 pl-10 text-sm text-slate-900 placeholder-slate-400 transition focus:bg-white focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 focus:outline-none"
                     />
                   </div>
                 </div>
@@ -489,41 +506,41 @@ export default function Signup() {
                 {/* Institutional Email & USN Grid */}
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-300">
-                      Institutional Email <span className="text-rose-400">*</span>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                      Institutional Email <span className="text-rose-500">*</span>
                     </label>
                     <div className="relative">
-                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
+                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
                         <Mail className="h-4 w-4" />
                       </div>
                       <input
                         type="email"
                         name="email"
                         required
-                        placeholder="student@college.edu"
+                        placeholder="student@campusflow.edu"
                         value={formData.email}
                         onChange={handleChange}
-                        className="w-full rounded-xl border border-slate-800 bg-slate-950/80 py-2.5 pr-3 pl-10 text-sm text-white placeholder-slate-600 transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50/60 py-2.5 pr-3 pl-10 text-sm text-slate-900 placeholder-slate-400 transition focus:bg-white focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 focus:outline-none"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-300">
-                      USN / Roll Number <span className="text-rose-400">*</span>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                      USN / Roll Number <span className="text-rose-500">*</span>
                     </label>
                     <div className="relative">
-                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
+                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
                         <FileCheck2 className="h-4 w-4" />
                       </div>
                       <input
                         type="text"
                         name="usn"
                         required
-                        placeholder="e.g. 1MS23CS001"
+                        placeholder="e.g. 1JS21CS001"
                         value={formData.usn}
                         onChange={handleChange}
-                        className="w-full rounded-xl border border-slate-800 bg-slate-950/80 py-2.5 pr-3 pl-10 text-sm text-white uppercase placeholder-slate-600 transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50/60 py-2.5 pr-3 pl-10 text-sm text-slate-900 uppercase placeholder-slate-400 transition focus:bg-white focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 focus:outline-none"
                       />
                     </div>
                   </div>
@@ -532,11 +549,11 @@ export default function Signup() {
                 {/* Personal Email & Phone Grid */}
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-300">
-                      Personal Email <span className="text-slate-500">(Optional)</span>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                      Personal Email <span className="text-slate-400">(Optional)</span>
                     </label>
                     <div className="relative">
-                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
+                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
                         <Mail className="h-4 w-4" />
                       </div>
                       <input
@@ -545,17 +562,17 @@ export default function Signup() {
                         placeholder="personal@gmail.com"
                         value={formData.personalEmail}
                         onChange={handleChange}
-                        className="w-full rounded-xl border border-slate-800 bg-slate-950/80 py-2.5 pr-3 pl-10 text-sm text-white placeholder-slate-600 transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50/60 py-2.5 pr-3 pl-10 text-sm text-slate-900 placeholder-slate-400 transition focus:bg-white focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 focus:outline-none"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-300">
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
                       Mobile Number
                     </label>
                     <div className="relative">
-                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
+                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
                         <Phone className="h-4 w-4" />
                       </div>
                       <input
@@ -564,7 +581,7 @@ export default function Signup() {
                         placeholder="+91 98765 43210"
                         value={formData.phone}
                         onChange={handleChange}
-                        className="w-full rounded-xl border border-slate-800 bg-slate-950/80 py-2.5 pr-3 pl-10 text-sm text-white placeholder-slate-600 transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50/60 py-2.5 pr-3 pl-10 text-sm text-slate-900 placeholder-slate-400 transition focus:bg-white focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 focus:outline-none"
                       />
                     </div>
                   </div>
@@ -573,11 +590,11 @@ export default function Signup() {
                 {/* Password & Confirm Password */}
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-300">
-                      Password <span className="text-rose-400">*</span>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                      Password <span className="text-rose-500">*</span>
                     </label>
                     <div className="relative">
-                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
+                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
                         <Lock className="h-4 w-4" />
                       </div>
                       <input
@@ -587,17 +604,17 @@ export default function Signup() {
                         placeholder="Min 8 characters"
                         value={formData.password}
                         onChange={handleChange}
-                        className="w-full rounded-xl border border-slate-800 bg-slate-950/80 py-2.5 pr-8 pl-10 text-sm text-white placeholder-slate-600 transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50/60 py-2.5 pr-8 pl-10 text-sm text-slate-900 placeholder-slate-400 transition focus:bg-white focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 focus:outline-none"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-300">
-                      Confirm Password <span className="text-rose-400">*</span>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                      Confirm Password <span className="text-rose-500">*</span>
                     </label>
                     <div className="relative">
-                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
+                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
                         <CheckCircle2 className="h-4 w-4" />
                       </div>
                       <input
@@ -607,12 +624,12 @@ export default function Signup() {
                         placeholder="Re-enter password"
                         value={formData.confirmPassword}
                         onChange={handleChange}
-                        className="w-full rounded-xl border border-slate-800 bg-slate-950/80 py-2.5 pr-8 pl-10 text-sm text-white placeholder-slate-600 transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50/60 py-2.5 pr-8 pl-10 text-sm text-slate-900 placeholder-slate-400 transition focus:bg-white focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 focus:outline-none"
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="absolute inset-y-0 right-0 flex items-center pr-2.5 text-slate-500 hover:text-slate-300"
+                        className="absolute inset-y-0 right-0 flex items-center pr-2.5 text-slate-400 hover:text-slate-600 transition"
                       >
                         {showPassword ? (
                           <EyeOff className="h-3.5 w-3.5" />
@@ -633,18 +650,18 @@ export default function Signup() {
               <div className="space-y-4 animate-in fade-in-50">
                 {/* Program level and approved program */}
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-300">
-                    Program Level <span className="text-rose-400">*</span>
+                  <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                    Program Level <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative">
-                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
                       <GraduationCap className="h-4 w-4" />
                     </div>
                     <select
                       name="programLevel"
                       value={formData.programLevel}
                       onChange={handleChange}
-                      className="w-full rounded-xl border border-slate-800 bg-slate-950/80 py-2.5 pr-4 pl-10 text-sm text-white transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50/60 py-2.5 pr-4 pl-10 text-sm text-slate-900 transition focus:bg-white focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 focus:outline-none"
                     >
                       <option value="">Select program level</option>
                       <option value="Undergraduate">Undergraduate (B.E.)</option>
@@ -654,13 +671,13 @@ export default function Signup() {
                 </div>
 
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-medium text-slate-300">
-                      Academic Program <span className="text-rose-400">*</span>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Academic Program <span className="text-rose-500">*</span>
                     </label>
                   </div>
                   <div className="relative">
-                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
                       <Layers className="h-4 w-4" />
                     </div>
                     <select
@@ -668,7 +685,7 @@ export default function Signup() {
                       value={formData.programCode}
                       onChange={handleChange}
                       disabled={!formData.programLevel || loadingConfig || departments.length === 0}
-                      className="w-full rounded-xl border border-slate-800 bg-slate-950/80 py-2.5 pr-4 pl-10 text-sm text-white transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50/60 py-2.5 pr-4 pl-10 text-sm text-slate-900 transition focus:bg-white focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 focus:outline-none disabled:opacity-50"
                     >
                       <option value="">{loadingConfig ? "Loading approved programs..." : "Select academic program"}</option>
                       {programsForLevel.map((program) => (
@@ -679,25 +696,25 @@ export default function Signup() {
                     </select>
                   </div>
                   {!loadingConfig && departments.length === 0 && (
-                    <p className="mt-1 text-xs text-rose-300">Approved programs could not be loaded. Refresh the page or contact the Placement Office.</p>
+                    <p className="mt-1 text-xs text-rose-600">Approved programs could not be loaded. Refresh the page or contact the Placement Office.</p>
                   )}
                 </div>
 
                 {/* Admission Year & Current Semester Grid */}
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-300">
-                      Admission Year <span className="text-rose-400">*</span>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                      Admission Year <span className="text-rose-500">*</span>
                     </label>
                     <div className="relative">
-                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
+                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
                         <Calendar className="h-4 w-4" />
                       </div>
                       <select
                         name="admissionYear"
                         value={formData.admissionYear || ""}
                         onChange={handleChange}
-                        className="w-full rounded-xl border border-slate-800 bg-slate-950/80 py-2.5 pr-4 pl-10 text-sm text-white transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50/60 py-2.5 pr-4 pl-10 text-sm text-slate-900 transition focus:bg-white focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 focus:outline-none"
                       >
                         <option value="">Select admission year</option>
                         {admissionYearOptions.map((item) => (
@@ -710,18 +727,18 @@ export default function Signup() {
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-300">
-                      Current Semester <span className="text-rose-400">*</span>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                      Current Semester <span className="text-rose-500">*</span>
                     </label>
                     <div className="relative">
-                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
+                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
                         <BookOpen className="h-4 w-4" />
                       </div>
                       <select
                         name="currentSemester"
                         value={formData.currentSemester}
                         onChange={handleChange}
-                        className="w-full rounded-xl border border-slate-800 bg-slate-950/80 py-2.5 pr-4 pl-10 text-sm text-white transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50/60 py-2.5 pr-4 pl-10 text-sm text-slate-900 transition focus:bg-white focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 focus:outline-none"
                       >
                         {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
                           <option key={sem} value={sem}>
@@ -734,16 +751,16 @@ export default function Signup() {
                 </div>
 
                 {/* Formula Information Box */}
-                <div className="rounded-2xl border border-blue-500/20 bg-blue-500/10 p-3.5 text-xs text-blue-200">
-                  <div className="flex items-center gap-2 font-semibold text-blue-300">
-                    <Sparkles className="h-4 w-4 text-blue-400" />
+                <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-xs text-amber-900">
+                  <div className="flex items-center gap-2 font-bold text-amber-800">
+                    <Sparkles className="h-4 w-4 text-amber-600" />
                     <span>Configurable Academic Progression</span>
                   </div>
-                  <p className="mt-1 text-[11px] leading-relaxed text-blue-100/80">
-                    Admission year <strong>{formData.admissionYear}</strong> in a{" "}
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-amber-800/90">
+                    Admission year <strong>{formData.admissionYear || "—"}</strong> in a{" "}
                     <strong>{formData.courseDurationYears || "—"}-year {formData.course || "program"}</strong>{" "}
                     program maps deterministically to the{" "}
-                    <strong>Class of {expectedGraduationYear}</strong> placement cohort.
+                    <strong className="text-amber-900">Class of {expectedGraduationYear || "—"}</strong> placement cohort.
                   </p>
                 </div>
               </div>
@@ -754,68 +771,68 @@ export default function Signup() {
             {/* ======================================================== */}
             {currentStep === 3 && (
               <div className="space-y-4 animate-in fade-in-50">
-                <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 shadow-xs">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-orange-700">
                     Academic Mapping Calculation
                   </h4>
                   <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
                     <div>
                       <span className="text-slate-500">Program:</span>
-                      <p className="font-semibold text-white">{selectedProgram?.name || "Not selected"}</p>
+                      <p className="font-semibold text-slate-900 truncate">{selectedProgram?.name || "Not selected"}</p>
                     </div>
                     <div>
                       <span className="text-slate-500">Department:</span>
-                      <p className="font-semibold text-white truncate">{formData.department}</p>
+                      <p className="font-semibold text-slate-900 truncate">{formData.department || "—"}</p>
                     </div>
                     <div>
                       <span className="text-slate-500">Admission Year:</span>
-                      <p className="font-semibold text-white">{formData.admissionYear}</p>
+                      <p className="font-semibold text-slate-900">{formData.admissionYear || "—"}</p>
                     </div>
                     <div>
                       <span className="text-slate-500">Expected Graduation:</span>
-                      <p className="font-semibold text-emerald-400">Class of {expectedGraduationYear}</p>
+                      <p className="font-semibold text-emerald-700">Class of {expectedGraduationYear}</p>
                     </div>
                   </div>
                 </div>
 
                 {/* Placement Session Status Display */}
                 {matchingSession ? (
-                  <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs text-emerald-200">
-                    <div className="flex items-center gap-2 font-bold text-emerald-300 text-sm">
-                      <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50/90 p-4 text-xs text-emerald-900">
+                    <div className="flex items-center gap-2 font-bold text-emerald-800 text-sm">
+                      <CheckCircle2 className="h-5 w-5 text-emerald-600" />
                       <span>Placement Session Verified & Linked</span>
                     </div>
                     <div className="mt-2.5 space-y-1 text-xs">
                       <p>
-                        <span className="text-emerald-400 font-semibold">Session Name:</span>{" "}
+                        <span className="text-emerald-700 font-semibold">Session Name:</span>{" "}
                         {matchingSession.name || `Class of ${expectedGraduationYear} Placement Session`}
                       </p>
                       <p>
-                        <span className="text-emerald-400 font-semibold">Academic Period:</span>{" "}
+                        <span className="text-emerald-700 font-semibold">Academic Period:</span>{" "}
                         {matchingSession.academicYear || `${expectedGraduationYear - 1}-${expectedGraduationYear}`}
                       </p>
                       <p>
-                        <span className="text-emerald-400 font-semibold">Cohort Status:</span>{" "}
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-400/20 text-emerald-200">
+                        <span className="text-emerald-700 font-semibold">Cohort Status:</span>{" "}
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                           {matchingSession.isActive ? "ACTIVE TPO COHORT" : "UPCOMING"}
                         </span>
                       </p>
                     </div>
-                    <p className="mt-3 text-[11px] text-emerald-100/70 border-t border-emerald-500/20 pt-2">
+                    <p className="mt-3 text-[11px] text-emerald-800/80 border-t border-emerald-200 pt-2">
                       Your applications, placement drive eligibility, and interview schedules will be strictly scoped to this verified placement session.
                     </p>
                   </div>
                 ) : (
-                  <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-200">
-                    <div className="flex items-center gap-2 font-bold text-amber-300 text-sm">
-                      <AlertCircle className="h-5 w-5 text-amber-400" />
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50/90 p-4 text-xs text-amber-900">
+                    <div className="flex items-center gap-2 font-bold text-amber-800 text-sm">
+                      <AlertCircle className="h-5 w-5 text-amber-600" />
                       <span>No Active Placement Session Found</span>
                     </div>
-                    <p className="mt-2 text-xs leading-relaxed text-amber-100">
+                    <p className="mt-2 text-xs leading-relaxed text-amber-800">
                       No placement session is configured for the <strong>Class of {expectedGraduationYear}</strong>.
                       College guidelines require the Training & Placement Office (TPO) to initialize and activate this cohort session before student onboarding.
                     </p>
-                    <p className="mt-2 text-[11px] text-amber-200/80 font-medium">
+                    <p className="mt-2 text-[11px] text-amber-700 font-medium">
                       Please contact your college Placement Officer (TPO) or adjust your admission year if entered mistakenly.
                     </p>
                   </div>
@@ -831,27 +848,27 @@ export default function Signup() {
                 {/* Optional DOB & Gender */}
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-300">
-                      Date of Birth <span className="text-slate-500">(Optional)</span>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                      Date of Birth <span className="text-slate-400">(Optional)</span>
                     </label>
                     <input
                       type="date"
                       name="dob"
                       value={formData.dob}
                       onChange={handleChange}
-                      className="w-full rounded-xl border border-slate-800 bg-slate-950/80 py-2.5 px-3 text-sm text-white transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50/60 py-2.5 px-3 text-sm text-slate-900 transition focus:bg-white focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 focus:outline-none"
                     />
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-300">
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
                       Gender
                     </label>
                     <select
                       name="gender"
                       value={formData.gender}
                       onChange={handleChange}
-                      className="w-full rounded-xl border border-slate-800 bg-slate-950/80 py-2.5 px-3 text-sm text-white transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50/60 py-2.5 px-3 text-sm text-slate-900 transition focus:bg-white focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 focus:outline-none"
                     >
                       <option value="Male">Male</option>
                       <option value="Female">Female</option>
@@ -862,28 +879,28 @@ export default function Signup() {
                 </div>
 
                 {/* Profile Completion Note */}
-                <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-3.5 text-xs text-slate-300">
-                  <div className="flex items-center gap-2 font-semibold text-blue-400">
-                    <ShieldCheck className="h-4 w-4" />
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-xs text-slate-600">
+                  <div className="flex items-center gap-2 font-bold text-slate-800">
+                    <ShieldCheck className="h-4 w-4 text-orange-600" />
                     <span>Gradual Profile Completion Workflow</span>
                   </div>
-                  <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500">
                     Only essential account & cohort details are required now.
                     Detailed semester results, 10th/12th percentages, backlog ledgers, family info, and master resume uploads can be completed anytime in your candidate drawer after registration.
                   </p>
                 </div>
 
                 {/* Consent Checkbox */}
-                <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-3.5">
-                  <label className="flex items-start gap-2.5 cursor-pointer">
+                <div className="rounded-2xl border border-orange-200 bg-orange-50/50 p-4 transition hover:bg-orange-50/80">
+                  <label className="flex items-start gap-3 cursor-pointer">
                     <input
                       type="checkbox"
                       name="consentAgreed"
                       checked={formData.consentAgreed}
                       onChange={handleChange}
-                      className="mt-0.5 h-4 w-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-500/30"
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500/30 accent-orange-600"
                     />
-                    <span className="text-xs text-slate-300 leading-relaxed">
+                    <span className="text-xs text-slate-700 leading-relaxed font-medium">
                       I declare that all academic credentials, department details, and contact numbers provided are accurate and understand that falsification will lead to debarment from campus recruitment.
                     </span>
                   </label>
@@ -898,7 +915,7 @@ export default function Signup() {
                   type="button"
                   onClick={handlePrevStep}
                   disabled={loading}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-950/80 px-4 py-2.5 text-xs font-bold text-slate-300 transition hover:bg-slate-800 hover:text-white disabled:opacity-60"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 transition hover:bg-slate-50 hover:text-slate-900 disabled:opacity-60 shadow-2xs"
                 >
                   <ArrowLeft className="h-3.5 w-3.5" />
                   <span>Back</span>
@@ -912,7 +929,7 @@ export default function Signup() {
                   type="button"
                   onClick={handleNextStep}
                   disabled={currentStep === 3 && !matchingSession}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-blue-500/20 transition hover:from-blue-500 hover:to-indigo-500 active:scale-95 disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-orange-600 via-rose-600 to-indigo-700 px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-orange-600/25 transition hover:from-orange-500 hover:to-indigo-600 active:scale-95 disabled:opacity-50"
                 >
                   <span>Continue</span>
                   <ArrowRight className="h-3.5 w-3.5" />
@@ -921,7 +938,7 @@ export default function Signup() {
                 <button
                   type="submit"
                   disabled={loading || !formData.consentAgreed}
-                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 px-6 py-2.5 text-xs font-bold text-white shadow-lg shadow-emerald-600/20 transition hover:from-emerald-500 hover:to-teal-500 active:scale-95 disabled:opacity-50"
+                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-700 px-6 py-2.5 text-xs font-bold text-white shadow-lg shadow-emerald-600/25 transition hover:from-emerald-500 hover:to-teal-500 active:scale-95 disabled:opacity-50"
                 >
                   {loading ? (
                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
@@ -937,11 +954,11 @@ export default function Signup() {
           </form>
 
           {/* Already have account */}
-          <div className="mt-6 text-center text-xs text-slate-400">
+          <div className="mt-6 text-center text-xs text-slate-500">
             Already registered?{" "}
             <Link
               to="/login"
-              className="font-semibold text-blue-400 hover:text-blue-300 hover:underline"
+              className="font-bold text-orange-600 hover:text-orange-700 hover:underline transition"
             >
               Sign In here
             </Link>
@@ -952,9 +969,9 @@ export default function Signup() {
         <div className="mt-4 text-center">
           <Link
             to="/"
-            className="text-xs text-slate-500 transition hover:text-slate-300"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 transition hover:text-slate-800"
           >
-            ← Return to Homepage
+            ← Return to College Homepage
           </Link>
         </div>
       </div>

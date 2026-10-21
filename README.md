@@ -2,11 +2,11 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Version-2.0.0-blue.svg?style=for-the-badge" alt="Version 2.0.0" />
-  <img src="https://img.shields.io/badge/Frontend-React_18_%7C_Vite-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React 18" />
+  <img src="https://img.shields.io/badge/Frontend-React_19_%7C_Vite-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React 19" />
   <img src="https://img.shields.io/badge/Backend-Node.js_%7C_Express-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node.js" />
   <img src="https://img.shields.io/badge/Database-MongoDB_%7C_Mongoose-47A248?style=for-the-badge&logo=mongodb&logoColor=white" alt="MongoDB" />
   <img src="https://img.shields.io/badge/Styling-Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind CSS" />
-  <img src="https://img.shields.io/badge/Tests-25%20Passing-brightgreen?style=for-the-badge" alt="Tests" />
+  <img src="https://img.shields.io/badge/Tests-44%20Passing-brightgreen?style=for-the-badge" alt="Tests" />
 </p>
 
 CampusFlow V2 is an enterprise-grade placement management platform engineered to automate collegiate recruitment operations. Built with a high-performance **React + Vite** client and a scalable **Node.js + Express + MongoDB** backend, it manages academic cohorts, multi-criteria drive eligibility, immutable application snapshots, Excel migration preview/commit workflows, background deadline notifications, and live placement analytics.
@@ -100,7 +100,7 @@ graph LR
 
 ```text
 Frontend Architecture
-├── Core:             React 18, Vite 8, JavaScript (ESM)
+├── Core:             React 19, Vite 8, JavaScript (ESM)
 ├── State & Routing:  React Context API, React Router DOM (v7)
 ├── Styling & UI:     Tailwind CSS, Lucide React Icons
 └── Networking:       Axios (with JWT auto-refresh interceptors), React Hot Toast
@@ -307,7 +307,7 @@ Visit [`http://localhost:5173`](http://localhost:5173) in your browser.
 CampusFlow V2 includes comprehensive automated tests covering configuration, authentication boundaries, program catalogs, Excel formula sanitization, and background reminder persistence:
 
 ```powershell
-# Run backend test suite (25 native node:test unit & integration tests)
+# Run backend test suite (44 passing native node:test unit & regression tests)
 cd major-backend
 npm test
 

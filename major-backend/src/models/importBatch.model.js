@@ -10,9 +10,22 @@ const importBatchSchema = new mongoose.Schema(
         },
         importType: {
             type: String,
-            enum: ["student_records", "academic_history", "historical_placements"],
+            enum: [
+                "student_records",
+                "academic_history",
+                "historical_placements",
+                "automated_drive_results"
+            ],
             required: true,
             index: true
+        },
+        placementDrive: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "PlacementDrive",
+            index: true
+        },
+        roundNumber: {
+            type: Number
         },
         placementSession: {
             type: mongoose.Schema.Types.ObjectId,

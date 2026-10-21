@@ -303,6 +303,7 @@ export default function AutomatedPlacementDrives({
         confirmedAdvances,
         confirmedRejections,
         confirmedExceptionResolutions,
+        batchId: previewData.batchId,
       };
 
       const res = await commitCompanyResults(activeDriveWorkspace._id, payload);
