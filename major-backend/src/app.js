@@ -12,6 +12,10 @@ const configuredOrigins = (process.env.CORS_ORIGIN || "")
     .map((o) => o.trim().replace(/\/$/, ""))
     .filter(Boolean);
 
+const deployedFrontendOrigins = [
+    "https://campus-flow-smoky-ten.vercel.app"
+];
+
 const defaultAllowedOrigins = [
     "http://localhost:5173",
     "http://localhost:3000",
@@ -27,7 +31,10 @@ const isOriginAllowed = (origin) => {
 
     const normalizedOrigin = origin.replace(/\/$/, "");
 
-    if (configuredOrigins.includes(normalizedOrigin)) {
+    if (
+        configuredOrigins.includes(normalizedOrigin) ||
+        deployedFrontendOrigins.includes(normalizedOrigin)
+    ) {
         return true;
     }
 

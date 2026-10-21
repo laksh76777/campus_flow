@@ -39,6 +39,38 @@ test("HTTP readiness, root health, and JSON 404 behavior", async () => {
     assert.equal(missingBody.success, false);
     assert.match(missingBody.message, /Route not found/);
     assert.equal("stack" in missingBody, false);
+
+    const frontendOrigin = "https://campus-flow-smoky-ten.vercel.app";
+    const preflightResponse = await fetch(`${baseUrl}/api/v1/admin/login`, {
+        method: "OPTIONS",
+        headers: {
+            Origin: frontendOrigin,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type"
+        }
+    });
+    assert.equal(preflightResponse.status, 200);
+    assert.equal(
+        preflightResponse.headers.get("access-control-allow-origin"),
+        frontendOrigin
+    );
+    assert.equal(
+        preflightResponse.headers.get("access-control-allow-credentials"),
+        "true"
+    );
+
+    const untrustedPreflight = await fetch(`${baseUrl}/api/v1/admin/login`, {
+        method: "OPTIONS",
+        headers: {
+            Origin: "https://untrusted.example",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type"
+        }
+    });
+    assert.equal(
+        untrustedPreflight.headers.get("access-control-allow-origin"),
+        null
+    );
 });
 
 after(async () => {

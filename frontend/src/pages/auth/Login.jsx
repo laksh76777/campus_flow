@@ -110,7 +110,9 @@ export default function Login() {
     } catch (err) {
       const msg =
         err.response?.data?.message ||
-        err.message ||
+        (!err.response
+          ? "Could not connect to the CampusFlow server. Please check your connection and try again."
+          : err.message) ||
         "Invalid credentials. Please verify your email and password.";
       console.warn("Login attempt failed.", err.response?.status ?? "network error");
       setError(msg);
