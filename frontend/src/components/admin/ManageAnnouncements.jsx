@@ -837,7 +837,10 @@ export default function ManageAnnouncements({ drives = [], students = [] }) {
                 <button
                   type="button"
                   disabled={!title.trim() || !message.trim() || submitting}
-                  onClick={() => setIsReviewOpen(true)}
+                  onClick={() => {
+                    loadSmtpStatus();
+                    setIsReviewOpen(true);
+                  }}
                   className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Send className="h-4 w-4" />
@@ -1301,13 +1304,31 @@ export default function ManageAnnouncements({ drives = [], students = [] }) {
                 {message}
               </div>
 
-              {channels.includes("email") && !isSmtpVerified && (
-                <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-[11px] space-y-1">
-                  <strong>Warning:</strong>{" "}
-                  {isSmtpConfigured
-                    ? "SMTP connection verification is failing (check SMTP Diagnostic tab). Real email delivery will fail until credentials are corrected."
-                    : "SMTP is not configured in .env. In-app alerts will be created, but outbound emails will be skipped."}
-                </div>
+              {channels.includes("email") && (
+                loadingSmtp ? (
+                  <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-slate-600 text-[11px] flex items-center gap-2">
+                    <RefreshCw className="h-3 w-3 animate-spin text-slate-500" />
+                    <span>Verifying SMTP mail server connection...</span>
+                  </div>
+                ) : !isSmtpVerified ? (
+                  <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-[11px] space-y-1">
+                    <div className="flex items-center justify-between">
+                      <strong>Warning:</strong>
+                      <button
+                        type="button"
+                        onClick={() => loadSmtpStatus()}
+                        className="text-[10px] font-bold text-amber-800 underline hover:text-amber-950 cursor-pointer"
+                      >
+                        Re-check Connection
+                      </button>
+                    </div>
+                    <p>
+                      {isSmtpConfigured
+                        ? "SMTP connection verification is failing (check SMTP Diagnostic tab). Real email delivery will fail until credentials are corrected."
+                        : "SMTP is not configured in .env. In-app alerts will be created, but outbound emails will be skipped."}
+                    </p>
+                  </div>
+                ) : null
               )}
             </div>
 
