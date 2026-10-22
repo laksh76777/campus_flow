@@ -57,6 +57,9 @@ export const requestPasswordReset = asyncHandler(async (req, res) => {
 
     // Account enumeration protection: Return generic success if account does not exist or is inactive
     if (!user || user.isActive === false) {
+        if (process.env.NODE_ENV !== "production") {
+            console.warn(`[AUTH DEV] Password reset requested for unregistered or inactive email: ${normalizedEmail}`);
+        }
         return res.status(200).json(
             new ApiResponse(
                 200,
@@ -82,14 +85,15 @@ export const requestPasswordReset = asyncHandler(async (req, res) => {
         );
     }
 
-    // Check abuse limit: Maximum 3 OTP requests per 15 minutes per account
+    // Check abuse limit: Maximum 5 OTP requests per 15 minutes per account in dev, 3 in production
+    const maxRequests = process.env.NODE_ENV === "production" ? 3 : 6;
     const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
     const recentRequestsCount = await PasswordResetChallenge.countDocuments({
         user: user._id,
         createdAt: { $gte: fifteenMinutesAgo }
     });
 
-    if (recentRequestsCount >= 3) {
+    if (recentRequestsCount >= maxRequests) {
         throw new ApiError(
             429,
             "Too many password reset requests for this account. Please wait 15 minutes before trying again."
@@ -110,7 +114,7 @@ export const requestPasswordReset = asyncHandler(async (req, res) => {
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes TTL
     const resendCooldownUntil = new Date(Date.now() + 60 * 1000); // 60 seconds cooldown
 
-    await PasswordResetChallenge.create({
+    const newChallenge = await PasswordResetChallenge.create({
         user: user._id,
         email: user.email,
         otpHash,
@@ -129,7 +133,10 @@ export const requestPasswordReset = asyncHandler(async (req, res) => {
     });
 
     if (emailResult.accepted === false) {
-        console.warn("[PasswordReset] OTP delivery issue:", emailResult.category || emailResult.error);
+        console.error("[PasswordReset] OTP delivery issue:", emailResult.category || emailResult.error);
+        // Clean up challenge on failure so user isn't locked out or penalized
+        await PasswordResetChallenge.deleteOne({ _id: newChallenge._id });
+
         if (emailResult.category === "NOT_CONFIGURED") {
             throw new ApiError(
                 503,
@@ -142,6 +149,16 @@ export const requestPasswordReset = asyncHandler(async (req, res) => {
                 "Unable to deliver verification code due to a mail server connection issue. Please try again later."
             );
         }
+        throw new ApiError(
+            503,
+            emailResult.error || "Unable to deliver verification code email. Please try again later."
+        );
+    }
+
+    if (process.env.NODE_ENV !== "production") {
+        console.log(`\n======================================================`);
+        console.log(`[AUTH DEV] Password Reset OTP for ${user.email}: ${otp}`);
+        console.log(`======================================================\n`);
     }
 
     return res.status(200).json(

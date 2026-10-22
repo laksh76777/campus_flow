@@ -781,7 +781,13 @@ export const sendPasswordResetOtpEmail = async ({
             to: recipient,
             subject,
             html: htmlContent,
-            text: textContent
+            text: textContent,
+            priority: "high",
+            headers: {
+                "X-Priority": "1 (Highest)",
+                "X-MSMail-Priority": "High",
+                "Importance": "High"
+            }
         });
 
         return { accepted: true, messageId: info.messageId };
