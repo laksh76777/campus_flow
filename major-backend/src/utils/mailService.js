@@ -48,12 +48,21 @@ export const getSmtpConfigStatus = () => {
     const emailPass = (process.env.EMAIL_PASS || process.env.SMTP_PASS || "").trim();
     const smtpHost = (process.env.SMTP_HOST || "smtp.gmail.com").trim();
 
-    // Auto-detect secure port: Cloud hosts like Render frequently block/timeout port 587.
-    // If on Render / production cloud or if SMTP_SECURE is true, use port 465 (SSL/TLS).
+    // Auto-detect secure port: Cloud hosts like Render block or throttle port 587 (STARTTLS).
+    // When running on Render / production cloud, automatically upgrade Gmail to port 465 (SSL/TLS).
     const isCloudEnv = Boolean(process.env.RENDER || process.env.VERCEL || process.env.NODE_ENV === "production");
     const rawPort = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : null;
-    const smtpPort = rawPort || (process.env.SMTP_SECURE === "true" || (isCloudEnv && smtpHost.includes("gmail")) ? 465 : 587);
-    const isSecure = smtpPort === 465 || process.env.SMTP_SECURE === "true";
+    let smtpPort = rawPort;
+    let isSecure = process.env.SMTP_SECURE === "true";
+
+    if (smtpHost.includes("gmail.com") && (isCloudEnv || rawPort === 465 || !rawPort)) {
+        smtpPort = 465;
+        isSecure = true;
+    } else if (!smtpPort) {
+        smtpPort = isSecure ? 465 : 587;
+    } else if (smtpPort === 465) {
+        isSecure = true;
+    }
 
     const hasUser = Boolean(emailUser);
     const hasPass = Boolean(emailPass);
