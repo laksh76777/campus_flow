@@ -176,8 +176,8 @@ app.use((err, req, res, next) => {
     return res.status(statusCode).json({
         statusCode,
         success: false,
-        message: isServerError ? "Internal Server Error" : err.message,
-        errors: isServerError || !Array.isArray(err.errors) ? [] : err.errors
+        message: err.message || (isServerError ? "Internal Server Error" : "An error occurred"),
+        errors: !Array.isArray(err.errors) ? [] : err.errors
     });
 });
 
