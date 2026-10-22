@@ -10,12 +10,26 @@ import {
     updateUserAvatar,
     deleteUserAvatar
 } from "../controllers/user.controllers.js";
+import {
+    requestPasswordReset,
+    verifyResetOtp,
+    resetPasswordWithToken
+} from "../controllers/authReset.controller.js";
 import { upload } from "../middlewares/multer.middleware.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
-import { authRateLimiter } from "../middlewares/security.middleware.js";
+import {
+    authRateLimiter,
+    passwordResetRequestLimiter,
+    passwordResetActionLimiter
+} from "../middlewares/security.middleware.js";
 import { validateRegister, validateLogin } from "../middlewares/validation.middleware.js";
 
 const router = Router();
+
+// Password Reset Flow (Public, Rate-limited)
+router.route("/forgot-password").post(passwordResetRequestLimiter, requestPasswordReset);
+router.route("/verify-reset-otp").post(passwordResetActionLimiter, verifyResetOtp);
+router.route("/reset-password").post(passwordResetActionLimiter, resetPasswordWithToken);
 
 router.route("/register").post(
     authRateLimiter,

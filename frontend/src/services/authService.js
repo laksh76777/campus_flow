@@ -88,4 +88,32 @@ export const logoutAuth = async (role = "student") => {
     }
   );
   return response.data;
+};
+
+// 1. Request Password Reset OTP
+export const requestPasswordResetOtp = async (email, role = "student") => {
+  ensureApiConfigured();
+  const endpoint = role === "admin" ? `${API_BASE_URL}/admin/forgot-password` : `${API_BASE_URL}/users/forgot-password`;
+  const response = await axios.post(endpoint, { email }, { withCredentials: true });
+  return response.data;
+};
+
+// 2. Verify Password Reset OTP
+export const verifyPasswordResetOtp = async ({ email, otp }, role = "student") => {
+  ensureApiConfigured();
+  const endpoint = role === "admin" ? `${API_BASE_URL}/admin/verify-reset-otp` : `${API_BASE_URL}/users/verify-reset-otp`;
+  const response = await axios.post(endpoint, { email, otp }, { withCredentials: true });
+  return response.data;
+};
+
+// 3. Complete Password Reset
+export const completePasswordReset = async ({ resetToken, newPassword, confirmPassword }, role = "student") => {
+  ensureApiConfigured();
+  const endpoint = role === "admin" ? `${API_BASE_URL}/admin/reset-password` : `${API_BASE_URL}/users/reset-password`;
+  const response = await axios.post(
+    endpoint,
+    { resetToken, newPassword, confirmPassword },
+    { withCredentials: true }
+  );
+  return response.data;
 };

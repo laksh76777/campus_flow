@@ -82,6 +82,27 @@ export const applyRateLimiter = new InMemoryRateLimiter({
     message: "Too many application requests submitted. Please slow down."
 }).middleware();
 
+// Password reset request limiter (max 5 OTP requests per 15 minutes per IP)
+export const passwordResetRequestLimiter = new InMemoryRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 8,
+    message: "Too many password recovery requests. Please try again after 15 minutes."
+}).middleware();
+
+// Password reset action limiter (max 15 verification / reset calls per 15 minutes per IP)
+export const passwordResetActionLimiter = new InMemoryRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    message: "Too many verification or reset submissions. Please slow down."
+}).middleware();
+
+// Certificate validation limiter (max 20 validation requests per 15 minutes per IP)
+export const certificateValidationLimiter = new InMemoryRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    message: "Too many certificate validation attempts. Please try again after 15 minutes."
+}).middleware();
+
 /**
  * Security headers middleware setting OWASP-recommended HTTP headers
  */

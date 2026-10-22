@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
-import { RefreshCw, Calendar } from "lucide-react";
+import { RefreshCw, Calendar, Trash2, Archive } from "lucide-react";
 
 import AdminSidebar from "../../components/admin/AdminSidebar";
 import AdminNavbar from "../../components/admin/AdminNavbar";
@@ -69,6 +69,8 @@ export default function AdminDashboard({ initialTab = "overview" }) {
   // Modal triggers
   const [isCreateDriveOpen, setIsCreateDriveOpen] = useState(false);
   const [isCreateCompanyOpen, setIsCreateCompanyOpen] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState(null); // { driveId, compName, jobTitle }
+  const [deletingDrive, setDeletingDrive] = useState(false);
 
   // Role Protection
   useEffect(() => {
@@ -290,23 +292,25 @@ export default function AdminDashboard({ initialTab = "overview" }) {
     }
   };
 
-  const handleDeletePlacementDrive = async (driveId, compName = "Corporate Recruiter", jobTitle = "Drive") => {
-    const confirm = window.confirm(
-      `Are you sure you want to permanently DELETE the placement drive "${jobTitle}" (${compName})?\n\nAll candidate applications, round progressions, and associated records for this drive will be deleted.`
-    );
-    if (!confirm) return;
+  const handleDeletePlacementDrive = (driveId, compName = "Corporate Recruiter", jobTitle = "Placement Drive") => {
+    setDeleteConfirmation({ driveId, compName, jobTitle });
+  };
 
+  const confirmDeletePlacementDrive = async () => {
+    if (!deleteConfirmation) return;
+    const { driveId, jobTitle } = deleteConfirmation;
     try {
+      setDeletingDrive(true);
       await deletePlacementDrive(driveId);
-      toast.success(`Placement drive "${jobTitle}" deleted successfully`);
+      toast.success(`Placement drive "${jobTitle}" deleted & archived successfully`);
       setDrives((prev) => prev.filter((d) => d._id !== driveId));
-      setApplications((prev) =>
-        prev.filter((a) => (a.placementDrive?._id || a.placementDrive) !== driveId)
-      );
-      loadDashboardData(true);
+      await loadDashboardData(true);
+      setDeleteConfirmation(null);
     } catch (err) {
       const msg = err.response?.data?.message || err.message || "Failed to delete placement drive";
       toast.error(msg);
+    } finally {
+      setDeletingDrive(false);
     }
   };
 
@@ -534,10 +538,64 @@ export default function AdminDashboard({ initialTab = "overview" }) {
           {activeTab === "announcements" && (
             <ManageAnnouncements
               drives={scopedDrives}
+              students={students}
             />
           )}
         </main>
       </div>
+
+      {/* Delete Placement Drive Confirmation Modal */}
+      {deleteConfirmation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-100 space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200">
+                <Trash2 className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Delete Placement Drive?</h3>
+                <p className="text-xs text-slate-500 truncate max-w-[260px]">
+                  {deleteConfirmation.jobTitle} • {deleteConfirmation.compName}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Are you sure you want to remove this recruitment drive? Active recruitment and application submissions for this drive will stop immediately.
+            </p>
+
+            <div className="rounded-xl bg-amber-50 p-3 border border-amber-200 text-[11px] text-amber-800 space-y-1">
+              <p className="font-semibold flex items-center gap-1.5">
+                <Archive className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                <span>Candidate History Preserved as Archived</span>
+              </p>
+              <p className="text-amber-700">
+                All candidates who applied will be safely preserved under <strong>{deleteConfirmation.compName}</strong> in <em>Applicant Review & Shortlisting</em>.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmation(null)}
+                disabled={deletingDrive}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeletePlacementDrive}
+                disabled={deletingDrive}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-xl transition shadow-md shadow-rose-500/20 active:scale-95 cursor-pointer disabled:opacity-50"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>{deletingDrive ? "Deleting..." : "Delete & Archive Drive"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

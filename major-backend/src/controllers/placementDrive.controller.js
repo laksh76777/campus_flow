@@ -295,7 +295,9 @@ const createPlacementDrive = asyncHandler(async (req, res) => {
 });
 
 const getAllPlacementDrives = asyncHandler(async (req, res) => {
-    const filter = req.user?.role === "admin" ? {} : { isActive: true };
+    const filter = req.user?.role === "admin"
+        ? (req.query.includeDeleted === "true" ? {} : { isDeleted: { $ne: true } })
+        : { isActive: true, isDeleted: { $ne: true } };
     if (req.query.session) {
         filter.placementSession = req.query.session;
     }
@@ -658,7 +660,7 @@ const reactivatePlacementDrive = asyncHandler(async (req, res) => {
     );
 });
 
-// @desc    Permanently delete a placement drive and clean associated applications
+// @desc    Delete a placement drive and archive its applications under company history
 // @route   DELETE /api/v1/placementdrive/:driveId
 // @access  Admin
 const deletePlacementDrive = asyncHandler(async (req, res) => {
@@ -672,6 +674,9 @@ const deletePlacementDrive = asyncHandler(async (req, res) => {
         throw new ApiError(404, "Placement drive not found");
     }
 
+    const company = await Company.findById(placementDrive.company);
+    const compName = company?.companyName || "Corporate Recruiter";
+
     // Find all applications associated with this drive
     const applications = await Application.find({ placementDrive: driveId });
     const appIds = applications.map((a) => a._id);
@@ -679,9 +684,6 @@ const deletePlacementDrive = asyncHandler(async (req, res) => {
     // If any student was marked as placed through this drive's accepted offer, revert their profile
     const studentIds = applications.map((a) => a.student).filter(Boolean);
     if (studentIds.length > 0) {
-        const company = await Company.findById(placementDrive.company);
-        const compName = company?.companyName || "";
-
         await StudentProfile.updateMany(
             {
                 _id: { $in: studentIds },
@@ -702,19 +704,41 @@ const deletePlacementDrive = asyncHandler(async (req, res) => {
         );
     }
 
-    // Delete all associated applications
+    // Preserve candidate applications as archived under this company and drive
     if (appIds.length > 0) {
-        await Application.deleteMany({ _id: { $in: appIds } });
+        await Application.updateMany(
+            { _id: { $in: appIds } },
+            {
+                $set: {
+                    isArchived: true,
+                    archivedAt: new Date(),
+                    archivedDriveSnapshot: {
+                        companyName: compName,
+                        jobTitle: placementDrive.jobTitle,
+                        package: placementDrive.package,
+                        driveId: placementDrive._id
+                    }
+                }
+            }
+        );
     }
 
-    // Delete the placement drive
-    await PlacementDrive.findByIdAndDelete(driveId);
+    // Mark placement drive as deleted / inactive
+    placementDrive.isDeleted = true;
+    placementDrive.isActive = false;
+    placementDrive.deletedAt = new Date();
+    await placementDrive.save();
 
     return res.status(200).json(
         new ApiResponse(
             200,
-            { driveId, deletedApplicationsCount: appIds.length },
-            "Placement drive and all related applications deleted successfully"
+            {
+                driveId,
+                companyName: compName,
+                jobTitle: placementDrive.jobTitle,
+                archivedApplicationsCount: appIds.length
+            },
+            "Placement drive deleted and applications archived successfully"
         )
     );
 });

@@ -159,3 +159,37 @@ export const requestProfileModification = async (modificationData) => {
   const response = await api.post("/studentprofile/request-modification", modificationData);
   return response.data;
 };
+
+// Validate certificate URL or document with backend verification pipeline & AI
+export const validateCertificate = async ({ certificateUrl, file }) => {
+  if (file) {
+    const formData = new FormData();
+    formData.append("document", file);
+    if (certificateUrl) formData.append("certificateUrl", certificateUrl);
+    const response = await api.post("/studentprofile/certificates/validate", formData, {
+      headers: { "Content-Type": "multipart/form-data" }
+    });
+    return response.data;
+  }
+
+  const response = await api.post("/studentprofile/certificates/validate", { certificateUrl });
+  return response.data;
+};
+
+// Add validated certificate to student profile
+export const addCertificate = async (certificateData) => {
+  const response = await api.post("/studentprofile/certificates", certificateData);
+  return response.data;
+};
+
+// Delete certificate from student profile
+export const deleteCertificate = async (certId) => {
+  const response = await api.delete(`/studentprofile/certificates/${certId}`);
+  return response.data;
+};
+
+// Admin review / approve / reject student certificate
+export const reviewCertificate = async (studentId, certId, reviewData) => {
+  const response = await api.patch(`/studentprofile/certificates/${studentId}/${certId}/review`, reviewData);
+  return response.data;
+};

@@ -20,6 +20,12 @@ import {
   ExternalLink,
   Wrench,
   Check,
+  UserCheck,
+  Search,
+  X,
+  Trash2,
+  History,
+  RotateCcw,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
@@ -27,11 +33,15 @@ import {
   broadcastAnnouncement,
   getScheduledReminders,
   getSmtpStatus,
+  getBroadcastHistory,
+  deleteBroadcastAnnouncement,
+  freshstartNotifications,
 } from "../../services/notificationService";
 import { getPublicDepartments } from "../../services/authService";
 import { getAllPlacementSessions } from "../../services/sessionService";
+import { getAllStudentProfiles } from "../../services/adminService";
 
-export default function ManageAnnouncements({ drives = [] }) {
+export default function ManageAnnouncements({ drives = [], students = [] }) {
   const [activeSubTab, setActiveSubTab] = useState("compose"); // "compose" | "reminders" | "smtp"
 
   // Form State
@@ -42,6 +52,11 @@ export default function ManageAnnouncements({ drives = [] }) {
   const [targetProgramCode, setTargetProgramCode] = useState("");
   const [targetSessionId, setTargetSessionId] = useState("");
   const [selectedDriveId, setSelectedDriveId] = useState("");
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [selectedStudentId, setSelectedStudentId] = useState("");
+  const [studentSearchTerm, setStudentSearchTerm] = useState("");
+  const [cohortStudents, setCohortStudents] = useState(students || []);
+  const [loadingStudents, setLoadingStudents] = useState(false);
   const [channels, setChannels] = useState(["in_app", "email"]); // "in_app", "email"
 
   // Options & Metadata
@@ -61,6 +76,36 @@ export default function ManageAnnouncements({ drives = [] }) {
   // SMTP Status State
   const [smtpData, setSmtpData] = useState(null);
   const [loadingSmtp, setLoadingSmtp] = useState(false);
+
+  // Broadcast History State
+  const [broadcastHistory, setBroadcastHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+
+  // Sync passed students prop or fetch if empty
+  useEffect(() => {
+    if (students && students.length > 0) {
+      setCohortStudents(students);
+    } else {
+      let isSubscribed = true;
+      setLoadingStudents(true);
+      getAllStudentProfiles({ limit: 200 })
+        .then((res) => {
+          if (isSubscribed && res?.data?.students) {
+            setCohortStudents(res.data.students);
+          }
+        })
+        .catch((err) => {
+          console.warn("Could not preload students for announcement picker:", err.message);
+        })
+        .finally(() => {
+          if (isSubscribed) setLoadingStudents(false);
+        });
+      return () => {
+        isSubscribed = false;
+      };
+    }
+  }, [students]);
 
   // Load programs & sessions on mount
   useEffect(() => {
@@ -93,6 +138,7 @@ export default function ManageAnnouncements({ drives = [] }) {
       if (targetAudience === "program") params.targetProgramCode = targetProgramCode;
       if (targetAudience === "session") params.targetSessionId = targetSessionId;
       if (targetAudience === "drive_applicants") params.driveId = selectedDriveId;
+      if (targetAudience === "student") params.targetStudentId = selectedStudentId;
 
       if (targetAudience === "program" && !targetProgramCode) {
         setPreviewData(null);
@@ -106,6 +152,10 @@ export default function ManageAnnouncements({ drives = [] }) {
         setPreviewData(null);
         return;
       }
+      if (targetAudience === "student" && !selectedStudentId) {
+        setPreviewData(null);
+        return;
+      }
 
       const res = await getAnnouncementPreview(params);
       if (res?.data) {
@@ -116,7 +166,7 @@ export default function ManageAnnouncements({ drives = [] }) {
     } finally {
       setLoadingPreview(false);
     }
-  }, [targetAudience, targetProgramCode, targetSessionId, selectedDriveId]);
+  }, [targetAudience, targetProgramCode, targetSessionId, selectedDriveId, selectedStudentId]);
 
   useEffect(() => {
     fetchPreview();
@@ -163,6 +213,69 @@ export default function ManageAnnouncements({ drives = [] }) {
     loadSmtpStatus();
   }, [loadSmtpStatus]);
 
+  // Load Broadcast History
+  const loadBroadcastHistory = useCallback(async () => {
+    try {
+      setLoadingHistory(true);
+      const res = await getBroadcastHistory();
+      if (Array.isArray(res?.data?.broadcasts)) {
+        setBroadcastHistory(res.data.broadcasts);
+      }
+    } catch (err) {
+      console.warn("Could not load broadcast history:", err.message);
+    } finally {
+      setLoadingHistory(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeSubTab === "history") {
+      loadBroadcastHistory();
+    }
+  }, [activeSubTab, loadBroadcastHistory]);
+
+  const handleRecallBroadcast = async (broadcast) => {
+    const identifier = broadcast.broadcastId || broadcast.title;
+    if (!identifier) return;
+    if (
+      !window.confirm(
+        `Are you sure you want to recall and delete "${broadcast.title}" from all ${broadcast.recipientCount} student inbox(es)?`
+      )
+    ) {
+      return;
+    }
+    try {
+      setActionLoading(true);
+      const res = await deleteBroadcastAnnouncement(identifier);
+      toast.success(res?.message || `Recalled announcement from ${broadcast.recipientCount} inboxes`);
+      loadBroadcastHistory();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to recall announcement");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleFreshstart = async () => {
+    if (
+      !window.confirm(
+        "CRITICAL: This will purge all broadcast test notifications and announcements across all students, giving you a completely fresh start. Do you wish to continue?"
+      )
+    ) {
+      return;
+    }
+    try {
+      setActionLoading(true);
+      const res = await freshstartNotifications();
+      toast.success(res?.message || "All broadcast notifications purged successfully!");
+      loadBroadcastHistory();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to purge notifications");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   // Toggle delivery channels
   const toggleChannel = (ch) => {
     setChannels((prev) => {
@@ -187,6 +300,10 @@ export default function ManageAnnouncements({ drives = [] }) {
       toast.error("Please write the announcement message");
       return;
     }
+    if (targetAudience === "student" && !selectedStudentId) {
+      toast.error("Please select a specific student recipient");
+      return;
+    }
 
     try {
       setSubmitting(true);
@@ -198,6 +315,7 @@ export default function ManageAnnouncements({ drives = [] }) {
         targetProgramCode: targetAudience === "program" ? targetProgramCode : undefined,
         targetSessionId: targetAudience === "session" ? targetSessionId : undefined,
         driveId: targetAudience === "drive_applicants" ? selectedDriveId : undefined,
+        targetStudentId: targetAudience === "student" ? selectedStudentId : undefined,
         channels,
       };
 
@@ -205,6 +323,11 @@ export default function ManageAnnouncements({ drives = [] }) {
       setIsReviewOpen(false);
       setTitle("");
       setMessage("");
+      if (targetAudience === "student") {
+        setSelectedStudent(null);
+        setSelectedStudentId("");
+        setStudentSearchTerm("");
+      }
 
       const result = res?.data || {};
       const emailsSent = result.emailsSent || 0;
@@ -319,6 +442,23 @@ export default function ManageAnnouncements({ drives = [] }) {
             </span>
           )}
         </button>
+        <button
+          type="button"
+          onClick={() => setActiveSubTab("history")}
+          className={`flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-bold rounded-xl transition cursor-pointer ${
+            activeSubTab === "history"
+              ? "bg-slate-900 text-white shadow-sm"
+              : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+          }`}
+        >
+          <History className="h-4 w-4" />
+          <span>Broadcast History & Freshstart</span>
+          {broadcastHistory.length > 0 && (
+            <span className="rounded-full bg-slate-700 text-white px-2 py-0.5 text-[10px]">
+              {broadcastHistory.length}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* TAB 1: COMPOSE ANNOUNCEMENT */}
@@ -396,12 +536,13 @@ export default function ManageAnnouncements({ drives = [] }) {
                 <label className="block text-xs font-bold text-slate-700">
                   Target Audience
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
                   {[
                     { id: "all", label: "All Students", icon: Users },
                     { id: "program", label: "By Academic Program", icon: Layers },
                     { id: "session", label: "Placement Session", icon: Calendar },
                     { id: "drive_applicants", label: "Drive Applicants", icon: Briefcase },
+                    { id: "student", label: "Particular Student", icon: UserCheck },
                   ].map((aud) => {
                     const Icon = aud.icon;
                     const isSelected = targetAudience === aud.id;
@@ -481,6 +622,127 @@ export default function ManageAnnouncements({ drives = [] }) {
                         </option>
                       ))}
                     </select>
+                  </div>
+                )}
+
+                {targetAudience === "student" && (
+                  <div className="rounded-xl border border-slate-200 p-3 bg-slate-50/60 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-bold text-slate-700">
+                        Select Registered Student Recipient
+                      </label>
+                      {cohortStudents.length > 0 && (
+                        <span className="text-[10px] text-slate-500 font-medium">
+                          {cohortStudents.length} students loaded
+                        </span>
+                      )}
+                    </div>
+
+                    {selectedStudent ? (
+                      <div className="flex items-center justify-between p-3 rounded-xl bg-white border border-indigo-200 shadow-xs">
+                        <div className="flex items-center gap-3">
+                          <div className="h-9 w-9 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-xs shadow-xs">
+                            {(selectedStudent.user?.fullName || selectedStudent.fullName || "S").charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                              <span>{selectedStudent.user?.fullName || selectedStudent.fullName}</span>
+                              <span className="text-[10px] font-mono font-normal bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-100">
+                                {selectedStudent.enrollmentNumber || selectedStudent.rollNumber || "N/A"}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-slate-500">
+                              {selectedStudent.user?.email || selectedStudent.email} • {selectedStudent.branch || "General"}
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedStudent(null);
+                            setSelectedStudentId("");
+                          }}
+                          className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                          title="Change selected student"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                          <span>Change</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="relative">
+                          <Search className="h-3.5 w-3.5 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+                          <input
+                            type="text"
+                            placeholder="Search by student name, USN / enrollment, or email..."
+                            value={studentSearchTerm}
+                            onChange={(e) => setStudentSearchTerm(e.target.value)}
+                            className="w-full rounded-xl border border-slate-200 pl-8 pr-3 py-2 text-xs focus:border-indigo-500 focus:outline-none bg-white"
+                          />
+                        </div>
+
+                        {/* List of matched students */}
+                        <div className="max-h-48 overflow-y-auto space-y-1 bg-white rounded-xl border border-slate-200 p-1.5 shadow-2xs">
+                          {cohortStudents
+                            .filter((s) => {
+                              const term = studentSearchTerm.trim().toLowerCase();
+                              if (!term) return true;
+                              const name = (s.user?.fullName || s.fullName || "").toLowerCase();
+                              const usn = (s.enrollmentNumber || s.rollNumber || "").toLowerCase();
+                              const email = (s.user?.email || s.email || "").toLowerCase();
+                              const branch = (s.branch || "").toLowerCase();
+                              return name.includes(term) || usn.includes(term) || email.includes(term) || branch.includes(term);
+                            })
+                            .slice(0, 8)
+                            .map((s) => {
+                              const sName = s.user?.fullName || s.fullName || "Student";
+                              const sUsn = s.enrollmentNumber || s.rollNumber || "No USN";
+                              const sEmail = s.user?.email || s.email || "";
+                              const sBranch = s.branch || "";
+
+                              return (
+                                <button
+                                  type="button"
+                                  key={s._id}
+                                  onClick={() => {
+                                    setSelectedStudent(s);
+                                    setSelectedStudentId(s._id);
+                                    setStudentSearchTerm("");
+                                  }}
+                                  className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-indigo-50/70 transition text-left cursor-pointer group"
+                                >
+                                  <div>
+                                    <div className="text-xs font-bold text-slate-900 group-hover:text-indigo-900">
+                                      {sName}
+                                    </div>
+                                    <div className="text-[10px] text-slate-500">
+                                      {sUsn} • {sEmail}
+                                    </div>
+                                  </div>
+                                  <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded group-hover:bg-indigo-100 group-hover:text-indigo-800">
+                                    {sBranch || "Select"}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          {cohortStudents.filter((s) => {
+                            const term = studentSearchTerm.trim().toLowerCase();
+                            if (!term) return true;
+                            const name = (s.user?.fullName || s.fullName || "").toLowerCase();
+                            const usn = (s.enrollmentNumber || s.rollNumber || "").toLowerCase();
+                            const email = (s.user?.email || s.email || "").toLowerCase();
+                            const branch = (s.branch || "").toLowerCase();
+                            return name.includes(term) || usn.includes(term) || email.includes(term) || branch.includes(term);
+                          }).length === 0 && (
+                            <div className="text-center py-4 text-xs text-slate-400">
+                              {loadingStudents ? "Loading registered students..." : "No matching students found."}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -847,6 +1109,141 @@ export default function ManageAnnouncements({ drives = [] }) {
         </div>
       )}
 
+      {/* TAB 3: BROADCAST HISTORY & FRESHSTART */}
+      {activeSubTab === "history" && (
+        <div className="space-y-4">
+          {/* Action & Stats Bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white rounded-2xl border border-slate-200 p-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-slate-900">
+                  Broadcast History & Inbox Synchronization
+                </h3>
+                <span className="rounded-full bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 text-[11px] font-bold text-indigo-700">
+                  {broadcastHistory.length} Past Broadcast(s)
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Inspect past announcements sent to student inboxes, recall specific announcements, or fresh start notifications.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleFreshstart}
+                disabled={actionLoading}
+                className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl border border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100 transition shadow-2xs cursor-pointer disabled:opacity-50"
+                title="Purge all test/broadcast announcements"
+              >
+                <RotateCcw className={`h-3.5 w-3.5 ${actionLoading ? "animate-spin" : ""}`} />
+                <span>Fresh Start All Notifications</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={loadBroadcastHistory}
+                disabled={loadingHistory || actionLoading}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+              >
+                <RefreshCw
+                  className={`h-3.5 w-3.5 ${loadingHistory ? "animate-spin" : ""}`}
+                />
+                <span>Refresh</span>
+              </button>
+            </div>
+          </div>
+
+          {/* List or Table */}
+          {loadingHistory ? (
+            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+              <RefreshCw className="h-6 w-6 text-indigo-600 animate-spin mx-auto mb-2" />
+              <p className="text-xs text-slate-500">Loading broadcast history...</p>
+            </div>
+          ) : broadcastHistory.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-dashed border-slate-200 p-12 text-center space-y-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 mx-auto">
+                <Bell className="h-6 w-6" />
+              </div>
+              <h4 className="text-sm font-bold text-slate-900">
+                No Broadcast Announcements Active
+              </h4>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                All broadcast announcements and test notifications have been cleared. Future broadcasts will appear here with recipient tracking and recall capability.
+              </p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider">
+                    <tr>
+                      <th className="py-3 px-4">Announcement Details</th>
+                      <th className="py-3 px-4">Priority Type</th>
+                      <th className="py-3 px-4">Dispatched At</th>
+                      <th className="py-3 px-4">Recipients</th>
+                      <th className="py-3 px-4 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {broadcastHistory.map((item, idx) => (
+                      <tr key={item.broadcastId || idx} className="hover:bg-slate-50/50 transition">
+                        <td className="py-3.5 px-4 max-w-md">
+                          <div className="font-bold text-slate-900 text-sm">
+                            {item.title}
+                          </div>
+                          <div className="text-xs text-slate-500 line-clamp-2 mt-0.5 leading-relaxed">
+                            {item.message}
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              item.type === "urgent"
+                                ? "bg-rose-100 text-rose-800 border border-rose-200"
+                                : "bg-indigo-100 text-indigo-800 border border-indigo-200"
+                            }`}
+                          >
+                            {item.type === "urgent" ? "Urgent Alert" : "Standard Notice"}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 whitespace-nowrap text-slate-600">
+                          <div>{new Date(item.createdAt).toLocaleDateString()}</div>
+                          <div className="text-[10px] text-slate-400">
+                            {new Date(item.createdAt).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 whitespace-nowrap text-slate-700">
+                          <div className="font-bold">{item.recipientCount} inboxes</div>
+                          <div className="text-[10px] text-slate-400">
+                            {item.unreadCount} unread
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 whitespace-nowrap text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleRecallBroadcast(item)}
+                            disabled={actionLoading}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs transition cursor-pointer disabled:opacity-50"
+                            title="Recall and delete announcement from all inboxes"
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-rose-600" />
+                            <span>Recall / Delete</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
 
 
       {/* REVIEW & CONFIRMATION MODAL */}
@@ -885,9 +1282,11 @@ export default function ManageAnnouncements({ drives = [] }) {
                   </span>
                 </div>
                 <div>
-                  <span className="text-slate-400 font-medium">Targeted Candidates:</span>
+                  <span className="text-slate-400 font-medium">Targeted Audience:</span>
                   <span className="ml-2 font-bold text-slate-900">
-                    {previewData?.totalEligibleRecipients ?? 0} students
+                    {targetAudience === "student" && selectedStudent
+                      ? `${selectedStudent.user?.fullName || selectedStudent.fullName} (${selectedStudent.enrollmentNumber || selectedStudent.rollNumber || "Student"})`
+                      : `${previewData?.totalEligibleRecipients ?? 0} students`}
                   </span>
                 </div>
                 <div>

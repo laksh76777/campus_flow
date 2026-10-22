@@ -62,6 +62,11 @@ const notificationSchema = new Schema(
             type: Schema.Types.ObjectId,
             ref: "Application",
         },
+        broadcastId: {
+            type: String,
+            default: "",
+            index: true,
+        },
     },
     {
         timestamps: true,

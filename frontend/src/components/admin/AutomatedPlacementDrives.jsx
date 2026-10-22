@@ -793,16 +793,14 @@ export default function AutomatedPlacementDrives({
                 {onDeleteDrive && (
                   <button
                     type="button"
-                    onClick={async () => {
+                    onClick={() => {
                       const comp = activeDriveWorkspace.company?.companyName || "Company";
-                      const confirmed = await onDeleteDrive(
+                      onDeleteDrive(
                         activeDriveWorkspace._id,
                         comp,
                         activeDriveWorkspace.jobTitle
                       );
-                      if (confirmed) {
-                        setActiveDriveWorkspace(null);
-                      }
+                      setActiveDriveWorkspace(null);
                     }}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition shadow-xs cursor-pointer"
                     title="Permanently delete this placement drive and clear applications"

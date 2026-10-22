@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
@@ -91,6 +92,45 @@ export const markAllNotificationsAsRead = asyncHandler(async (req, res) => {
     );
 });
 
+// @desc    Delete a single notification
+// @route   DELETE /api/v1/notifications/:notificationId
+// @access  Student / Authenticated User
+export const deleteNotification = asyncHandler(async (req, res) => {
+    const { notificationId } = req.params;
+    const userId = req.user._id;
+
+    const notification = await Notification.findOneAndDelete({
+        _id: notificationId,
+        user: userId
+    });
+
+    if (!notification) {
+        throw new ApiError(404, "Notification not found");
+    }
+
+    const unreadCount = await Notification.countDocuments({
+        user: userId,
+        isRead: false
+    });
+
+    return res.status(200).json(
+        new ApiResponse(200, { unreadCount }, "Notification deleted successfully")
+    );
+});
+
+// @desc    Clear all notifications for the authenticated user
+// @route   DELETE /api/v1/notifications/clear-all
+// @access  Student / Authenticated User
+export const clearAllMyNotifications = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+
+    await Notification.deleteMany({ user: userId });
+
+    return res.status(200).json(
+        new ApiResponse(200, { unreadCount: 0 }, "All notifications cleared successfully")
+    );
+});
+
 /**
  * Helper to resolve audience recipients strictly and deterministically
  */
@@ -100,15 +140,50 @@ const resolveAudienceRecipients = async ({
     targetBranch,
     targetSessionId,
     targetSessionYear,
-    driveId
+    driveId,
+    targetStudentId
 }) => {
-    if (!["all", "branch", "program", "session", "drive_applicants"].includes(targetAudience)) {
+    if (!["all", "branch", "program", "session", "drive_applicants", "student"].includes(targetAudience)) {
         throw new ApiError(400, "Unsupported announcement audience selection");
     }
 
     let recipientList = [];
 
-    if (targetAudience === "drive_applicants") {
+    if (targetAudience === "student") {
+        if (!targetStudentId) {
+            throw new ApiError(400, "Please select an individual student recipient");
+        }
+        let profile = null;
+        if (mongoose.Types.ObjectId.isValid(targetStudentId)) {
+            profile = await StudentProfile.findById(targetStudentId).populate("user", "fullName email phone isActive");
+            if (!profile) {
+                profile = await StudentProfile.findOne({ user: targetStudentId }).populate("user", "fullName email phone isActive");
+            }
+        }
+        if (!profile) {
+            profile = await StudentProfile.findOne({
+                $or: [
+                    { enrollmentNumber: String(targetStudentId).trim() },
+                    { collegeEmail: String(targetStudentId).trim().toLowerCase() }
+                ]
+            }).populate("user", "fullName email phone isActive");
+        }
+
+        if (!profile || !profile.user) {
+            throw new ApiError(404, "Selected student was not found in the cohort registry");
+        }
+
+        if (profile.user.isActive !== false) {
+            recipientList.push({
+                userId: profile.user._id,
+                fullName: profile.user.fullName,
+                email: profile.user.email || profile.collegeEmail,
+                branch: profile.branch,
+                course: profile.course,
+                enrollmentNumber: profile.enrollmentNumber
+            });
+        }
+    } else if (targetAudience === "drive_applicants") {
         if (!driveId) throw new ApiError(400, "A placement drive ID is required for drive applicants audience");
         const apps = await Application.find({
             placementDrive: driveId,
@@ -228,7 +303,8 @@ export const getAnnouncementPreview = asyncHandler(async (req, res) => {
         targetBranch,
         targetSessionId,
         targetSessionYear,
-        driveId
+        driveId,
+        targetStudentId
     } = req.query;
 
     const recipients = await resolveAudienceRecipients({
@@ -237,7 +313,8 @@ export const getAnnouncementPreview = asyncHandler(async (req, res) => {
         targetBranch,
         targetSessionId,
         targetSessionYear,
-        driveId
+        driveId,
+        targetStudentId
     });
 
     const sample = recipients.slice(0, 5).map((r) => ({
@@ -274,6 +351,7 @@ export const broadcastAnnouncement = asyncHandler(async (req, res) => {
         targetSessionId,
         targetSessionYear,
         driveId,
+        targetStudentId,
         type = "announcement",
         channels = ["in_app"]
     } = req.body;
@@ -301,7 +379,8 @@ export const broadcastAnnouncement = asyncHandler(async (req, res) => {
         targetBranch,
         targetSessionId,
         targetSessionYear,
-        driveId
+        driveId,
+        targetStudentId
     });
 
     if (recipients.length === 0) {
@@ -328,6 +407,8 @@ export const broadcastAnnouncement = asyncHandler(async (req, res) => {
     let emailStatus = "SKIPPED";
     let emailNote = "";
 
+    const broadcastId = new mongoose.Types.ObjectId().toString();
+
     // 1. In-App Notification Delivery
     if (selectedChannels.includes("in_app")) {
         const notificationsToInsert = recipients.map((r) => ({
@@ -335,6 +416,7 @@ export const broadcastAnnouncement = asyncHandler(async (req, res) => {
             title: title.trim(),
             message: message.trim(),
             type: type === "urgent" ? "urgent" : "announcement",
+            broadcastId,
             isRead: false
         }));
 
@@ -499,5 +581,81 @@ export const sendSmtpTestEmail = asyncHandler(async (req, res) => {
             result,
             "Test email accepted by SMTP server for delivery"
         )
+    );
+});
+
+// @desc    Get broadcast announcements history (Admin)
+// @route   GET /api/v1/notifications/broadcast-history
+// @access  Admin
+export const getBroadcastHistory = asyncHandler(async (req, res) => {
+    const broadcasts = await Notification.aggregate([
+        {
+            $match: {
+                type: { $in: ["announcement", "urgent"] }
+            }
+        },
+        {
+            $group: {
+                _id: {
+                    $ifNull: ["$broadcastId", "$title"]
+                },
+                broadcastId: { $first: "$broadcastId" },
+                title: { $first: "$title" },
+                message: { $first: "$message" },
+                type: { $first: "$type" },
+                totalDelivered: { $sum: 1 },
+                createdAt: { $min: "$createdAt" }
+            }
+        },
+        {
+            $sort: { createdAt: -1 }
+        },
+        {
+            $limit: 50
+        }
+    ]);
+
+    return res.status(200).json(
+        new ApiResponse(200, broadcasts, "Broadcast announcement history retrieved successfully")
+    );
+});
+
+// @desc    Recall or delete a broadcast announcement from all student inboxes (Admin)
+// @route   DELETE /api/v1/notifications/broadcast/:identifier
+// @access  Admin
+export const deleteBroadcastAnnouncement = asyncHandler(async (req, res) => {
+    const { identifier } = req.params;
+    if (!identifier) {
+        throw new ApiError(400, "Announcement identifier is required");
+    }
+
+    const decoded = decodeURIComponent(identifier);
+
+    const deleteFilter = mongoose.Types.ObjectId.isValid(decoded)
+        ? { $or: [{ broadcastId: decoded }, { _id: decoded }] }
+        : { $or: [{ broadcastId: decoded }, { title: decoded }] };
+
+    const result = await Notification.deleteMany(deleteFilter);
+
+    return res.status(200).json(
+        new ApiResponse(200, { deletedCount: result.deletedCount }, `Announcement deleted from ${result.deletedCount} student inbox(es)`)
+    );
+});
+
+// @desc    Fresh-start all broadcast notifications (Admin)
+// @route   POST /api/v1/notifications/admin/freshstart
+// @access  Admin
+export const freshstartAllNotifications = asyncHandler(async (req, res) => {
+    // Purges all broadcast announcements and test notifications
+    const result = await Notification.deleteMany({
+        $or: [
+            { type: { $in: ["announcement", "urgent", "general"] } },
+            { title: { $regex: /broadcast/i } },
+            { title: { $regex: /test/i } }
+        ]
+    });
+
+    return res.status(200).json(
+        new ApiResponse(200, { deletedCount: result.deletedCount }, `Notification system fresh-started. Cleared ${result.deletedCount} notifications.`)
     );
 });

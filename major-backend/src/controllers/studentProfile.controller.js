@@ -1,3 +1,4 @@
+import fs from "fs";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
@@ -8,6 +9,7 @@ import { Notification } from "../models/notification.model.js";
 import { uploadOnCloudinary, deleteFromCloudinary } from "../utils/cloudinary.js";
 import { resolveStudentProgram } from "../constants/programCatalog.js";
 import { ensureProfileEditable } from "../services/studentProfilePermissions.service.js";
+import { verifyCertificatePipeline, cleanCertificateTitle, computeFileHash, checkCrossStudentDuplicate } from "../services/certificateVerification.service.js";
 
 // @desc    Create student profile
 // @route   POST /api/v1/studentprofile/create-student-profile
@@ -1191,6 +1193,342 @@ const reviewModificationRequest = asyncHandler(async (req, res) => {
     );
 });
 
+// @desc    Validate certificate URL or document without immediately saving
+// @route   POST /api/v1/studentprofile/certificates/validate
+// @access  Student
+const validateCertificate = asyncHandler(async (req, res) => {
+    const studentProfile = await StudentProfile.findOne({ user: req.user._id }).populate("user", "fullName email");
+    if (!studentProfile) {
+        throw new ApiError(404, "Student profile record not found. Please create your profile first.");
+    }
+
+    const { certificateUrl } = req.body;
+    let documentUrl = "";
+    let documentPublicId = "";
+    let fileBase64 = null;
+    let fileMimeType = null;
+    let fileHash = "";
+
+    // If student uploaded a file (PDF or image)
+    if (req.file) {
+        const allowedMimeTypes = [
+            "application/pdf",
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+        ];
+        if (!allowedMimeTypes.includes(req.file.mimetype)) {
+            throw new ApiError(400, "Invalid file format. Only PDF, JPEG, PNG, and WebP are supported.");
+        }
+
+        try {
+            const buffer = await fs.promises.readFile(req.file.path);
+            fileBase64 = buffer.toString("base64");
+            fileMimeType = req.file.mimetype;
+            fileHash = computeFileHash(buffer);
+        } catch (readErr) {
+            console.warn("[Certificate Buffer Read Warning]", readErr.message);
+        }
+    }
+
+    if (!certificateUrl && !fileBase64) {
+        throw new ApiError(400, "Please provide either a valid certificate URL or upload a certificate document.");
+    }
+
+    // Execute backend verification pipeline
+    const verificationResult = await verifyCertificatePipeline({
+        certificateUrl: certificateUrl ? certificateUrl.trim() : "",
+        documentUrl: "",
+        fileBase64,
+        fileMimeType,
+        fileHash,
+        student: studentProfile
+    });
+
+    // Check if an official online URL was detected or verified (e.g. Coursera, Credly, HackerRank, etc.)
+    const onlineUrl = verificationResult.officialVerificationUrl || (certificateUrl ? certificateUrl.trim() : "");
+
+    if (onlineUrl) {
+        // Online certificate URL available:
+        // Store the official verification URL directly for viewing without wasting Cloudinary storage space!
+        verificationResult.certificateUrl = onlineUrl;
+        verificationResult.officialVerificationUrl = onlineUrl;
+        verificationResult.documentUrl = onlineUrl;
+        if (req.file?.path) {
+            try { await fs.promises.unlink(req.file.path); } catch {}
+        }
+    } else if (req.file) {
+        // Offline / participation certificate without an online URL:
+        // Automatically detect this and store the certificate image/PDF in system / Cloudinary!
+        try {
+            const uploadResult = await uploadOnCloudinary(req.file.path, {
+                folder: "campusflow/certificates"
+            });
+            if (uploadResult?.secure_url) {
+                documentUrl = uploadResult.secure_url;
+                documentPublicId = uploadResult.public_id;
+                verificationResult.documentUrl = documentUrl;
+                verificationResult.certificateUrl = documentUrl;
+            }
+        } catch (uploadErr) {
+            console.warn("[Certificate Upload Error]", uploadErr.message);
+        }
+    }
+
+    // Validation analysis strictly evaluates the certificate and returns details for review without saving yet.
+    // The certificate is persisted only when the student reviews and clicks "Save Certificate".
+    return res.status(200).json(
+        new ApiResponse(200, {
+            ...verificationResult,
+            documentPublicId,
+            fileHash: fileHash || verificationResult.fileHash
+        }, "Certificate validation analysis completed.")
+    );
+});
+
+/**
+ * Idempotent persistence helper for validated or submitted certificates.
+ */
+export const persistValidatedCertificate = async (studentProfile, certData) => {
+    const rawTitle = (certData.title || "").trim();
+    const cleanTitle = cleanCertificateTitle(rawTitle, certData.issuer);
+    const cleanIssuer = (certData.issuer || "Online Credential").trim();
+    const cleanId = (certData.credentialId || "").trim();
+    const resolvedUrl = (certData.officialVerificationUrl || certData.certificateUrl || certData.documentUrl || certData.url || "").trim();
+    const normalizedUrl = resolvedUrl.toLowerCase();
+
+    // Security Rules:
+    // 1. Cross-student duplicate conflicts or recipient mismatches MUST NEVER be "Verified"
+    let safeStatus = certData.verificationStatus || "Pending";
+    let safeMethod = certData.verificationMethod || "UNVERIFIED";
+
+    if (certData.duplicateStatus === "CROSS_STUDENT_DUPLICATE" || certData.ownershipStatus === "MISMATCH") {
+        safeStatus = "Needs Review";
+    } else if (safeStatus === "Verified") {
+        safeStatus = "Verified";
+    }
+
+    // Duplicate Prevention within current student's own record
+    const existingCert = (studentProfile.certificates || []).find((c) => {
+        if (cleanId && c.credentialId && c.credentialId.trim().toLowerCase() === cleanId.toLowerCase()) return true;
+        if (normalizedUrl && c.certificateUrl && c.certificateUrl.trim().toLowerCase() === normalizedUrl) return true;
+        if (c.title?.trim().toLowerCase() === cleanTitle.toLowerCase() && c.issuer?.trim().toLowerCase() === cleanIssuer.toLowerCase()) return true;
+        return false;
+    });
+
+    if (existingCert) {
+        existingCert.title = cleanTitle;
+        if (cleanIssuer) existingCert.issuer = cleanIssuer;
+        if (certData.recipientName) existingCert.recipientName = certData.recipientName.trim();
+        if (certData.issueDate) existingCert.issueDate = certData.issueDate.trim();
+        if (certData.expirationDate) existingCert.expirationDate = certData.expirationDate.trim();
+        existingCert.certificateUrl = resolvedUrl;
+        if (cleanId) existingCert.credentialId = cleanId;
+        if (certData.category) existingCert.category = certData.category;
+        existingCert.verificationStatus = safeStatus;
+        existingCert.verificationMethod = safeMethod;
+        if (certData.authenticityStatus) existingCert.authenticityStatus = certData.authenticityStatus;
+        if (certData.ownershipStatus) existingCert.ownershipStatus = certData.ownershipStatus;
+        if (certData.duplicateStatus) existingCert.duplicateStatus = certData.duplicateStatus;
+        if (certData.duplicateDetails) existingCert.duplicateDetails = certData.duplicateDetails;
+        if (certData.fileHash) existingCert.fileHash = certData.fileHash;
+        if (certData.identityMatch) existingCert.identityMatch = certData.identityMatch;
+        existingCert.officialVerificationUrl = certData.officialVerificationUrl || (resolvedUrl.startsWith("http") ? resolvedUrl : "");
+        existingCert.documentUrl = certData.documentUrl || resolvedUrl;
+        if (certData.documentPublicId) existingCert.documentPublicId = certData.documentPublicId.trim();
+        if (certData.aiAnalysis) existingCert.aiAnalysis = certData.aiAnalysis;
+        if (certData.evidence) existingCert.evidence = certData.evidence;
+    } else {
+        studentProfile.certificates.push({
+            title: cleanTitle,
+            issuer: cleanIssuer,
+            recipientName: (certData.recipientName || "").trim(),
+            issueDate: (certData.issueDate || "").trim(),
+            expirationDate: (certData.expirationDate || "").trim(),
+            certificateUrl: resolvedUrl,
+            credentialId: cleanId,
+            category: certData.category || "Course Completion",
+            verificationStatus: safeStatus,
+            verificationMethod: safeMethod,
+            authenticityStatus: certData.authenticityStatus || "UNVERIFIED",
+            ownershipStatus: certData.ownershipStatus || "INSUFFICIENT_INFORMATION",
+            duplicateStatus: certData.duplicateStatus || "NONE",
+            duplicateDetails: certData.duplicateDetails || "",
+            fileHash: certData.fileHash || "",
+            identityMatch: certData.identityMatch || "Insufficient Information",
+            officialVerificationUrl: certData.officialVerificationUrl || (resolvedUrl.startsWith("http") ? resolvedUrl : ""),
+            documentUrl: certData.documentUrl || resolvedUrl,
+            documentPublicId: (certData.documentPublicId || "").trim(),
+            aiAnalysis: certData.aiAnalysis || {},
+            evidence: certData.evidence || { checkedAt: new Date(), sourceType: resolvedUrl ? "URL" : "UPLOAD" }
+        });
+    }
+
+    await studentProfile.save();
+    return studentProfile.certificates;
+};
+
+// @desc    Add validated or reviewed certificate to student's profile
+// @route   POST /api/v1/studentprofile/certificates
+// @access  Student
+const addCertificate = asyncHandler(async (req, res) => {
+    const studentProfile = await StudentProfile.findOne({ user: req.user._id });
+    if (!studentProfile) {
+        throw new ApiError(404, "Student profile record not found.");
+    }
+
+    const {
+        title,
+        issuer,
+        recipientName,
+        issueDate,
+        expirationDate,
+        certificateUrl,
+        credentialId,
+        category,
+        verificationStatus,
+        verificationMethod,
+        identityMatch,
+        officialVerificationUrl,
+        documentUrl,
+        documentPublicId,
+        aiAnalysis,
+        evidence
+    } = req.body;
+
+    const cleanTitle = cleanCertificateTitle(title, issuer);
+    if (!cleanTitle || (cleanTitle === "Untitled Certificate" && !title.trim())) {
+        throw new ApiError(400, "Certificate title is required.");
+    }
+
+    const duplicateCheck = await checkCrossStudentDuplicate({
+        currentStudentProfileId: studentProfile._id,
+        issuer,
+        credentialId,
+        certificateUrl: certificateUrl || officialVerificationUrl || documentUrl,
+        fileHash: req.body.fileHash
+    });
+
+    if (duplicateCheck.isDuplicate) {
+        throw new ApiError(400, "Cannot save certificate: This credential appears to be associated with another student submission.");
+    }
+
+    if (req.body.ownershipStatus === "MISMATCH" || req.body.identityMatch === "Mismatch") {
+        throw new ApiError(400, "Cannot save certificate: Recipient name does not match your registered student name.");
+    }
+
+    const updatedCertificates = await persistValidatedCertificate(studentProfile, {
+        title: cleanTitle,
+        issuer,
+        recipientName,
+        issueDate,
+        expirationDate,
+        certificateUrl,
+        credentialId,
+        category,
+        verificationStatus: "Verified",
+        verificationMethod: verificationMethod || "AUTO_VALIDATED",
+        identityMatch: req.body.identityMatch || "Match",
+        authenticityStatus: req.body.authenticityStatus || "AUTHENTIC",
+        ownershipStatus: req.body.ownershipStatus || "MATCH",
+        duplicateStatus: duplicateCheck.duplicateStatus || "NONE",
+        duplicateDetails: duplicateCheck.reason || "",
+        fileHash: req.body.fileHash,
+        officialVerificationUrl,
+        documentUrl,
+        documentPublicId,
+        aiAnalysis,
+        evidence
+    });
+
+    return res.status(200).json(
+        new ApiResponse(200, updatedCertificates, "Certificate saved to student profile successfully.")
+    );
+});
+
+// @desc    Delete certificate from student's profile
+// @route   DELETE /api/v1/studentprofile/certificates/:certId
+// @access  Student
+const deleteCertificate = asyncHandler(async (req, res) => {
+    const studentProfile = await StudentProfile.findOne({ user: req.user._id });
+    if (!studentProfile) {
+        throw new ApiError(404, "Student profile record not found.");
+    }
+
+    const { certId } = req.params;
+    const certIndex = studentProfile.certificates.findIndex(
+        (c) => c._id?.toString() === certId || c.id === certId
+    );
+
+    if (certIndex === -1) {
+        throw new ApiError(404, "Certificate not found in student profile.");
+    }
+
+    const certToDelete = studentProfile.certificates[certIndex];
+    if (certToDelete?.documentPublicId) {
+        try {
+            await deleteFromCloudinary(certToDelete.documentPublicId, "image");
+        } catch (cleanupErr) {
+            console.warn("Could not delete Cloudinary document:", cleanupErr.message);
+        }
+    }
+
+    studentProfile.certificates.splice(certIndex, 1);
+    await studentProfile.save();
+
+    return res.status(200).json(
+        new ApiResponse(200, studentProfile.certificates, "Certificate successfully removed from profile.")
+    );
+});
+
+// @desc    Admin review/approve/reject certificate
+// @route   PATCH /api/v1/studentprofile/certificates/:studentId/:certId/review
+// @access  Admin
+const reviewCertificate = asyncHandler(async (req, res) => {
+    const { studentId, certId } = req.params;
+    const { status, reviewNotes } = req.body;
+
+    if (!["Verified", "Rejected", "Needs Review"].includes(status)) {
+        throw new ApiError(400, "Invalid review status. Choose from: Verified, Rejected, Needs Review.");
+    }
+
+    const studentProfile = await StudentProfile.findById(studentId).populate("user", "fullName email");
+    if (!studentProfile) {
+        throw new ApiError(404, "Target student profile not found.");
+    }
+
+    const cert = studentProfile.certificates.id(certId) || studentProfile.certificates.find((c) => c._id?.toString() === certId);
+    if (!cert) {
+        throw new ApiError(404, "Certificate record not found in student profile.");
+    }
+
+    cert.verificationStatus = status;
+    cert.verificationMethod = "MANUAL_REVIEW";
+    cert.reviewNotes = (reviewNotes || "").trim();
+    cert.reviewedBy = req.admin?._id || req.user?._id;
+    cert.reviewedByName = req.admin?.fullName || req.user?.fullName || "Placement Admin";
+    cert.reviewedAt = new Date();
+
+    await studentProfile.save();
+
+    // Notify student of admin certificate decision
+    try {
+        await Notification.create({
+            user: studentProfile.user._id,
+            title: `Certificate Review: ${cert.title}`,
+            message: `Your certificate '${cert.title}' was reviewed by ${cert.reviewedByName} and marked as '${status}'. ${reviewNotes ? `Notes: ${reviewNotes}` : ""}`,
+            type: status === "Verified" ? "offer" : "alert",
+            isRead: false
+        });
+    } catch (notifErr) {
+        console.warn("Failed to notify student of certificate review:", notifErr.message);
+    }
+
+    return res.status(200).json(
+        new ApiResponse(200, cert, `Certificate has been reviewed and marked as ${status}.`)
+    );
+});
+
 export {
     createStudentProfile,
     getCurrentStudentProfile,
@@ -1208,5 +1546,9 @@ export {
     unlockStudentProfile,
     submitModificationRequest,
     getModificationRequests,
-    reviewModificationRequest
+    reviewModificationRequest,
+    validateCertificate,
+    addCertificate,
+    deleteCertificate,
+    reviewCertificate
 };

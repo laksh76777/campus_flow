@@ -8,6 +8,7 @@ import ProtectedRoute from "./components/common/ProtectedRoute";
 const IndexHome = lazy(() => import("./components/HomePageDashboard/IndexHome"));
 const Login = lazy(() => import("./pages/auth/Login"));
 const Signup = lazy(() => import("./pages/auth/Signup"));
+const ForgotPassword = lazy(() => import("./pages/auth/ForgotPassword"));
 const StudentDashboard = lazy(() => import("./pages/student/StudentDashboard"));
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
 
@@ -40,6 +41,7 @@ function App() {
           <Route path="/" element={<IndexHome />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
 
         {/* Protected Student Portal Routes */}
         <Route

@@ -20,21 +20,42 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { getResumeViewUrl } from "../../utils/resumeHelper";
-import { verifyStudentProfile, deleteBacklogRecord } from "../../services/studentService";
+import { verifyStudentProfile, deleteBacklogRecord, reviewCertificate } from "../../services/studentService";
 
 export default function StudentDetailModal({ student, isOpen, onClose, onStudentVerified }) {
   const [verifying, setVerifying] = useState(false);
   const [currentVerification, setCurrentVerification] = useState(student?.verificationStatus || "PENDING");
   const [isLocked, setIsLocked] = useState(Boolean(student?.isProfileLocked));
   const [backlogList, setBacklogList] = useState(Array.isArray(student?.backlogDetails) ? student.backlogDetails : []);
+  const [certificatesList, setCertificatesList] = useState(Array.isArray(student?.certificates) ? student.certificates : []);
+  const [reviewingCertId, setReviewingCertId] = useState(null);
 
   useEffect(() => {
     if (student) {
       setCurrentVerification(student.verificationStatus || "PENDING");
       setIsLocked(Boolean(student.isProfileLocked));
       setBacklogList(Array.isArray(student.backlogDetails) ? student.backlogDetails : []);
+      setCertificatesList(Array.isArray(student.certificates) ? student.certificates : []);
     }
   }, [student]);
+
+  const handleReviewCert = async (certId, status) => {
+    try {
+      setReviewingCertId(certId);
+      await reviewCertificate(student._id, certId, {
+        status,
+        reviewNotes: `Marked as ${status} by Administrator.`
+      });
+      setCertificatesList((prev) =>
+        prev.map((c) => ((c._id === certId || c.id === certId) ? { ...c, verificationStatus: status } : c))
+      );
+      toast.success(`Certificate marked as ${status}`);
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.message || "Failed to update certificate status");
+    } finally {
+      setReviewingCertId(null);
+    }
+  };
 
   // Close on Escape key
   useEffect(() => {
@@ -509,16 +530,59 @@ export default function StudentDetailModal({ student, isOpen, onClose, onStudent
                         ))}
                       </div>
                     )}
-                    {certificates.map((certificate, idx) => (
-                      <div key={certificate._id || idx} className="border-t border-slate-100 pt-2">
-                        <p className="font-bold text-slate-800">{certificate.title || "Certificate"}</p>
-                        <p className="text-slate-500">
-                          {[certificate.issuer, certificate.issueDate].filter(Boolean).join(" · ") || "Issuer/date not provided"}
-                        </p>
-                        {certificate.certificateUrl && (
-                          <a href={certificate.certificateUrl} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 font-semibold text-blue-600 hover:underline">
-                            View certificate <ExternalLink className="h-3 w-3" />
-                          </a>
+                    {(certificatesList || certificates).map((certificate, idx) => (
+                      <div key={certificate._id || idx} className="border-t border-slate-100 pt-2.5 flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-bold text-slate-800">{certificate.title || "Certificate"}</p>
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                                certificate.verificationStatus === "Verified"
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  : certificate.verificationStatus === "Needs Review"
+                                  ? "bg-amber-50 text-amber-700 border-amber-200"
+                                  : certificate.verificationStatus === "Rejected"
+                                  ? "bg-rose-50 text-rose-700 border-rose-200"
+                                  : "bg-slate-100 text-slate-600 border-slate-200"
+                              }`}
+                            >
+                              {certificate.verificationStatus || "Pending"}
+                            </span>
+                          </div>
+                          <p className="text-slate-500 text-[11px] mt-0.5">
+                            {[certificate.issuer, certificate.issueDate].filter(Boolean).join(" · ") || "Issuer/date not provided"}
+                            {certificate.category && ` · ${certificate.category}`}
+                          </p>
+                          {(certificate.officialVerificationUrl || certificate.certificateUrl || certificate.documentUrl) && (
+                            <a
+                              href={certificate.officialVerificationUrl || certificate.certificateUrl || certificate.documentUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="mt-1 inline-flex items-center gap-1 font-semibold text-blue-600 hover:underline text-[11px]"
+                            >
+                              View certificate <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                        </div>
+                        {certificate.verificationStatus !== "Verified" && (
+                          <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
+                            <button
+                              type="button"
+                              onClick={() => handleReviewCert(certificate._id, "Verified")}
+                              disabled={reviewingCertId === certificate._id}
+                              className="px-2 py-1 rounded-lg text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition disabled:opacity-50"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleReviewCert(certificate._id, "Rejected")}
+                              disabled={reviewingCertId === certificate._id}
+                              className="px-2 py-1 rounded-lg text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 transition disabled:opacity-50"
+                            >
+                              Reject
+                            </button>
+                          </div>
                         )}
                       </div>
                     ))}

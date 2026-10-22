@@ -372,9 +372,76 @@ const studentProfileSchema = new mongoose.Schema(
             {
                 title: { type: String, required: true, trim: true },
                 issuer: { type: String, trim: true, default: "" },
+                recipientName: { type: String, trim: true, default: "" },
                 issueDate: { type: String, trim: true, default: "" },
+                expirationDate: { type: String, trim: true, default: "" },
                 certificateUrl: { type: String, trim: true, default: "" },
-                credentialId: { type: String, trim: true, default: "" }
+                credentialId: { type: String, trim: true, default: "" },
+                category: {
+                    type: String,
+                    trim: true,
+                    enum: [
+                        "Course Completion",
+                        "Technical Certification",
+                        "Internship",
+                        "Workshop",
+                        "Academic Achievement",
+                        "Other"
+                    ],
+                    default: "Course Completion"
+                },
+                verificationStatus: {
+                    type: String,
+                    enum: ["Pending", "Verified", "Needs Review", "Unable to Verify", "Rejected"],
+                    default: "Pending"
+                },
+                verificationMethod: {
+                    type: String,
+                    enum: ["OFFICIAL_ISSUER", "AI_ANALYSIS", "MANUAL_REVIEW", "UNVERIFIED"],
+                    default: "UNVERIFIED"
+                },
+                identityMatch: {
+                    type: String,
+                    enum: ["Match", "Possible Match", "Mismatch", "Insufficient Information"],
+                    default: "Insufficient Information"
+                },
+                officialVerificationUrl: { type: String, trim: true, default: "" },
+                documentUrl: { type: String, trim: true, default: "" },
+                documentPublicId: { type: String, trim: true, default: "" },
+                aiAnalysis: {
+                    summary: { type: String, default: "" },
+                    warnings: { type: [String], default: [] },
+                    inconsistencies: { type: [String], default: [] },
+                    confidence: { type: String, default: "" }
+                },
+                evidence: {
+                    sourceType: { type: String, default: "" }, // URL, UPLOAD
+                    checkedAt: { type: Date, default: Date.now },
+                    issuerIdentified: { type: Boolean, default: false },
+                    officialRecordFound: { type: Boolean, default: false },
+                    details: { type: String, default: "" }
+                },
+                fileHash: { type: String, trim: true, default: "" },
+                authenticityStatus: {
+                    type: String,
+                    enum: ["AUTHENTIC", "UNVERIFIED", "SUSPICIOUS", "UNKNOWN"],
+                    default: "UNVERIFIED"
+                },
+                ownershipStatus: {
+                    type: String,
+                    enum: ["MATCH", "POSSIBLE_MATCH", "MISMATCH", "INSUFFICIENT_INFORMATION"],
+                    default: "INSUFFICIENT_INFORMATION"
+                },
+                duplicateStatus: {
+                    type: String,
+                    enum: ["NONE", "CROSS_STUDENT_DUPLICATE", "SAME_STUDENT_DUPLICATE"],
+                    default: "NONE"
+                },
+                duplicateDetails: { type: String, trim: true, default: "" },
+                reviewNotes: { type: String, default: "" },
+                reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: "Admin", default: null },
+                reviewedByName: { type: String, default: "" },
+                reviewedAt: { type: Date, default: null }
             }
         ],
         about: {
@@ -574,6 +641,11 @@ studentProfileSchema.pre("save", async function () {
 
     this.profileCompleteness = Math.min(totalWeight, filledWeight);
 });
+
+// Fast global lookup indexes for certificate verification and duplicate detection
+studentProfileSchema.index({ "certificates.credentialId": 1, "certificates.issuer": 1 });
+studentProfileSchema.index({ "certificates.fileHash": 1 });
+studentProfileSchema.index({ "certificates.certificateUrl": 1 });
 
 export const StudentProfile = mongoose.model(
     "StudentProfile",

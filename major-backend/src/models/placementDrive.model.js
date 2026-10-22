@@ -251,6 +251,17 @@ const placementDriveSchema = new mongoose.Schema(
             default: true,
         },
 
+        isDeleted: {
+            type: Boolean,
+            default: false,
+            index: true,
+        },
+
+        deletedAt: {
+            type: Date,
+            default: null,
+        },
+
         // V2 Phase - Student Information Requirements
         requirementsVersion: {
             type: Number,

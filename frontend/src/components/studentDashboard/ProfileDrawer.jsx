@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   X,
   FileText,
@@ -40,7 +40,10 @@ import {
   addSemesterResult,
   addBacklogRecord,
   deleteBacklogRecord,
-  lockProfile
+  lockProfile,
+  validateCertificate,
+  addCertificate,
+  deleteCertificate
 } from "../../services/studentService";
 import { getPublicDepartments } from "../../services/authService";
 import { getResumeViewUrl } from "../../utils/resumeHelper";
@@ -74,6 +77,44 @@ const GAP_REASONS = [
   "Family responsibilities",
   "Other"
 ];
+
+export const cleanCertificateTitle = (title, issuerFallback = "") => {
+  if (!title || typeof title !== "string") {
+    return issuerFallback ? `${issuerFallback} Certificate` : "Untitled Certificate";
+  }
+  const trimmed = title.trim();
+  if (
+    !trimmed ||
+    /^https?:\/\//i.test(trimmed) ||
+    trimmed.includes("://") ||
+    trimmed.startsWith("www.") ||
+    /^[a-zA-Z0-9-]+\.[a-zA-Z]{2,}\//i.test(trimmed)
+  ) {
+    return issuerFallback ? `${issuerFallback} Certificate` : "Untitled Certificate";
+  }
+  return trimmed;
+};
+
+export const getEffectiveCredentialUrl = (c) => {
+  if (!c) return "";
+  if (c.officialVerificationUrl && /^https?:\/\//i.test(c.officialVerificationUrl.trim())) {
+    return c.officialVerificationUrl.trim();
+  }
+
+  const id = (c.credentialId || "").trim();
+  const issuer = (c.issuer || "").toLowerCase();
+
+  if (id) {
+    if (issuer.includes("coursera")) return `https://coursera.org/verify/${id}`;
+    if (issuer.includes("credly")) return `https://www.credly.com/badges/${id}`;
+    if (issuer.includes("hackerrank")) return `https://www.hackerrank.com/certificates/${id}`;
+    if (issuer.includes("freecodecamp")) return `https://www.freecodecamp.org/certification/${id}`;
+    if (issuer.includes("udemy")) return `https://www.udemy.com/certificate/${id}`;
+    if (issuer.includes("accredible")) return `https://credential.net/${id}`;
+  }
+
+  return c.certificateUrl || c.documentUrl || c.url || "";
+};
 
 const toDateInputValue = (value) => {
   if (!value) return "";
@@ -122,6 +163,17 @@ export default function ProfileDrawer({
   const [certIssuer, setCertIssuer] = useState("");
   const [certIssueDate, setCertIssueDate] = useState("");
   const [certUrl, setCertUrl] = useState("");
+  const [certRecipientName, setCertRecipientName] = useState("");
+  const [certCredentialId, setCertCredentialId] = useState("");
+  const [certCategory, setCertCategory] = useState("Course Completion");
+  const [certExpirationDate, setCertExpirationDate] = useState("");
+  const [certFile, setCertFile] = useState(null);
+  const [certValidating, setCertValidating] = useState(false);
+  const [certValidationStage, setCertValidationStage] = useState("");
+  const [certValidationResult, setCertValidationResult] = useState(null);
+  const [certSourceType, setCertSourceType] = useState("url"); // 'url' or 'file'
+  const [autoFilledFields, setAutoFilledFields] = useState(new Set());
+  const urlDebounceTimerRef = useRef(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -375,30 +427,313 @@ export default function ProfileDrawer({
     ? formData.cgpa
     : studentProfile?.verifiedCGPA ?? studentProfile?.cgpa ?? "";
 
-  const handleAddCertificate = (e) => {
-    if (e && e.preventDefault) e.preventDefault();
-    if (!certTitle.trim()) {
-      toast.error("Please enter credential or certificate title");
-      return;
+  const resetCertForm = () => {
+    if (urlDebounceTimerRef.current) {
+      clearTimeout(urlDebounceTimerRef.current);
+      urlDebounceTimerRef.current = null;
     }
-    const newCert = {
-      title: certTitle.trim(),
-      issuer: certIssuer.trim() || "Online Provider",
-      issueDate: certIssueDate || undefined,
-      url: certUrl.trim() || undefined
-    };
-    setCertificates((prev) => [...prev, newCert]);
     setCertTitle("");
     setCertIssuer("");
     setCertIssueDate("");
     setCertUrl("");
-    setIsAddCertOpen(false);
-    toast.success("Certificate added! Save or Submit your profile to persist.");
+    setCertRecipientName("");
+    setCertCredentialId("");
+    setCertCategory("Course Completion");
+    setCertExpirationDate("");
+    setCertFile(null);
+    setCertValidating(false);
+    setCertValidationStage("");
+    setCertValidationResult(null);
+    setAutoFilledFields(new Set());
   };
 
-  const handleDeleteCertificate = (idx) => {
+  const triggerAutoValidate = async ({ urlToUse, fileToUse, isAuto = false } = {}) => {
+    const targetUrl = urlToUse !== undefined ? urlToUse : (certSourceType === "url" ? certUrl.trim() : "");
+    const targetFile = fileToUse !== undefined ? fileToUse : (certSourceType === "file" ? certFile : null);
+
+    if (!targetUrl && !targetFile) {
+      if (!isAuto) {
+        toast.error(certSourceType === "url" ? "Please enter a certificate URL" : "Please select a PDF or image file");
+      }
+      return;
+    }
+
+    setCertValidating(true);
+    setCertValidationStage("Reading certificate details...");
+
+    const stageTimer1 = setTimeout(() => {
+      setCertValidationStage("Auto-extracting metadata with Gemini AI...");
+    }, 600);
+
+    const stageTimer2 = setTimeout(() => {
+      setCertValidationStage("Verifying issuer & matching recipient identity...");
+    }, 1500);
+
+    try {
+      const response = await validateCertificate({
+        certificateUrl: targetUrl || "",
+        file: targetFile || null
+      });
+
+      clearTimeout(stageTimer1);
+      clearTimeout(stageTimer2);
+
+      const data = response?.data;
+      if (!data) throw new Error("Validation returned empty data");
+
+      setCertValidationResult(data);
+
+      const filled = new Set();
+      if (data.title) {
+        setCertTitle(data.title);
+        filled.add("title");
+      }
+      if (data.issuer) {
+        setCertIssuer(data.issuer);
+        filled.add("issuer");
+      }
+      if (data.recipientName) {
+        setCertRecipientName(data.recipientName);
+        filled.add("recipientName");
+      }
+      if (data.issueDate) {
+        setCertIssueDate(data.issueDate);
+        filled.add("issueDate");
+      }
+      if (data.expirationDate) {
+        setCertExpirationDate(data.expirationDate);
+        filled.add("expirationDate");
+      }
+      if (data.credentialId) {
+        setCertCredentialId(data.credentialId);
+        filled.add("credentialId");
+      }
+      if (data.category) {
+        setCertCategory(data.category);
+        filled.add("category");
+      }
+
+      setAutoFilledFields(filled);
+
+      // Details extracted: allow student to review/edit before saving
+      if (data.ownershipStatus === "MISMATCH" || data.identityMatch === "Mismatch") {
+        toast.error("⚠️ Recipient mismatch: Name on certificate does not match your student profile name.");
+      } else if (data.duplicateStatus === "CROSS_STUDENT_DUPLICATE") {
+        toast.error("⚠️ Duplicate detected: This credential appears to be associated with another student.");
+      } else {
+        toast.success("✨ Details extracted! Please review below and click 'Save Certificate'.");
+      }
+    } catch (err) {
+      clearTimeout(stageTimer1);
+      clearTimeout(stageTimer2);
+      const msg = err.response?.data?.message || err.message || "Failed to analyze certificate";
+      if (!isAuto) {
+        toast.error(msg);
+      } else {
+        console.warn("[Auto-Fill Note]", msg);
+      }
+    } finally {
+      setCertValidating(false);
+      setCertValidationStage("");
+    }
+  };
+
+  const handleValidateCertificate = async () => {
+    await triggerAutoValidate({ isAuto: false });
+  };
+
+  const handleCertUrlChange = (val) => {
+    setCertUrl(val);
+
+    if (urlDebounceTimerRef.current) {
+      clearTimeout(urlDebounceTimerRef.current);
+      urlDebounceTimerRef.current = null;
+    }
+
+    const trimmed = (val || "").trim();
+    // Automatically trigger analysis if valid URL format
+    if (/^https?:\/\/[^\s$.?#].[^\s]*$/i.test(trimmed)) {
+      urlDebounceTimerRef.current = setTimeout(() => {
+        triggerAutoValidate({ urlToUse: trimmed, fileToUse: null, isAuto: true });
+      }, 700);
+    }
+  };
+
+  const handleCertUrlPaste = (e) => {
+    const pasted = e.clipboardData.getData("text")?.trim();
+    if (pasted && /^https?:\/\/[^\s$.?#].[^\s]*$/i.test(pasted)) {
+      setCertUrl(pasted);
+      if (urlDebounceTimerRef.current) clearTimeout(urlDebounceTimerRef.current);
+      urlDebounceTimerRef.current = setTimeout(() => {
+        triggerAutoValidate({ urlToUse: pasted, fileToUse: null, isAuto: true });
+      }, 150);
+    }
+  };
+
+  const handleCertFileChange = (file) => {
+    setCertFile(file);
+    if (file) {
+      triggerAutoValidate({ urlToUse: "", fileToUse: file, isAuto: true });
+    }
+  };
+
+  const handleAddCertificate = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+
+    if (!certValidationResult) {
+      toast.error("Please auto-fill / validate the certificate first before saving.");
+      return;
+    }
+
+    const isMismatch = certValidationResult?.ownershipStatus === "MISMATCH" || certValidationResult?.identityMatch === "Mismatch";
+    if (isMismatch) {
+      toast.error("Cannot save certificate: Recipient name does not match your registered student name.");
+      return;
+    }
+
+    if (certValidationResult?.duplicateStatus === "CROSS_STUDENT_DUPLICATE") {
+      toast.error("Cannot save certificate: This credential appears to be associated with another student submission.");
+      return;
+    }
+
+    if (!certTitle.trim()) {
+      toast.error("Please enter credential or certificate title");
+      return;
+    }
+
+    const targetUrl = certValidationResult?.officialVerificationUrl ||
+                      certValidationResult?.certificateUrl ||
+                      (certUrl || "").trim() ||
+                      certValidationResult?.documentUrl || "";
+
+    const newCert = {
+      title: cleanCertificateTitle(certTitle, certIssuer),
+      issuer: certIssuer.trim() || "Online Provider",
+      recipientName: certRecipientName.trim() || certValidationResult?.recipientName || user?.fullName || "",
+      issueDate: certIssueDate || certValidationResult?.issueDate || undefined,
+      expirationDate: certExpirationDate || certValidationResult?.expirationDate || undefined,
+      certificateUrl: targetUrl || undefined,
+      url: targetUrl || undefined,
+      credentialId: certCredentialId.trim() || certValidationResult?.credentialId || undefined,
+      category: certCategory || "Course Completion",
+      verificationStatus: "Verified",
+      verificationMethod: certValidationResult?.verificationMethod || "AUTO_VALIDATED",
+      identityMatch: certValidationResult?.identityMatch || "Match",
+      authenticityStatus: "AUTHENTIC",
+      ownershipStatus: certValidationResult?.ownershipStatus || "MATCH",
+      duplicateStatus: "NONE",
+      duplicateDetails: "",
+      fileHash: certValidationResult?.fileHash || "",
+      officialVerificationUrl: certValidationResult?.officialVerificationUrl || (targetUrl.startsWith("http") ? targetUrl : undefined),
+      documentUrl: certValidationResult?.documentUrl || (targetUrl.startsWith("http") ? targetUrl : undefined),
+      documentPublicId: certValidationResult?.documentPublicId || undefined,
+      aiAnalysis: certValidationResult?.aiAnalysis || undefined,
+      evidence: certValidationResult?.evidence || undefined
+    };
+
+    if (studentProfile?._id) {
+      try {
+        const res = await addCertificate(newCert);
+        if (res?.data && Array.isArray(res.data)) {
+          setCertificates(res.data);
+        } else {
+          setCertificates((prev) => [...prev, newCert]);
+        }
+      } catch (err) {
+        console.warn("Direct save fallback:", err.message);
+        setCertificates((prev) => [...prev, newCert]);
+      }
+    } else {
+      setCertificates((prev) => [...prev, newCert]);
+    }
+
+    resetCertForm();
+    setIsAddCertOpen(false);
+    toast.success("Certificate added to profile!");
+    if (typeof onProfileUpdated === "function") {
+      onProfileUpdated();
+    }
+  };
+
+  const handleDeleteCertificate = async (idx) => {
+    const certToDelete = certificates[idx];
+    if (certToDelete?._id) {
+      try {
+        await deleteCertificate(certToDelete._id);
+      } catch (err) {
+        console.warn("Server delete warning:", err.message);
+      }
+    }
     setCertificates((prev) => prev.filter((_, i) => i !== idx));
     toast.success("Certificate removed from list");
+    if (typeof onProfileUpdated === "function") {
+      onProfileUpdated();
+    }
+  };
+
+  const renderOwnershipBadge = (status) => {
+    switch (status) {
+      case "MATCH":
+      case "Match":
+        return (
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <CheckCircle2 className="h-2.5 w-2.5 text-emerald-600" />
+            <span>ID Match</span>
+          </span>
+        );
+      case "POSSIBLE_MATCH":
+      case "Possible Match":
+        return (
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+            <Clock className="h-2.5 w-2.5 text-amber-600" />
+            <span>Name Review</span>
+          </span>
+        );
+      case "MISMATCH":
+      case "Mismatch":
+        return (
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+            <AlertTriangle className="h-2.5 w-2.5 text-rose-600" />
+            <span>Name Mismatch</span>
+          </span>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const renderVerificationBadge = (status) => {
+    switch (status) {
+      case "Verified":
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+            <span>Verified</span>
+          </span>
+        );
+      case "Needs Review":
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200">
+            <Clock className="h-3 w-3 text-amber-600" />
+            <span>Needs Review</span>
+          </span>
+        );
+      case "Rejected":
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-200">
+            <AlertTriangle className="h-3 w-3 text-rose-600" />
+            <span>Rejected</span>
+          </span>
+        );
+      case "Unable to Verify":
+      default:
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
+            <ShieldCheck className="h-3 w-3 text-slate-400" />
+            <span>{status || "Pending"}</span>
+          </span>
+        );
+    }
   };
 
   const buildProfilePayload = () => {
@@ -1458,27 +1793,61 @@ export default function ProfileDrawer({
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {certificates.map((c, i) => (
-                      <div key={i} className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50/60 text-xs">
-                        <div>
-                          <strong className="text-slate-800 font-bold block">{c.title || "Certificate"}</strong>
-                          <span className="text-slate-500 text-[11px]">{c.issuer || "Online Credential"} {c.issueDate && `• ${new Date(c.issueDate).toLocaleDateString()}`}</span>
-                          {c.url && (
-                            <a href={c.url} target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:underline block text-[11px] mt-0.5">
-                              {c.url}
-                            </a>
+                    {certificates.map((c, i) => {
+                      const credUrl = getEffectiveCredentialUrl(c);
+                      return (
+                        <div key={i} className="p-3 rounded-xl border border-slate-200 bg-slate-50/60 text-xs">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <strong className="text-slate-800 font-bold block truncate">{cleanCertificateTitle(c.title, c.issuer)}</strong>
+                                {renderVerificationBadge(c.verificationStatus)}
+                                {renderOwnershipBadge(c.ownershipStatus)}
+                              </div>
+                              <span className="text-slate-500 text-[11px] block mt-0.5">
+                                {c.issuer || "Online Credential"} {c.issueDate && `• ${new Date(c.issueDate).toLocaleDateString()}`}
+                                {c.category && ` • ${c.category}`}
+                              </span>
+                              {(c.recipientName || c.extractedRecipientName) && (
+                                <span className="text-slate-600 text-[11px] block mt-0.5">
+                                  Recipient: <strong className="text-slate-800">{c.recipientName || c.extractedRecipientName}</strong>
+                                </span>
+                              )}
+                              {c.credentialId && (
+                                <span className="text-slate-400 font-mono text-[10px] block mt-0.5">
+                                  ID: {c.credentialId}
+                                </span>
+                              )}
+                              {credUrl && (
+                                <a
+                                  href={credUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-purple-600 hover:text-purple-800 hover:underline inline-flex items-center gap-1 text-[11px] mt-1 font-bold"
+                                >
+                                  <span>[View Credential]</span>
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCertificate(i)}
+                              className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition shrink-0 cursor-pointer"
+                              title="Remove certificate"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                          {c.duplicateStatus === "CROSS_STUDENT_DUPLICATE" && (
+                            <div className="mt-2 p-2 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-900 font-medium flex items-start gap-1.5">
+                              <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
+                              <span>This credential appears to be associated with another submission. Additional ownership verification is required.</span>
+                            </div>
                           )}
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteCertificate(i)}
-                          className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition"
-                          title="Remove certificate"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1988,16 +2357,14 @@ export default function ProfileDrawer({
                       </h4>
                       <p className="text-[11px] text-slate-400">Verified credentials and certifications to showcase to campus recruiters.</p>
                     </div>
-                    {!studentProfile?.isProfileLocked && (
-                      <button
-                        type="button"
-                        onClick={() => setIsAddCertOpen(true)}
-                        className="inline-flex items-center gap-1.5 rounded-xl bg-purple-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-purple-700 transition active:scale-95 shadow-2xs"
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                        <span>+ Add Credential</span>
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => setIsAddCertOpen(true)}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-purple-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-purple-700 transition active:scale-95 shadow-2xs cursor-pointer"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>+ Add Credential</span>
+                    </button>
                   </div>
 
                   {certificates.length === 0 ? (
@@ -2006,35 +2373,60 @@ export default function ProfileDrawer({
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {certificates.map((cert, idx) => (
-                        <div key={idx} className="rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 flex items-start justify-between gap-3">
-                          <div className="min-w-0 flex-1">
-                            <h5 className="text-xs font-bold text-slate-900 truncate">{cert.title || "Certificate"}</h5>
-                            <p className="text-[11px] text-slate-500">{cert.issuer || "Online Credential"} {cert.issueDate && `• ${new Date(cert.issueDate).toLocaleDateString()}`}</p>
-                            {cert.url && (
-                              <a
-                                href={cert.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-[11px] font-bold text-purple-600 hover:text-purple-800 mt-1"
+                      {certificates.map((cert, idx) => {
+                        const credUrl = getEffectiveCredentialUrl(cert);
+                        return (
+                          <div key={idx} className="rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 flex flex-col justify-between gap-2">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <h5 className="text-xs font-bold text-slate-900 truncate">{cleanCertificateTitle(cert.title, cert.issuer)}</h5>
+                                  {renderVerificationBadge(cert.verificationStatus)}
+                                  {renderOwnershipBadge(cert.ownershipStatus)}
+                                </div>
+                                <p className="text-[11px] text-slate-500 mt-0.5">
+                                  {cert.issuer || "Online Credential"}
+                                  {cert.issueDate && ` • ${new Date(cert.issueDate).toLocaleDateString()}`}
+                                  {cert.category && ` • ${cert.category}`}
+                                </p>
+                                {(cert.recipientName || cert.extractedRecipientName) && (
+                                  <p className="text-[11px] text-slate-600 mt-0.5">
+                                    Recipient: <strong className="text-slate-800">{cert.recipientName || cert.extractedRecipientName}</strong>
+                                  </p>
+                                )}
+                                {cert.credentialId && (
+                                  <p className="text-[10px] font-mono text-slate-400 mt-0.5">ID: {cert.credentialId}</p>
+                                )}
+                                {credUrl && (
+                                  <a
+                                    href={credUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-purple-600 hover:text-purple-800 hover:underline mt-1"
+                                  >
+                                    <span>[View Credential]</span>
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteCertificate(idx)}
+                                className="text-rose-500 hover:text-rose-700 p-1 shrink-0 cursor-pointer"
+                                title="Remove certificate"
                               >
-                                <span>View Credential</span>
-                                <ExternalLink className="h-3 w-3" />
-                              </a>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                            {cert.duplicateStatus === "CROSS_STUDENT_DUPLICATE" && (
+                              <div className="mt-1.5 p-2 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-900 font-medium flex items-start gap-1.5">
+                                <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
+                                <span>This credential appears to be associated with another submission. Additional ownership verification is required.</span>
+                              </div>
                             )}
                           </div>
-                          {!studentProfile?.isProfileLocked && (
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteCertificate(idx)}
-                              className="text-rose-500 hover:text-rose-700 p-1"
-                              title="Remove certificate"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -2436,65 +2828,386 @@ export default function ProfileDrawer({
       {/* MODAL: ADD CERTIFICATE / CREDENTIAL */}
       {isAddCertOpen && (
         <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl space-y-4">
-            <h4 className="text-sm font-black text-slate-900">Add Certificate / Credential</h4>
-            <form onSubmit={handleAddCertificate} className="space-y-3">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
+                  <Award className="h-4 w-4" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-black text-slate-900">Add & Verify Certificate</h4>
+                  <p className="text-[11px] text-slate-400">Automated credential extraction & verification</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  resetCertForm();
+                  setIsAddCertOpen(false);
+                }}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Source Selection Tabs */}
+            <div className="flex rounded-xl bg-slate-100 p-1 text-xs font-bold text-slate-600">
+              <button
+                type="button"
+                onClick={() => setCertSourceType("url")}
+                className={`flex-1 rounded-lg py-1.5 transition text-center ${
+                  certSourceType === "url"
+                    ? "bg-white text-purple-700 shadow-2xs font-black"
+                    : "hover:text-slate-900"
+                }`}
+              >
+                Certificate URL / Link
+              </button>
+              <button
+                type="button"
+                onClick={() => setCertSourceType("file")}
+                className={`flex-1 rounded-lg py-1.5 transition text-center ${
+                  certSourceType === "file"
+                    ? "bg-white text-purple-700 shadow-2xs font-black"
+                    : "hover:text-slate-900"
+                }`}
+              >
+                Upload PDF / Image
+              </button>
+            </div>
+
+            {/* Source Input Area */}
+            {certSourceType === "url" ? (
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Certificate Title *</label>
-                <input
-                  type="text"
-                  required
-                  value={certTitle}
-                  onChange={(e) => setCertTitle(e.target.value)}
-                  placeholder="e.g. AWS Certified Cloud Practitioner"
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500"
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-700">
+                    Credential Verification URL / Link
+                  </label>
+                  <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                    <Sparkles className="h-3 w-3" /> Auto-fills on Paste / Entry
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={certUrl}
+                    onChange={(e) => handleCertUrlChange(e.target.value)}
+                    onPaste={handleCertUrlPaste}
+                    placeholder="https://coursera.org/verify/... or https://credly.com/..."
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-purple-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleValidateCertificate}
+                    disabled={certValidating || !certUrl.trim()}
+                    className="rounded-xl bg-purple-600 px-3 py-2 text-xs font-bold text-white hover:bg-purple-700 transition disabled:opacity-50 shrink-0 inline-flex items-center gap-1.5 shadow-2xs"
+                    title="Run or re-run AI Extraction"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    <span>{certValidating ? "Analyzing..." : "Auto-Fill"}</span>
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Supports Coursera, Credly, HackerRank, freeCodeCamp, Udemy, and public credential portals.
+                </p>
               </div>
+            ) : (
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Issuing Authority / Provider</label>
-                <input
-                  type="text"
-                  value={certIssuer}
-                  onChange={(e) => setCertIssuer(e.target.value)}
-                  placeholder="e.g. Amazon Web Services / Coursera"
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500"
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-700">
+                    Certificate Document (PDF, PNG, JPG)
+                  </label>
+                  <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                    <Sparkles className="h-3 w-3" /> Auto-fills on Selection
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="file"
+                    accept=".pdf,image/png,image/jpeg,image/webp"
+                    onChange={(e) => handleCertFileChange(e.target.files?.[0] || null)}
+                    className="w-full rounded-xl border border-slate-200 px-3 py-1.5 text-xs text-slate-600 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[11px] file:font-bold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleValidateCertificate}
+                    disabled={certValidating || !certFile}
+                    className="rounded-xl bg-purple-600 px-3 py-2 text-xs font-bold text-white hover:bg-purple-700 transition disabled:opacity-50 shrink-0 inline-flex items-center gap-1.5 shadow-2xs"
+                    title="Run or re-run AI Extraction"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    <span>{certValidating ? "Analyzing..." : "Auto-Fill"}</span>
+                  </button>
+                </div>
               </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Issue Date</label>
-                <input
-                  type="date"
-                  value={certIssueDate}
-                  onChange={(e) => setCertIssueDate(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500"
-                />
+            )}
+
+            {/* Validation Progress Indicator */}
+            {certValidating && (
+              <div className="rounded-xl border border-purple-200 bg-purple-50/70 p-3 text-xs text-purple-900 space-y-1.5 animate-pulse">
+                <div className="flex items-center gap-2 font-bold">
+                  <Clock className="h-3.5 w-3.5 text-purple-600 animate-spin" />
+                  <span>{certValidationStage || "Processing certificate verification pipeline..."}</span>
+                </div>
+                <p className="text-[11px] text-purple-700/80 pl-5.5">
+                  Reading certificate details, extracting fields with Gemini AI, and verifying credentials.
+                </p>
               </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Verification URL / Link</label>
-                <input
-                  type="url"
-                  value={certUrl}
-                  onChange={(e) => setCertUrl(e.target.value)}
-                  placeholder="https://credly.com/..."
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500"
-                />
+            )}
+
+            {/* Verification Result Card */}
+            {certValidationResult && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 pb-2">
+                  <span className="font-black text-slate-900 uppercase tracking-wider text-[10px]">
+                    Analysis Outcome
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {renderVerificationBadge(certValidationResult.verificationStatus)}
+                    {renderOwnershipBadge(certValidationResult.ownershipStatus || certValidationResult.identityMatch)}
+                  </div>
+                </div>
+
+                {certValidationResult.duplicateStatus === "CROSS_STUDENT_DUPLICATE" && (
+                  <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-300 text-[11px] text-amber-900 font-semibold flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
+                    <span>{certValidationResult.duplicateDetails || "This credential appears to be associated with another submission. Additional ownership verification is required."}</span>
+                  </div>
+                )}
+
+                {certValidationResult.aiAnalysis?.summary && (
+                  <p className="text-[11px] text-slate-600 italic">
+                    {certValidationResult.aiAnalysis.summary}
+                  </p>
+                )}
+
+                {certValidationResult.aiAnalysis?.warnings?.length > 0 && (
+                  <div className="space-y-1">
+                    {certValidationResult.aiAnalysis.warnings.map((warn, wIdx) => (
+                      <p key={wIdx} className="text-[10px] text-amber-800 flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3 shrink-0 text-amber-600" />
+                        <span>{warn}</span>
+                      </p>
+                    ))}
+                  </div>
+                )}
               </div>
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsAddCertOpen(false)}
-                  className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-xl bg-purple-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-purple-700"
-                >
-                  Add Credential
-                </button>
+            )}
+
+            {/* Step 1: Guide Card when validation has not been run yet */}
+            {!certValidationResult && !certValidating ? (
+              <div className="rounded-xl border border-dashed border-purple-200 bg-purple-50/40 p-6 text-center text-xs space-y-2">
+                <div className="flex h-10 w-10 mx-auto items-center justify-center rounded-xl bg-purple-100 text-purple-600">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+                <h6 className="font-bold text-slate-800">Auto-Extract Certificate First</h6>
+                <p className="text-[11px] text-slate-500 max-w-sm mx-auto leading-relaxed">
+                  Paste your credential link or select a certificate document above, then click <strong>Auto-Fill</strong>. The system will verify authenticity and extract recipient details before allowing you to review and save.
+                </p>
               </div>
-            </form>
+            ) : (
+              /* Step 2: Form shown after validation for review & manual adjustments */
+              <form onSubmit={handleAddCertificate} className="space-y-3">
+                {/* Ownership Mismatch Banner */}
+                {Boolean(
+                  certValidationResult?.ownershipStatus === "MISMATCH" ||
+                  certValidationResult?.identityMatch === "Mismatch"
+                ) && (
+                  <div className="rounded-xl bg-rose-50 border border-rose-200 p-3 text-xs text-rose-800 font-semibold flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-rose-900">Ownership Mismatch Detected</p>
+                      <p className="text-[11px] text-rose-700 mt-0.5">
+                        Certificate recipient <strong>"{certRecipientName || certValidationResult?.recipientName}"</strong> does not match your registered name <strong>"{user?.fullName || studentProfile?.fullName}"</strong>. Saving is disabled because you cannot attach someone else's certificate.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Duplicate Credential Banner */}
+                {certValidationResult?.duplicateStatus === "CROSS_STUDENT_DUPLICATE" && (
+                  <div className="rounded-xl bg-amber-50 border border-amber-300 p-3 text-xs text-amber-900 font-semibold flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-amber-900">Duplicate Submission Detected</p>
+                      <p className="text-[11px] text-amber-800 mt-0.5">
+                        {certValidationResult.duplicateDetails || "This credential appears to be associated with another student submission. Additional ownership verification is required."}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-slate-700">Certificate Title *</label>
+                    {autoFilledFields.has("title") && (
+                      <span className="text-[10px] font-bold text-purple-600 flex items-center gap-0.5">
+                        <Sparkles className="h-2.5 w-2.5" /> Auto-filled
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    value={certTitle}
+                    onChange={(e) => setCertTitle(e.target.value)}
+                    placeholder="e.g. AWS Certified Solutions Architect"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-slate-700">Issuing Organization</label>
+                      {autoFilledFields.has("issuer") && (
+                        <span className="text-[10px] font-bold text-purple-600 flex items-center gap-0.5">
+                          <Sparkles className="h-2.5 w-2.5" /> Auto-filled
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      value={certIssuer}
+                      onChange={(e) => setCertIssuer(e.target.value)}
+                      placeholder="e.g. Amazon Web Services"
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-purple-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Category</label>
+                    <select
+                      value={certCategory}
+                      onChange={(e) => setCertCategory(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-purple-500 bg-white"
+                    >
+                      <option value="Course Completion">Course Completion</option>
+                      <option value="Technical Certification">Technical Certification</option>
+                      <option value="Internship">Internship</option>
+                      <option value="Workshop">Workshop</option>
+                      <option value="Academic Achievement">Academic Achievement</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-slate-700">Recipient Name</label>
+                      {autoFilledFields.has("recipientName") && (
+                        <span className="text-[10px] font-bold text-purple-600 flex items-center gap-0.5">
+                          <Sparkles className="h-2.5 w-2.5" /> Auto-filled
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      value={certRecipientName}
+                      onChange={(e) => setCertRecipientName(e.target.value)}
+                      placeholder="Recipient name on certificate"
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-purple-500"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-slate-700">Credential ID (Optional)</label>
+                      {autoFilledFields.has("credentialId") && (
+                        <span className="text-[10px] font-bold text-purple-600 flex items-center gap-0.5">
+                          <Sparkles className="h-2.5 w-2.5" /> Auto-filled
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      value={certCredentialId}
+                      onChange={(e) => setCertCredentialId(e.target.value)}
+                      placeholder="e.g. AWS-849201"
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-slate-700">Issue Date</label>
+                      {autoFilledFields.has("issueDate") && (
+                        <span className="text-[10px] font-bold text-purple-600 flex items-center gap-0.5">
+                          <Sparkles className="h-2.5 w-2.5" /> Auto-filled
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      value={certIssueDate}
+                      onChange={(e) => setCertIssueDate(e.target.value)}
+                      placeholder="YYYY-MM-DD or Month Year"
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-purple-500"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-slate-700">Expiration Date (Optional)</label>
+                      {autoFilledFields.has("expirationDate") && (
+                        <span className="text-[10px] font-bold text-purple-600 flex items-center gap-0.5">
+                          <Sparkles className="h-2.5 w-2.5" /> Auto-filled
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      value={certExpirationDate}
+                      onChange={(e) => setCertExpirationDate(e.target.value)}
+                      placeholder="YYYY-MM-DD or Never"
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetCertForm();
+                      setIsAddCertOpen(false);
+                    }}
+                    className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 transition"
+                  >
+                    Cancel
+                  </button>
+                  {(() => {
+                    const isMismatch = certValidationResult?.ownershipStatus === "MISMATCH" || certValidationResult?.identityMatch === "Mismatch";
+                    const isDuplicate = certValidationResult?.duplicateStatus === "CROSS_STUDENT_DUPLICATE";
+                    const canSave = !certValidating && Boolean(certValidationResult) && !isMismatch && !isDuplicate && Boolean(certTitle.trim());
+
+                    return (
+                      <button
+                        type="submit"
+                        disabled={!canSave}
+                        className={`rounded-xl px-4 py-1.5 text-xs font-bold transition shadow-2xs ${
+                          canSave
+                            ? "bg-purple-600 text-white hover:bg-purple-700 active:scale-95 cursor-pointer"
+                            : "bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300 shadow-none"
+                        }`}
+                        title={
+                          !certValidationResult
+                            ? "Please auto-fill / validate the certificate first"
+                            : isMismatch
+                            ? "Cannot save: Recipient name does not match your registered name"
+                            : isDuplicate
+                            ? "Cannot save: Duplicate submission detected"
+                            : "Save certificate"
+                        }
+                      >
+                        Save Certificate
+                      </button>
+                    );
+                  })()}
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

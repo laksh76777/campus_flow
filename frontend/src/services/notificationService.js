@@ -18,6 +18,18 @@ export const markAllNotificationsAsRead = async () => {
   return response.data;
 };
 
+// Delete a single notification
+export const deleteNotification = async (notificationId) => {
+  const response = await api.delete(`/notifications/${notificationId}`);
+  return response.data;
+};
+
+// Clear all notifications for the current student
+export const clearAllNotifications = async () => {
+  const response = await api.delete("/notifications/clear-all");
+  return response.data;
+};
+
 // Preview announcement audience count and recipients
 export const getAnnouncementPreview = async (params) => {
   const response = await api.get("/notifications/announcement-preview", { params });
@@ -51,5 +63,23 @@ export const getSmtpStatus = async () => {
 // Send single controlled test email (Admin)
 export const sendSmtpTestEmail = async (testEmail) => {
   const response = await api.post("/notifications/smtp-test-email", { testEmail });
+  return response.data;
+};
+
+// Get broadcast announcement history (Admin)
+export const getBroadcastHistory = async () => {
+  const response = await api.get("/notifications/broadcast-history");
+  return response.data;
+};
+
+// Delete/recall a broadcast announcement from all student inboxes (Admin)
+export const deleteBroadcastAnnouncement = async (identifier) => {
+  const response = await api.delete(`/notifications/broadcast/${encodeURIComponent(identifier)}`);
+  return response.data;
+};
+
+// Freshstart / purge all broadcast test notifications (Admin)
+export const freshstartNotifications = async () => {
+  const response = await api.post("/notifications/admin/freshstart");
   return response.data;
 };

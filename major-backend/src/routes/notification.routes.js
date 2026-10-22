@@ -4,8 +4,13 @@ import {
     getMyNotifications,
     markNotificationAsRead,
     markAllNotificationsAsRead,
+    deleteNotification,
+    clearAllMyNotifications,
     broadcastAnnouncement,
     getAnnouncementPreview,
+    getBroadcastHistory,
+    deleteBroadcastAnnouncement,
+    freshstartAllNotifications,
     getScheduledReminders,
     triggerReminderWorker,
     getSmtpStatus,
@@ -16,14 +21,19 @@ const router = Router();
 
 router.use(verifyJWT);
 
-// Student & common endpoints
+// Student & common notification endpoints
 router.route("/").get(getMyNotifications);
 router.route("/mark-all-read").patch(markAllNotificationsAsRead);
+router.route("/clear-all").delete(clearAllMyNotifications);
+router.route("/:notificationId").delete(deleteNotification);
 router.route("/:notificationId/read").patch(markNotificationAsRead);
 
 // Admin announcement & reminder endpoints
 router.route("/announcement-preview").get(verifyAdmin, getAnnouncementPreview);
 router.route("/broadcast").post(verifyAdmin, broadcastAnnouncement);
+router.route("/broadcast-history").get(verifyAdmin, getBroadcastHistory);
+router.route("/broadcast/:identifier").delete(verifyAdmin, deleteBroadcastAnnouncement);
+router.route("/admin/freshstart").post(verifyAdmin, freshstartAllNotifications);
 router.route("/scheduled-reminders").get(verifyAdmin, getScheduledReminders);
 router.route("/trigger-reminders").post(verifyAdmin, triggerReminderWorker);
 

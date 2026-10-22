@@ -690,3 +690,104 @@ export const sendBroadcastAnnouncementEmail = async ({
         return { accepted: false, category: sanitized.category, error: sanitized.message };
     }
 };
+
+/**
+ * 4. Password Recovery OTP Email
+ * Dispatches a single-use 6-digit verification code with 5-minute TTL.
+ */
+export const sendPasswordResetOtpEmail = async ({
+    to,
+    recipientName = "CampusFlow User",
+    otp,
+    expiryMinutes = 5
+}) => {
+    try {
+        const recipient = (to || "").trim();
+        if (!validateEmailAddress(recipient)) {
+            return { accepted: false, category: "INVALID_RECIPIENT", error: "Invalid recipient email address" };
+        }
+
+        if (!otp || typeof otp !== "string" || !/^\d{6}$/.test(otp.trim())) {
+            return { accepted: false, category: "INVALID_OTP", error: "Valid 6-digit numeric OTP required" };
+        }
+
+        const mailer = getTransporter();
+        if (!mailer) {
+            return { accepted: false, category: "NOT_CONFIGURED", error: "SMTP server is not configured in system environment variables." };
+        }
+
+        const cleanOtp = otp.trim();
+        const subject = `[CampusFlow] ${cleanOtp} is your Password Reset Verification Code`;
+
+        const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #1e293b; }
+            .container { max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+            .header { background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); color: #ffffff; padding: 28px 24px; text-align: center; }
+            .header h1 { margin: 0 0 6px 0; font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
+            .header p { margin: 0; font-size: 13px; color: #94a3b8; }
+            .content { padding: 32px 28px; }
+            .greeting { font-size: 15px; color: #334155; margin-bottom: 16px; }
+            .intro-text { font-size: 14px; line-height: 1.6; color: #475569; margin-bottom: 24px; }
+            .otp-box { background: #f1f5f9; border: 2px dashed #cbd5e1; border-radius: 14px; padding: 24px; text-align: center; margin: 24px 0; }
+            .otp-code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace; font-size: 36px; font-weight: 900; letter-spacing: 8px; color: #0f172a; margin: 0; }
+            .otp-expiry { font-size: 12px; font-weight: 700; color: #dc2626; margin-top: 10px; display: inline-block; background: #fef2f2; border: 1px solid #fee2e2; padding: 4px 12px; rounded: 9999px; border-radius: 9999px; }
+            .warning-box { background: #fffbeb; border: 1px solid #fef3c7; border-radius: 12px; padding: 14px 16px; margin: 24px 0 16px 0; font-size: 12px; color: #92400e; line-height: 1.5; }
+            .footer { padding: 20px 28px; background: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8; text-align: center; line-height: 1.5; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>CampusFlow Account Security</h1>
+              <p>Placement & Career Management System</p>
+            </div>
+            <div class="content">
+              <div class="greeting">Hello <strong>${recipientName}</strong>,</div>
+              <p class="intro-text">
+                We received a request to reset the password for your CampusFlow account associated with <strong>${recipient}</strong>. Use the following verification code to proceed:
+              </p>
+              
+              <div class="otp-box">
+                <div class="otp-code">${cleanOtp}</div>
+                <div class="otp-expiry">⏳ Expires in ${expiryMinutes} minutes</div>
+              </div>
+
+              <div class="warning-box">
+                <strong>🔒 Security Notice:</strong> Never share this verification code with anyone, including college staff or recruiters. CampusFlow administrators will never ask for your code.
+              </div>
+
+              <p style="font-size: 13px; color: #64748b; line-height: 1.5;">
+                If you did not request a password reset, you can safely ignore this email. Your existing password will remain unchanged and your account is secure.
+              </p>
+            </div>
+            <div class="footer">
+              <div><strong>CampusFlow Authentication Security</strong></div>
+              <div>This is an automated system notification dispatched to your registered address.</div>
+            </div>
+          </div>
+        </body>
+        </html>
+        `;
+
+        const textContent = `CampusFlow Account Security\n\nHello ${recipientName},\n\nYour password reset verification code is: ${cleanOtp}\n\nThis code expires in ${expiryMinutes} minutes.\n\nSecurity Notice: Never share this code with anyone. If you did not request a password reset, please ignore this email.`;
+
+        const info = await mailer.sendMail({
+            from: getSenderAddress(),
+            to: recipient,
+            subject,
+            html: htmlContent,
+            text: textContent
+        });
+
+        return { accepted: true, messageId: info.messageId };
+    } catch (err) {
+        const sanitized = sanitizeSmtpError(err);
+        return { accepted: false, category: sanitized.category, error: sanitized.message };
+    }
+};
+

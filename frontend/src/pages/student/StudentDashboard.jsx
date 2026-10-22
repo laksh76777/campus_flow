@@ -29,6 +29,7 @@ import {
   Users as UsersIcon,
   Lock,
   Phone,
+  Trash2,
 } from "lucide-react";
 
 import StudentSidebar from "../../components/studentDashboard/StudentSidebar";
@@ -37,7 +38,7 @@ import DashboardStats from "../../components/studentDashboard/DashboardStats";
 import RecentDrives from "../../components/studentDashboard/RecentDrives";
 import RecentApplications from "../../components/studentDashboard/RecentApplications";
 import ApplyModal from "../../components/studentDashboard/ApplyModal";
-import ProfileDrawer from "../../components/studentDashboard/ProfileDrawer";
+import ProfileDrawer, { cleanCertificateTitle, getEffectiveCredentialUrl } from "../../components/studentDashboard/ProfileDrawer";
 import ProfileModificationModal from "../../components/studentDashboard/ProfileModificationModal";
 
 import {
@@ -53,6 +54,8 @@ import {
   getMyNotifications,
   markNotificationAsRead,
   markAllNotificationsAsRead,
+  deleteNotification,
+  clearAllNotifications,
 } from "../../services/notificationService";
 import { useAuth } from "../../context/authContextDef";
 import { getResumeViewUrl } from "../../utils/resumeHelper";
@@ -123,7 +126,7 @@ export default function StudentDashboard() {
       return;
     }
     setDrawerSection(section);
-    setDrawerEditing(edit && !isProfileLocked);
+    setDrawerEditing(section === "certificates" ? Boolean(edit) : Boolean(edit && !isProfileLocked));
     setIsProfileDrawerOpen(true);
   };
 
@@ -339,6 +342,34 @@ export default function StudentDashboard() {
       toast.success("All notifications marked as read");
     } catch (err) {
       toast.error("Could not mark notifications read");
+    }
+  };
+
+  const handleDeleteNotification = async (id, e) => {
+    if (e) e.stopPropagation();
+    try {
+      await deleteNotification(id);
+      setNotifications((prev) => prev.filter((n) => n._id !== id));
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+      if (selectedNotification?._id === id) {
+        setSelectedNotification(null);
+      }
+      toast.success("Notification removed");
+    } catch (err) {
+      toast.error("Failed to delete notification");
+    }
+  };
+
+  const handleClearAll = async () => {
+    if (!window.confirm("Are you sure you want to clear all your notifications?")) return;
+    try {
+      await clearAllNotifications();
+      setNotifications([]);
+      setUnreadCount(0);
+      setSelectedNotification(null);
+      toast.success("All notifications cleared");
+    } catch (err) {
+      toast.error("Failed to clear notifications");
     }
   };
 
@@ -1450,13 +1481,21 @@ export default function StudentDashboard() {
                     </p>
                   </div>
 
-                  <button
-                    onClick={() => handleOpenProfileToSection("certificates", true)}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-2xs cursor-pointer"
-                  >
-                    <Plus className="h-3.5 w-3.5 text-blue-600" />
-                    <span>Manage</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleOpenProfileToSection("certificates", true)}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 transition shadow-2xs cursor-pointer"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>+ Add Certificate</span>
+                    </button>
+                    <button
+                      onClick={() => handleOpenProfileToSection("certificates", true)}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-2xs cursor-pointer"
+                    >
+                      <span>Manage</span>
+                    </button>
+                  </div>
                 </div>
 
                 {certificates.length === 0 ? (
@@ -1470,10 +1509,10 @@ export default function StudentDashboard() {
                     </p>
                     <button
                       onClick={() => handleOpenProfileToSection("certificates", true)}
-                      className="mt-3 inline-flex items-center gap-1 rounded-xl bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100 transition border border-blue-100 cursor-pointer"
+                      className="mt-3 inline-flex items-center gap-1 rounded-xl bg-blue-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-blue-700 transition shadow-2xs cursor-pointer"
                     >
                       <Plus className="h-3.5 w-3.5" />
-                      <span>Add Credentials</span>
+                      <span>+ Add Credentials</span>
                     </button>
                   </div>
                 ) : (
@@ -1488,13 +1527,31 @@ export default function StudentDashboard() {
                             <Award className="h-4 w-4" />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <h5 className="font-bold text-xs text-slate-900 leading-tight truncate">
-                              {cert.title}
-                            </h5>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h5 className="font-bold text-xs text-slate-900 leading-tight truncate">
+                                {cleanCertificateTitle(cert.title, cert.issuer)}
+                              </h5>
+                              {cert.verificationStatus === "Verified" ? (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  <CheckCircle2 className="h-2.5 w-2.5 text-emerald-600" />
+                                  <span>Verified</span>
+                                </span>
+                              ) : cert.verificationStatus === "Needs Review" ? (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200">
+                                  <Clock className="h-2.5 w-2.5 text-amber-600" />
+                                  <span>Needs Review</span>
+                                </span>
+                              ) : null}
+                            </div>
                             <p className="text-[11px] font-medium text-slate-500 mt-0.5">
                               {cert.issuer || "Issuing Body"}
                               {cert.issueDate ? ` • ${cert.issueDate}` : ""}
                             </p>
+                            {(cert.recipientName || cert.extractedRecipientName) && (
+                              <p className="text-[11px] text-slate-600 mt-0.5">
+                                Recipient: <strong className="text-slate-800">{cert.recipientName || cert.extractedRecipientName}</strong>
+                              </p>
+                            )}
                             {cert.credentialId && (
                               <span className="inline-block mt-1 font-mono text-[10px] text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
                                 ID: {cert.credentialId}
@@ -1503,27 +1560,37 @@ export default function StudentDashboard() {
                           </div>
                         </div>
 
-                        {cert.certificateUrl ? (
-                          <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                            <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
-                              <ShieldCheck className="h-3.5 w-3.5" />
-                              <span>Verified Link</span>
-                            </span>
-                            <a
-                              href={cert.certificateUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline"
-                            >
-                              <span>Verify on Site</span>
-                              <ExternalLink className="h-3 w-3" />
-                            </a>
-                          </div>
-                        ) : (
-                          <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-400 italic">
-                            No verification URL attached
+                        {cert.duplicateStatus === "CROSS_STUDENT_DUPLICATE" && (
+                          <div className="p-2 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-900 font-medium flex items-start gap-1.5">
+                            <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
+                            <span>This credential appears to be associated with another submission. Additional ownership verification is required.</span>
                           </div>
                         )}
+
+                        {(() => {
+                          const credUrl = getEffectiveCredentialUrl(cert);
+                          return credUrl ? (
+                            <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                              <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
+                                <ShieldCheck className="h-3.5 w-3.5" />
+                                <span>{cert.verificationStatus || "Credential"}</span>
+                              </span>
+                              <a
+                                href={credUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline"
+                              >
+                                <span>[View Credential]</span>
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                            </div>
+                          ) : (
+                            <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-400 italic">
+                              No credential URL attached
+                            </div>
+                          );
+                        })()}
                       </div>
                     ))}
                   </div>
@@ -1587,6 +1654,17 @@ export default function StudentDashboard() {
                     >
                       <Check className="h-3.5 w-3.5 text-slate-500" />
                       <span>Mark all read</span>
+                    </button>
+                  )}
+
+                  {notifications.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleClearAll}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100 transition"
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                      <span>Clear all</span>
                     </button>
                   )}
 
@@ -1705,10 +1783,20 @@ export default function StudentDashboard() {
                               {formatRelativeTime(notif.createdAt)}
                             </p>
                           </div>
-                          <span className="text-xs font-bold text-blue-600 sm:mt-2 group-hover:translate-x-0.5 transition-transform inline-flex items-center gap-1">
-                            <span>Read message</span>
-                            <ArrowRight className="h-3 w-3" />
-                          </span>
+                          <div className="flex items-center gap-2 sm:mt-2">
+                            <button
+                              type="button"
+                              onClick={(e) => handleDeleteNotification(notif._id, e)}
+                              className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                              title="Delete notification"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                            <span className="text-xs font-bold text-blue-600 group-hover:translate-x-0.5 transition-transform inline-flex items-center gap-1">
+                              <span>Read message</span>
+                              <ArrowRight className="h-3 w-3" />
+                            </span>
+                          </div>
                         </div>
                       </div>
                     );
@@ -1872,25 +1960,35 @@ export default function StudentDashboard() {
             )}
 
             {/* Modal Actions */}
-            <div className="mt-6 flex items-center justify-end gap-2.5">
+            <div className="mt-6 flex items-center justify-between">
               <button
                 type="button"
-                onClick={() => setSelectedNotification(null)}
-                className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
+                onClick={() => handleDeleteNotification(selectedNotification._id)}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 transition"
               >
-                Close
+                <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                <span>Delete</span>
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedNotification(null);
-                  handleTabChange("drives");
-                }}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-xs font-bold transition shadow-xs"
-              >
-                <span>Explore Drives</span>
-                <ArrowRight className="h-3 w-3" />
-              </button>
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setSelectedNotification(null)}
+                  className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedNotification(null);
+                    handleTabChange("drives");
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-xs font-bold transition shadow-xs"
+                >
+                  <span>Explore Drives</span>
+                  <ArrowRight className="h-3 w-3" />
+                </button>
+              </div>
             </div>
           </div>
         </div>

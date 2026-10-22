@@ -599,7 +599,10 @@ export default function ManageDrives({
                     {onDeleteDrive && (
                       <button
                         type="button"
-                        onClick={() => onDeleteDrive(d._id, compName, d.jobTitle)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteDrive(d._id, compName, d.jobTitle);
+                        }}
                         className="rounded-lg p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition cursor-pointer"
                         title="Delete Placement Drive"
                       >

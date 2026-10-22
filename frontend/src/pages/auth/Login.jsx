@@ -265,9 +265,12 @@ export default function Login() {
             <div>
               <div className="mb-1 flex items-center justify-between">
                 <label className="text-[11px] font-semibold text-slate-700">Password</label>
-                <span className="text-[10px] font-medium text-orange-600 hover:text-orange-700 hover:underline cursor-pointer">
+                <Link
+                  to={`/forgot-password?role=${role}`}
+                  className="text-[10px] font-medium text-orange-600 hover:text-orange-700 hover:underline cursor-pointer"
+                >
                   Forgot password?
-                </span>
+                </Link>
               </div>
               <div className="relative">
                 <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">

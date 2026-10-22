@@ -21,6 +21,9 @@ import {
   Layers,
   FolderDown,
   HelpCircle,
+  Archive,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { getResumeViewUrl } from "../../utils/resumeHelper";
@@ -46,6 +49,7 @@ export default function ManageApplications({
   const [selectedStudentForDetail, setSelectedStudentForDetail] = useState(null);
   const [viewMode, setViewMode] = useState("company"); // "company" | "list"
   const [isCompanyExportModalOpen, setIsCompanyExportModalOpen] = useState(false);
+  const [expandedArchivedCompany, setExpandedArchivedCompany] = useState({});
 
   // Applications filtered only by Drive (used for calculating tab counts and exporting)
   const driveApplications = useMemo(() => {
@@ -58,17 +62,35 @@ export default function ManageApplications({
     });
   }, [applications, selectedDriveId]);
 
-  // Tab counts for the current drive
+  // Partition into Active and Archived applications (from deleted/archived drives)
+  const { activeDriveApplications, archivedDriveApplications } = useMemo(() => {
+    const active = [];
+    const archived = [];
+    driveApplications.forEach((app) => {
+      const isArchived =
+        app.isArchived === true ||
+        app.placementDrive?.isDeleted === true ||
+        !app.placementDrive;
+      if (isArchived) {
+        archived.push(app);
+      } else {
+        active.push(app);
+      }
+    });
+    return { activeDriveApplications: active, archivedDriveApplications: archived };
+  }, [driveApplications]);
+
+  // Tab counts for the active candidate pipeline
   const countsByStatus = useMemo(() => {
     const counts = {
-      all: driveApplications.length,
+      all: activeDriveApplications.length,
       applied: 0,
       shortlisted: 0,
       interview: 0,
       selected: 0,
       rejected: 0,
     };
-    driveApplications.forEach((app) => {
+    activeDriveApplications.forEach((app) => {
       if (counts[app.status] !== undefined) {
         counts[app.status]++;
       } else if (app.status === "offer_received" || app.status === "offer_accepted") {
@@ -76,44 +98,54 @@ export default function ManageApplications({
       }
     });
     return counts;
-  }, [driveApplications]);
+  }, [activeDriveApplications]);
 
-  // Filter applications by drive, search term, and status
-  const filteredApplications = useMemo(() => {
-    return driveApplications.filter((app) => {
-      // Filter by Status
-      if (statusFilter !== "all") {
-        if (statusFilter === "selected") {
-          if (!["selected", "offer_received", "offer_accepted"].includes(app.status)) {
-            return false;
-          }
-        } else if (app.status !== statusFilter) {
+  // Helper matcher for status and search filters
+  const matchesSearchAndStatus = (app) => {
+    // Filter by Status
+    if (statusFilter !== "all") {
+      if (statusFilter === "selected") {
+        if (!["selected", "offer_received", "offer_accepted"].includes(app.status)) {
           return false;
         }
+      } else if (app.status !== statusFilter) {
+        return false;
       }
+    }
 
-      // Search query
-      const student = app.student || {};
-      const user = student.user || {};
-      const fullName = user.fullName || student.fullName || "";
-      const email = user.email || student.email || "";
-      const enrollmentNo = student.enrollmentNumber || "";
-      const branch = student.branch || student.department || "";
+    if (!searchTerm.trim()) return true;
 
-      const query = searchTerm.toLowerCase();
-      return (
-        fullName.toLowerCase().includes(query) ||
-        email.toLowerCase().includes(query) ||
-        enrollmentNo.toLowerCase().includes(query) ||
-        branch.toLowerCase().includes(query)
-      );
-    });
-  }, [driveApplications, statusFilter, searchTerm]);
+    // Search query
+    const student = app.student || {};
+    const user = student.user || {};
+    const fullName = user.fullName || student.fullName || "";
+    const email = user.email || student.email || "";
+    const enrollmentNo = student.enrollmentNumber || "";
+    const branch = student.branch || student.department || "";
 
-  // Group applications by Company & Placement Drive
+    const query = searchTerm.toLowerCase();
+    return (
+      fullName.toLowerCase().includes(query) ||
+      email.toLowerCase().includes(query) ||
+      enrollmentNo.toLowerCase().includes(query) ||
+      branch.toLowerCase().includes(query)
+    );
+  };
+
+  // Filtered active applications (displayed outside in main view)
+  const filteredActiveApplications = useMemo(() => {
+    return activeDriveApplications.filter(matchesSearchAndStatus);
+  }, [activeDriveApplications, statusFilter, searchTerm]);
+
+  // Filtered archived applications (stored and revealed only on company click)
+  const filteredArchivedApplications = useMemo(() => {
+    return archivedDriveApplications.filter(matchesSearchAndStatus);
+  }, [archivedDriveApplications, statusFilter, searchTerm]);
+
+  // Group active applications by Company & Placement Drive
   const applicationsByCompany = useMemo(() => {
     const map = {};
-    filteredApplications.forEach((app) => {
+    filteredActiveApplications.forEach((app) => {
       const drive = app.placementDrive || {};
       const driveId = drive._id || "general";
       const compName =
@@ -122,6 +154,7 @@ export default function ManageApplications({
       const key = `${compName}_${driveId}`;
       if (!map[key]) {
         map[key] = {
+          key,
           driveId,
           companyName: compName,
           jobTitle: drive.jobTitle || "Role",
@@ -149,7 +182,53 @@ export default function ManageApplications({
       }
     });
     return Object.values(map).sort((a, b) => a.companyName.localeCompare(b.companyName));
-  }, [filteredApplications]);
+  }, [filteredActiveApplications]);
+
+  // Group archived applications by Company Name (revealed upon clicking company card)
+  const archivedApplicationsByCompany = useMemo(() => {
+    const map = {};
+    filteredArchivedApplications.forEach((app) => {
+      const drive = app.placementDrive || {};
+      const snapshot = app.archivedDriveSnapshot || {};
+      const driveId = drive._id || snapshot.driveId || "archived_general";
+      const compName =
+        snapshot.companyName ||
+        (typeof drive.company === "object" ? drive.company?.companyName : drive.companyName) ||
+        "Corporate Recruiter";
+      const jobTitle = snapshot.jobTitle || drive.jobTitle || "Recruitment Role";
+      const pkg = snapshot.package || drive.package;
+      const key = `${compName}_${driveId}`;
+      if (!map[key]) {
+        map[key] = {
+          key,
+          driveId,
+          companyName: compName,
+          jobTitle,
+          package: pkg,
+          location: drive.location,
+          drive,
+          applications: [],
+          counts: {
+            all: 0,
+            applied: 0,
+            shortlisted: 0,
+            interview: 0,
+            selected: 0,
+            rejected: 0,
+          },
+        };
+      }
+      map[key].applications.push(app);
+      map[key].counts.all++;
+      const s = app.status;
+      if (s in map[key].counts) {
+        map[key].counts[s]++;
+      } else if (s === "offer_received" || s === "offer_accepted") {
+        map[key].counts.selected++;
+      }
+    });
+    return Object.values(map).sort((a, b) => a.companyName.localeCompare(b.companyName));
+  }, [filteredArchivedApplications]);
 
   // Reusable CSV/Excel Exporter for any list of candidate applications
   const exportApplicationsToCsv = (appsToExport, label, targetStatus = "all") => {
@@ -679,7 +758,7 @@ export default function ManageApplications({
               Student Applicant Review & Shortlisting
             </h2>
             <span className="rounded-full bg-amber-50 border border-amber-200/80 px-2.5 py-0.5 text-xs font-bold text-amber-800">
-              {filteredApplications.length} Candidates
+              {filteredActiveApplications.length} Candidates
             </span>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
@@ -823,12 +902,12 @@ export default function ManageApplications({
         </div>
       </div>
 
-      {/* Applications Display (Company-Wise Grouped or Flat List) */}
-      {filteredApplications.length === 0 ? (
+      {/* Applications Display (Company-Wise Grouped or Flat List for Active Drives) */}
+      {filteredActiveApplications.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-12 text-center">
           <FileCheck2 className="mx-auto h-12 w-12 text-slate-300" />
           <h3 className="mt-3 text-sm font-bold text-slate-800">
-            No {statusFilter === "all" ? "" : statusFilter} applications match your criteria
+            No active {statusFilter === "all" ? "" : statusFilter} applications match your criteria
           </h3>
           <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
             {statusFilter === "shortlisted"
@@ -837,7 +916,7 @@ export default function ManageApplications({
           </p>
         </div>
       ) : viewMode === "company" ? (
-        /* Company-Wise Organized View */
+        /* Active Drives: Company-Wise Organized View */
         <div className="space-y-6">
           {applicationsByCompany.map((group) => {
             return (
@@ -928,9 +1007,126 @@ export default function ManageApplications({
           })}
         </div>
       ) : (
-        /* Flat List View */
+        /* Flat List View for Active Applications */
         <div className="space-y-3.5">
-          {filteredApplications.map(renderApplicantCard)}
+          {filteredActiveApplications.map(renderApplicantCard)}
+        </div>
+      )}
+
+      {/* Archived Placement Drives & Candidate History Section */}
+      {archivedApplicationsByCompany.length > 0 && (
+        <div className="mt-10 pt-6 border-t-2 border-slate-200/80 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-amber-50 text-amber-700 border border-amber-200">
+                <Archive className="h-4 w-4" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+                  <span>Archived Placement Drives & Candidates</span>
+                  <span className="rounded-full bg-amber-100/80 text-amber-900 px-2.5 py-0.5 text-[11px] font-bold border border-amber-200">
+                    {archivedApplicationsByCompany.length} {archivedApplicationsByCompany.length === 1 ? "Company" : "Companies"}
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Candidates from deleted recruitment drives are archived under each company name. Click a company to unfold and view candidate names.
+                </p>
+              </div>
+            </div>
+
+            <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-xl self-start sm:self-auto">
+              {filteredArchivedApplications.length} Total Archived Applicants
+            </span>
+          </div>
+
+          <div className="space-y-3">
+            {archivedApplicationsByCompany.map((group) => {
+              const isExpanded = !!expandedArchivedCompany[group.key];
+              return (
+                <div
+                  key={group.key}
+                  className="rounded-2xl border border-slate-200/90 bg-white overflow-hidden shadow-xs hover:border-amber-300 transition"
+                >
+                  {/* Clickable Header: Company Name, Role, Package, and Candidate Count */}
+                  <div
+                    onClick={() =>
+                      setExpandedArchivedCompany((prev) => ({
+                        ...prev,
+                        [group.key]: !prev[group.key],
+                      }))
+                    }
+                    className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer bg-slate-50/60 hover:bg-amber-50/30 transition select-none"
+                  >
+                    <div className="flex items-center gap-3.5">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-slate-700 to-slate-900 text-white font-black text-lg shadow-xs">
+                        {group.companyName.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="text-base font-extrabold text-slate-900">
+                            {group.companyName}
+                          </h4>
+                          <span className="rounded-md bg-slate-200/70 px-2 py-0.5 text-xs font-semibold text-slate-700">
+                            {group.jobTitle}
+                          </span>
+                          {group.package && (
+                            <span className="rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-xs font-bold text-emerald-800">
+                              ₹{group.package} LPA
+                            </span>
+                          )}
+                          <span className="rounded-md bg-amber-50 border border-amber-200 px-2 py-0.5 text-[10px] font-bold text-amber-800 flex items-center gap-1">
+                            <Archive className="h-3 w-3 text-amber-600" />
+                            Archived Drive
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Click to {isExpanded ? "collapse" : "view"} all candidate names and application records for {group.companyName}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 shrink-0 self-end sm:self-center">
+                      <span className="rounded-full bg-slate-100 border border-slate-200 px-3 py-1 text-xs font-bold text-slate-700">
+                        {group.applications.length} Candidates
+                      </span>
+                      <div className="p-1.5 rounded-xl bg-white border border-slate-200 text-slate-600 shadow-xs">
+                        {isExpanded ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Unfolded Candidates Roster */}
+                  {isExpanded && (
+                    <div className="p-4 sm:p-5 border-t border-slate-200 bg-slate-50/20 space-y-3 animate-in fade-in duration-150">
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2">
+                        <span className="text-xs font-bold text-slate-700">
+                          Archived Candidates for {group.companyName} ({group.applications.length})
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            exportApplicationsToCsv(group.applications, `${group.companyName}_Archived`);
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 transition shadow-xs cursor-pointer"
+                        >
+                          <Download className="h-3.5 w-3.5 text-slate-500" />
+                          <span>Export Candidate List</span>
+                        </button>
+                      </div>
+                      <div className="space-y-3">
+                        {group.applications.map(renderApplicantCard)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

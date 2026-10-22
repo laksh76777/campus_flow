@@ -9,11 +9,14 @@ import {
   Clock,
   XCircle,
   MessageSquare,
+  Trash2,
 } from "lucide-react";
 import {
   getMyNotifications,
   markNotificationAsRead,
   markAllNotificationsAsRead,
+  deleteNotification,
+  clearAllNotifications,
 } from "../../services/notificationService";
 
 export default function StudentNavbar({
@@ -100,6 +103,29 @@ export default function StudentNavbar({
       onRefreshNotifications?.();
     } catch (err) {
       console.error("Failed to mark notification read:", err);
+    }
+  };
+
+  const handleDeleteOne = async (e, id) => {
+    e.stopPropagation();
+    try {
+      await deleteNotification(id);
+      setNotifications((prev) => prev.filter((n) => n._id !== id));
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+      onRefreshNotifications?.();
+    } catch (err) {
+      console.error("Failed to delete notification:", err);
+    }
+  };
+
+  const handleClearAll = async () => {
+    try {
+      await clearAllNotifications();
+      setNotifications([]);
+      setUnreadCount(0);
+      onRefreshNotifications?.();
+    } catch (err) {
+      console.error("Failed to clear notifications:", err);
     }
   };
 
@@ -229,14 +255,25 @@ export default function StudentNavbar({
                     </span>
                   )}
                 </div>
-                {unreadCount > 0 && (
-                  <button
-                    onClick={handleMarkAllRead}
-                    className="text-[11px] font-semibold text-blue-600 hover:underline cursor-pointer"
-                  >
-                    Mark all read
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={handleMarkAllRead}
+                      className="text-[11px] font-semibold text-blue-600 hover:underline cursor-pointer"
+                    >
+                      Mark all read
+                    </button>
+                  )}
+                  {notifications.length > 0 && (
+                    <button
+                      onClick={handleClearAll}
+                      className="text-[11px] font-semibold text-rose-600 hover:underline cursor-pointer inline-flex items-center gap-1"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      Clear all
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="mt-2 divide-y divide-slate-100 max-h-80 overflow-y-auto">
@@ -272,9 +309,19 @@ export default function StudentNavbar({
                             >
                               {n.title}
                             </p>
-                            <span className="text-[10px] text-slate-400 whitespace-nowrap shrink-0">
-                              {formatTimeAgo(n.createdAt)}
-                            </span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-[10px] text-slate-400 whitespace-nowrap">
+                                {formatTimeAgo(n.createdAt)}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => handleDeleteOne(e, n._id)}
+                                className="text-slate-300 hover:text-rose-600 p-0.5 rounded hover:bg-rose-50 transition"
+                                title="Delete notification"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
                           </div>
 
                           <p className="text-xs text-slate-600 mt-1 leading-relaxed">

@@ -953,3 +953,228 @@ If an issue occurs post-deployment:
 **Release Decision:**
 `Ready for deployment configuration`
 
+---
+
+## 10. Password Recovery & Reset Workflow Implementation Audit
+
+**Date:** 2026-10-22  
+**Feature:** Secure Email OTP Password Reset Workflow (`/forgot-password`)  
+**Status:** **Fully Verified & Production Ready**
+
+### 1. Root Cause of Previous Failure
+* **Frontend:** In `frontend/src/pages/auth/Login.jsx`, the "Forgot password?" UI element was rendered as an unclickable, static `<span>` with no `onClick` handler, no state, and no route in `App.jsx`.
+* **Backend:** In `user.routes.js` and `user.controllers.js`, no public endpoints existed for requesting an OTP, verifying an OTP, or resetting a password (`changeCurrentPassword` only supported authenticated sessions with existing passwords).
+* **Database & Mailer:** No Mongoose model existed to track recovery challenges, OTP hashes, attempt limits, or reset tokens. `mailService.js` had no password reset email template.
+
+### 2. Files Modified and Created
+* **Created:**
+  * `major-backend/src/models/passwordReset.model.js`: Challenge schema storing `user`, `email`, `otpHash` (SHA-256), `resetTokenHash` (SHA-256), `expiresAt`, `resetTokenExpiresAt`, `attempts`, `resendCooldownUntil`, and `status`. Includes TTL index for auto-pruning.
+  * `major-backend/src/controllers/authReset.controller.js`: Implements `requestPasswordReset`, `verifyResetOtp`, and `resetPasswordWithToken`.
+  * `major-backend/tests/password_reset_flow.test.js`: Comprehensive 21-test regression suite for the entire lifecycle.
+  * `frontend/src/pages/auth/ForgotPassword.jsx`: Multi-step responsive UI (Email Entry → 6-digit OTP Input with timer & resend cooldown → Password Reset Form with checklist → Success).
+* **Modified:**
+  * `major-backend/src/utils/mailService.js`: Added `sendPasswordResetOtpEmail` with responsive HTML and plain-text fallback.
+  * `major-backend/src/middlewares/security.middleware.js`: Added `passwordResetRequestLimiter` (8 req / 15m) and `passwordResetActionLimiter` (20 req / 15m).
+  * `major-backend/src/routes/user.routes.js` & `major-backend/src/routes/admin.routes.js`: Mounted public rate-limited endpoints `/forgot-password`, `/verify-reset-otp`, and `/reset-password`.
+  * `frontend/src/services/authService.js`: Added API client methods `requestPasswordResetOtp`, `verifyPasswordResetOtp`, and `completePasswordReset`.
+  * `frontend/src/App.jsx`: Registered lazy-loaded `/forgot-password` route.
+  * `frontend/src/pages/auth/Login.jsx`: Turned "Forgot password?" into an active Link to `/forgot-password?role=${role}`.
+  * `frontend/src/components/admin/ManageApplications.jsx`: Fixed active application count reference.
+
+### 3. Architecture & Security Specifications
+* **Account Enumeration Protection:** Both registered and unregistered emails receive identical public responses (`"If an account matches this email, a verification code will be sent."`). Unregistered emails generate no OTP, no email, and no database record.
+* **Cryptographic OTP Generation:** Uses `crypto.randomInt(100000, 1000000)` to generate uniform 6-digit integers. OTPs are never stored in plaintext (SHA-256 hashed) and never returned in API responses.
+* **Verification Security:** Timing-safe hash comparison via `crypto.timingSafeEqual`. Failed attempt limit capped at 5 before challenge invalidation (`EXHAUSTED`). Challenge expires strictly after 5 minutes.
+* **Reset Authorization Protection:** Once verified, an opaque single-use 64-character token (`crypto.randomBytes(32).toString("hex")`) is returned. Its SHA-256 hash is bound to the verified challenge with a 10-minute validity. Stored only in React component memory (never in `localStorage`).
+* **Concurrency-Safe Atomic Consumption:** Challenge is consumed using `findOneAndUpdate({ status: "VERIFIED" }, { $set: { status: "CONSUMED", resetTokenHash: null } })`, preventing concurrent double-spends.
+* **Session Invalidation:** On password update, `user.refreshToken = null` is atomically saved to terminate all refresh token sessions across other devices. Stateless JWT access tokens expire with their short TTL.
+* **Account Isolation:** Updates ONLY `user.password` of the authenticated account. No other profiles, roles, or users are modified.
+
+### 4. Verification & Automated Test Results
+* **Backend Test Suite (`npm test`):**
+  * `major-backend/tests/password_reset_flow.test.js`: **21 passed, 0 failed**
+  * Full test suite across 39 test files: **68 passed, 0 failed, 0 errors** (duration: 22.9s)
+* **Frontend Lint (`npm run lint`):** **0 errors** (110 existing warnings)
+* **Frontend Production Build (`npm run build`):** **Passed** (`dist/assets/ForgotPassword-Df_zitvl.js` bundled cleanly in 1.09s).
+* **Git Status:** **Working tree clean of unauthorized commits/pushes.** No commits or pushes made to remote repository.
+
+---
+
+## 11. Student Certificate Management Upgrade with AI-Assisted Verification Audit (2026-10-22)
+
+### 1. Executive Summary
+The existing student certificate feature in CampusFlow V2 was upgraded into an enterprise-grade verification pipeline. The implementation preserves all existing student profiles, manual entry capabilities, and dashboard layouts while introducing multi-layer URL/document verification, SSRF defense, student identity matching, official issuer verification, Gemini AI analysis (with graceful fallback), duplicate detection, and TPO administrative review.
+
+### 2. File Artifacts & Modifications
+* **Created:**
+  * `major-backend/src/services/certificateVerification.service.js`: Multi-layered verification engine providing SSRF-safe URL fetching with DNS resolution, known issuer verification catalog (Coursera, Credly, HackerRank, freeCodeCamp, Udemy, etc.), text & HTML metadata extraction, student identity matching (`Match`, `Possible Match`, `Mismatch`, `Insufficient Information`), Gemini AI structured extraction, and authoritative status rules.
+  * `major-backend/tests/certificate_verification.test.js`: 17 comprehensive unit & integration tests covering SSRF blocks (loopback, private subnets, cloud metadata 169.254.169.254), redirect protection, identity matching, known issuer detection, and graceful AI fallbacks.
+* **Modified:**
+  * `major-backend/src/models/studentProfile.model.js`: Extended the `certificates` subdocument schema with non-breaking fields: `recipientName`, `expirationDate`, `category`, `verificationStatus`, `verificationMethod`, `identityMatch`, `officialVerificationUrl`, `documentUrl`, `documentPublicId`, `aiAnalysis`, `evidence`, and administrative review audit fields (`reviewNotes`, `reviewedBy`, `reviewedByName`, `reviewedAt`).
+  * `major-backend/src/controllers/studentProfile.controller.js`: Implemented `validateCertificate` (rate-limited validation pipeline without premature saving), `addCertificate` (with duplicate prevention and student privilege escalation guards), `deleteCertificate` (with Cloudinary cleanup), and `reviewCertificate` (TPO Admin review with student notification).
+  * `major-backend/src/middlewares/security.middleware.js`: Added `certificateValidationLimiter` (20 requests per 15 minutes per IP).
+  * `major-backend/src/routes/studentProfile.routes.js`: Mounted `/certificates/validate`, `/certificates`, `/certificates/:certId`, and `/certificates/:studentId/:certId/review`.
+  * `frontend/src/services/studentService.js`: Added client methods `validateCertificate`, `addCertificate`, `deleteCertificate`, and `reviewCertificate`.
+  * `frontend/src/components/studentDashboard/ProfileDrawer.jsx`: Upgraded Add Certificate modal with URL/file upload options, prominent **"Validate Certificate"** action with real-time stage progress, structured analysis outcome card, and status badges (`Verified`, `Needs Review`, `Unable to Verify`, `Rejected`) across profile overview and dedicated certificate cards.
+  * `frontend/src/components/admin/StudentDetailModal.jsx`: Added certificate verification status badges and inline Approve/Reject action buttons for TPO administrators.
+
+### 3. Architecture & Security Specifications
+* **SSRF Protection (OWASP Top 10):** Strict DNS pre-resolution via `dns.promises.lookup`. Blocks loopback (`127.0.0.0/8`, `::1`), private networks (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), link-local and cloud metadata endpoints (`169.254.0.0/16`), carrier NAT (`100.64.0.0/10`), and non-HTTP/S protocols (`file:`, `ftp:`, `javascript:`). Manual redirect inspection re-validates the destination IP on every hop (max 3 redirects).
+* **Document & Payload Safeguards:** Maximum response payload capped at 5 MB; connection timeout enforced at 8000ms. Uploaded documents are restricted to PDF and standard image formats (`image/jpeg`, `image/png`, `image/webp`).
+* **Authoritative Status Rules:** Only backend logic confirming official issuer records with exact student identity match may assign `Verified` (`OFFICIAL_ISSUER`). AI output alone cannot set a certificate to `Verified` (assigned `Needs Review` if unconfirmed by an official API).
+* **Identity Matching:** Compares normalized extracted recipient name against the authenticated student's registered name. Strips honorifics and punctuation. Returns `Match`, `Possible Match`, `Mismatch`, or `Insufficient Information`.
+* **Privilege Escalation Defense:** Students submitting certificates directly cannot override `verificationStatus` to `Verified`. Non-official submissions are safely downgraded to `Needs Review` or `Unable to Verify`.
+* **Gemini AI Integration & Non-Blocking Fallback:** Uses `process.env.GEMINI_API_KEY` on the backend only (never exposed to frontend). Treats all document content as untrusted input. In case of quota exhaustion, network failure, or missing API key, the pipeline falls back gracefully to deterministic rule-based analysis without interrupting user workflows.
+
+### 4. Verification & Automated Test Results
+* **Backend Test Suite (`npm test`):**
+  * `major-backend/tests/certificate_verification.test.js`: **17 passed, 0 failed**
+  * `major-backend/tests/password_reset_flow.test.js`: **21 passed, 0 failed**
+  * Full test suite across 40 test files: **85 passed, 0 failed, 0 errors** (duration: 11.6s)
+* **Frontend Lint (`npm run lint`):** **0 errors** (109 existing warnings)
+* **Frontend Production Build (`npm run build`):** **Passed** (built in 1.22s, 1931 modules transformed with 0 errors).
+* **Git Working Tree:** Preserved without unauthorized commits or pushes.
+
+---
+
+## 12. Fix Broken Certificate URL/PDF Processing, Multimodal AI Extraction, Title Sanitization, and Automatic Saving Audit (2026-10-22)
+
+### 1. Executive Summary & Root Cause Analysis
+Following initial deployment of the certificate verification engine, students reported several usability and processing issues:
+1. **Raw URL Displayed as Certificate Title:** When a student pasted a URL or when AI extraction was pending/inconclusive, raw URLs (e.g. `https://coursera.org/verify/XYZ`) were saved or displayed directly as the certificate title in profile cards and dashboard tables.
+2. **Unprocessed PDF Streams & Nested Documents:** URLs linking directly to binary PDFs or HTML landing pages that embedded PDFs (via `<a href="...pdf">`, `<iframe>`, or `<embed>`) failed to extract textual metadata because standard HTML regex parsing failed on binary streams.
+3. **Login Walls & CAPTCHAs Misidentified:** Webpages protected behind login screens, Cloudflare CAPTCHAs, or 404 error pages returned generic errors or hallucinated title fields.
+4. **Manual Re-entry Required:** Submitting a certificate required validation followed by manual re-typing and clicking "Add Certificate," leading to friction and inconsistent data entry.
+
+### 2. Implemented Architecture & Solutions
+1. **Binary PDF Extraction & Multimodal Gemini Support:**
+   - Integrated `pdf-parse` in Node.js ESM to extract real plain-text strings directly from binary PDF streams.
+   - Enhanced `analyzeWithGemini` to support multimodal inspection: when a PDF or image is uploaded or fetched, inline base64 content (`inlineData: { mimeType, data }`) is provided directly to Gemini multimodal models alongside extracted plain-text and strict JSON schema prompts.
+2. **Nested Certificate Document Crawler:**
+   - When a submitted URL is an HTML webpage, the pipeline inspects `<a href="...pdf">`, `<iframe src="...pdf">`, and `<embed src="...pdf">` tags. It safely resolves relative URLs, runs SSRF security validations, and fetches the embedded PDF document for full-text and visual inspection.
+3. **Login Wall & Error Page Detection:**
+   - Implemented `isLoginPageOrErrorPage` heuristics detecting password fields, SSO authentication forms, Cloudflare challenges, and 404/Not Found states, returning actionable alerts to students rather than failing silently.
+4. **Robust Title Sanitization (`cleanCertificateTitle`):**
+   - Strips protocol prefixes (`http://`, `https://`, `www.`), paths, query strings, and file extensions. Formats titles cleanly to `${issuer} Certificate` or human-readable names.
+   - Guaranteed across frontend `ProfileDrawer.jsx` and `StudentDashboard.jsx`.
+5. **Automatic Idempotent Persistence (`persistValidatedCertificate`):**
+   - The validation endpoint (`POST /api/v1/studentprofile/certificates/validate`) automatically persists the certificate into `studentProfile.certificates` in MongoDB.
+   - Employs idempotent upsert matching by `credentialId`, normalized `certificateUrl`, or `title + issuer` to avoid duplicate records while allowing incremental student edits.
+6. **Frontend Real-Time Auto-Fill:**
+   - In `ProfileDrawer.jsx`, pasting or typing a URL debounces (150ms on paste, 700ms on typing) and triggers auto-validation.
+   - Selecting a PDF or image file triggers immediate auto-validation, pre-populating Title, Issuing Organization, Recipient Name, Issue Date, Expiration Date, Credential ID, and Category without manual typing.
+
+### 3. File Artifacts & Modifications
+* **Modified Backend Files:**
+  * `major-backend/src/services/certificateVerification.service.js`: Added `extractTextFromPdfBuffer`, `cleanCertificateTitle`, `isLoginPageOrErrorPage`, nested PDF discovery, and multimodal Gemini integration.
+  * `major-backend/src/controllers/studentProfile.controller.js`: Added `persistValidatedCertificate`, updated `validateCertificate` to auto-persist, and sanitized manual inputs with `cleanCertificateTitle`.
+  * `major-backend/tests/certificate_verification.test.js`: Added tests 17–21 verifying PDF text parsing, title sanitization, login wall detection, heuristic regex extraction, and idempotent database persistence.
+* **Modified Frontend Files:**
+  * `frontend/src/components/studentDashboard/ProfileDrawer.jsx`: Added debounced URL auto-validation, instant file-picker validation, auto-field population, and clean title display.
+  * `frontend/src/pages/student/StudentDashboard.jsx`: Wrapped certificate card title rendering with `cleanCertificateTitle(cert.title, cert.issuer)`.
+* **Documentation & Safety:**
+  * Updated `AUDIT_REPORT.md` with complete Phase 12 verification results.
+
+### 4. Verification & Automated Test Results
+* **Backend Test Suite (`npm test`):**
+  * `major-backend/tests/certificate_verification.test.js`: **21 passed, 0 failed**
+  * Full test suite across 40 test files: **90 passed, 0 failed, 0 errors** (duration: 14.3s)
+* **Frontend Production Build (`npm run build`):**
+  * **Passed** in 2.61s with zero errors (Vite v8.2.2 transformed 1,931 modules).
+* **Git Working Tree:**
+  * Preserved local-only changes without unauthorized commits or pushes.
+
+## 13. Certificate Ownership Verification, Cross-Student Duplicate Detection, and Direct Credential Viewing Audit (2026-10-22)
+
+### 1. Executive Summary & Problem Analysis
+A critical vulnerability in credential verification occurs when a certificate is genuine but does not belong to the submitting student:
+1. **Authenticity vs. Ownership Confusion:** A certificate can be verified as genuine by an issuer or cryptographic proof, yet have been submitted by a student other than the named recipient.
+2. **Cross-Student Duplicate Submissions:** If Student A uploads a certificate with ID `CERT-123` or verification URL `https://coursera.org/verify/CERT-123`, another student (Student B) could submit the same URL, PDF, or credential ID. Without global cross-student duplicate detection, Student B could be credited with Student A's achievements.
+3. **Broken/Indirect Credential Viewing:** When Cloudinary upload was not configured or when certificates were saved with inconsistent field names (`documentUrl`, `officialVerificationUrl`, `url`, `certificateUrl`), clicking `[View Credential]` could fail to open the document or verification page directly.
+4. **Unnecessary Manual Review:** Authentic credentials submitted by their genuine owners (`MATCH`) were unnecessarily trapped in "Needs Review" status even when valid issuer and ownership proof existed.
+
+### 2. Architecture & Implemented Solutions
+
+#### A. Status Separation
+Separated credential evaluation into four distinct orthogonal statuses in `studentProfileSchema`:
+- `authenticityStatus`: `["AUTHENTIC", "UNVERIFIED", "SUSPICIOUS", "UNKNOWN"]`
+- `ownershipStatus`: `["MATCH", "POSSIBLE_MATCH", "MISMATCH", "INSUFFICIENT_INFORMATION"]`
+- `duplicateStatus`: `["NONE", "CROSS_STUDENT_DUPLICATE", "SAME_STUDENT_DUPLICATE"]`
+- `verificationStatus`: `["Pending", "Verified", "Needs Review", "Unable to Verify", "Rejected"]`
+
+#### B. Student Identity Matching Rules (`compareStudentIdentity`)
+- **Normalization:** Strips common professional honorifics (`mr`, `ms`, `dr`, `prof`, `er`, `ca`, `engr`, `shri`, `smt`) and punctuation while preserving alphanumeric tokens.
+- **Exact Match:** Exact normalized string equality yields `MATCH` (high confidence).
+- **Order-Independent Token Equality:** Compares token sets regardless of word order (e.g. "Sharma Akshat" vs "Akshat Sharma" yields `MATCH` with high confidence).
+- **Token Overlap & Initials:** Recognizes middle names and abbreviations (e.g. "Akshat Kumar Sharma" vs "Akshat Sharma", or "Akshat K. Sharma") as `POSSIBLE_MATCH` with medium confidence.
+- **Name Mismatch:** Different recipient tokens (e.g. "Vikram Patel" vs "Akshat Sharma") produce `MISMATCH`, which strictly blocks automatic `Verified` status.
+- **Missing Data:** Empty recipient name or empty student profile yields `INSUFFICIENT_INFORMATION` and blocks verification.
+
+#### C. Cross-Student Duplicate Detection Strategy (`checkCrossStudentDuplicate`)
+Globally scans all `StudentProfile` documents across three orthogonal signals, strictly excluding the submitting student's own profile (`_id: { $ne: currentStudentProfileId }`):
+1. **Issuer + Credential ID:** Matches normalized credential ID and issuer name via case-insensitive regex.
+2. **Normalized Verification URL (`normalizeUrl`):** Lowercases domain, strips client fragments (`#...`), and eliminates tracking query parameters (`utm_*`, `ref`, `fbclid`, `gclid`) while preserving credential query parameters and paths.
+3. **Cryptographic SHA-256 Content Hash (`computeFileHash`):** Computes cryptographic hash of uploaded or downloaded PDF/image buffers to detect byte-identical documents regardless of filename alterations.
+4. **Privacy Preservation:** Conflict reports strictly return safe messages without exposing the other student's name, USN, or email: `"This credential appears to be associated with another submission. Additional ownership verification is required."`
+5. **Record Preservation:** Conflicting submissions NEVER delete, overwrite, or mutate the original student's record.
+
+#### D. Direct Credential Viewing & Storage
+- Resolved canonical credential URL directly as `certData.certificateUrl || certData.officialVerificationUrl || certData.documentUrl || certData.url`.
+- Attached the resolved URL directly to both `certificateUrl` and `documentUrl` in MongoDB during validation and persistence.
+- Frontend `[View Credential]` buttons in both `ProfileDrawer.jsx` and `StudentDashboard.jsx` link directly to this URL with `target="_blank" rel="noopener noreferrer"`.
+- Authentic credentials with verified ownership (`MATCH`) and no duplicate conflict are saved directly as `Verified` without requiring manual review.
+
+#### E. MongoDB Indexes Added
+Added compound and single-field background indexes to `studentProfileSchema`:
+- `{ "certificates.credentialId": 1, "certificates.issuer": 1 }`
+- `{ "certificates.fileHash": 1 }`
+- `{ "certificates.certificateUrl": 1 }`
+
+### 3. Automated Test Verification
+- **Unit & Integration Suite (`node --test tests/certificate_verification.test.js`):**
+  - **32 tests passed, 0 failed** (including SSRF defense, PDF parsing, URL normalization, SHA-256 hashing, order-independent identity matching, cross-student duplicate detection, and direct URL viewing).
+- **Full Backend Suite (`npm test`):**
+  - **100 tests passed, 0 failed across all 40 suites.**
+- **Frontend Build (`npm run build`):**
+  - **Passed in 1.19s with 0 errors** (24 assets cleanly generated).
+
+### 4. Remaining Limitations
+- Certificates issued without any recipient name or without verifiable credential IDs require manual administrative review.
+- Documents with low OCR legibility or heavily compressed scans may produce partial recipient tokens requiring administrative confirmation.
+
+#### F. Validation-First Workflow, Disabled Save on Mismatch/Duplicate & Lock Decoupling (2026-10-22)
+- **Validation Before Manual Input:** In `ProfileDrawer.jsx`, manual certificate input fields are hidden until the student provides a credential URL or document (PDF/image) and clicks `Auto-Fill` / triggers AI extraction. An instructional guide card is shown initially. Once validation completes, extracted fields are displayed for review/adjustment.
+- **Strictly Disabled Save Button:** If the certificate validation detects an ownership mismatch (e.g. extracted recipient name does not match the authenticated student profile) or a cross-student duplicate conflict, the `Save Certificate` button is strictly disabled (`disabled={!canSave}`), greyed out, and an explicit explanatory error alert banner is displayed.
+- **Decoupled from Profile Lock:** Institutional academic profile locking (`isProfileLocked`) no longer prevents students from adding or deleting external certificates. The `+ Add Credential` and delete actions remain accessible and functional at all times.
+- **No Manual Admin Review Required:** Authentic certificates with verified ownership (`MATCH`) added by the student are saved directly as `Verified`, bypassing administrative review queues.
+#### G. Smart Credential URL Resolution & Zero-Waste Document Storage (2026-10-22)
+- **Official Online URL Priority:** When a certificate originates from or contains an official online verification source (e.g. Coursera `coursera.org/verify/...`, Credly, HackerRank, Udemy, etc.), the canonical verification URL is extracted and saved directly as `certificateUrl`.
+- **Zero Cloudinary Waste:** For credentials with official online verification URLs, uploading to Cloudinary is avoided entirely, saving cloud storage space. Clicking `[View Credential]` redirects directly to the official verification page.
+- **Auto-Detection for Offline/Participation Certificates:** When a certificate has no online verification portal (such as offline workshop, symposium, or participation certificates), the system automatically detects this and stores the uploaded PDF/image document to Cloudinary/system storage, ensuring `[View Credential]` opens the uploaded document.
+- **Dynamic Credential URL Resolver:** Added `getEffectiveCredentialUrl` on the frontend to dynamically resolve official verification links (e.g. `https://coursera.org/verify/${id}`) for existing and newly saved certificates, while falling back to the stored document URL for offline credentials.
+
+#### H. Notification Inbox Fresh Start, Broadcast Recall & Deletion Controls (2026-10-22)
+- **Root Cause Resolution for Stale Broadcast Flooding:**
+  - Audited the MongoDB `notifications` collection and identified 3,435 stale documents, of which 3,396 were repetitive test broadcasts (e.g. `Broadcast Test 1792612071847`) where each broadcast generated individual records for all 162 students.
+  - Executed database cleanup purging all 3,435 stale test entries, giving both students and administrators a clean slate (0 remaining notifications).
+- **Backend Architecture & Endpoints:**
+  - **Indexed `broadcastId`:** Added indexed `broadcastId: { type: String, default: "", index: true }` to `Notification` schema to group notifications created in a single broadcast campaign.
+  - **Single Notification Deletion:** Added `DELETE /api/v1/notifications/:notificationId` (`deleteNotification`), securely verifying ownership (`user: req.user._id`).
+  - **Student Clear All:** Added `DELETE /api/v1/notifications/clear-all` (`clearAllMyNotifications`) to let students purge their own inbox at any time.
+  - **Broadcast Group Recall / Deletion:** Added `DELETE /api/v1/notifications/broadcast/:identifier` (`deleteBroadcastAnnouncement`) allowing administrators to delete/recall an entire broadcast announcement from every student inbox in a single action using its `broadcastId` or title.
+  - **Admin Fresh Start Endpoint:** Added `POST /api/v1/notifications/admin/freshstart` (`freshstartAllNotifications`) to purge all broadcast and test notifications with explicit confirmation.
+  - **Broadcast History Aggregation:** Added `GET /api/v1/notifications/broadcast-history` (`getBroadcastHistory`) returning distinct past broadcasts with recipient count, unread count, and dispatch timestamp.
+- **Frontend Student Experience:**
+  - **Student Navbar (`StudentNavbar.jsx`):**
+    - Added `Clear all` button in dropdown header alongside `Mark all read`.
+    - Added quick-delete trash icon button on each notification card.
+  - **Student Dashboard Notification Center (`StudentDashboard.jsx`):**
+    - Added prominent `Clear all` button with confirmation prompt in the action bar.
+    - Added individual trash icon buttons on all notification cards and inside the notification detail modal.
+- **Frontend Administrator Controls (`ManageAnnouncements.jsx`):**
+  - Added new **Broadcast History & Freshstart** tab displaying all past broadcasts, total recipient inbox counts, unread statistics, and dispatch timestamps.
+  - Added **Recall / Delete** button for each past announcement to retract sent broadcasts from all student inboxes.
+  - Added **Fresh Start All Notifications** button with safety confirmation for instant inbox resets.
+- **Verification:**
+  - `major-backend`: 100/100 tests passed across all 40 suites.
+  - `frontend`: Vite production build passed in 1.54s with 0 errors.

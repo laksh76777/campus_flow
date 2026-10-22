@@ -18,8 +18,13 @@ import {
     unlockStudentProfile,
     submitModificationRequest,
     getModificationRequests,
-    reviewModificationRequest
+    reviewModificationRequest,
+    validateCertificate,
+    addCertificate,
+    deleteCertificate,
+    reviewCertificate
 } from "../controllers/studentProfile.controller.js";
+import { certificateValidationLimiter } from "../middlewares/security.middleware.js";
 
 const router = Router();
 
@@ -46,11 +51,28 @@ router.route("/backlog-record/:backlogId").delete(verifyJWT, deleteBacklogRecord
 router.route("/lock-profile").post(verifyJWT, lockStudentProfile);
 router.route("/request-modification").post(verifyJWT, submitModificationRequest);
 
+// Certificate Verification & Management
+router.route("/certificates/validate").post(
+    verifyJWT,
+    certificateValidationLimiter,
+    upload.single("document"),
+    validateCertificate
+);
+router.route("/certificates").post(verifyJWT, addCertificate);
+router.route("/certificates/:certId").delete(verifyJWT, deleteCertificate);
+
 // Admin-accessible batch & audit routes
 router.route("/all-students").get(verifyJWT, verifyAdmin, getAllStudentProfiles);
 router.route("/migrate-profiles").post(verifyJWT, verifyAdmin, safeMigrateExistingProfiles);
 router.route("/modification-requests").get(verifyJWT, verifyAdmin, getModificationRequests);
 router.route("/modification-requests/:requestId/review").post(verifyJWT, verifyAdmin, reviewModificationRequest);
+
+// Admin Certificate Review
+router.route("/certificates/:studentId/:certId/review").patch(
+    verifyJWT,
+    verifyAdmin,
+    reviewCertificate
+);
 
 // Dynamic studentId routes
 router.route("/:studentId/verify").patch(verifyJWT, verifyAdmin, verifyStudentProfile);

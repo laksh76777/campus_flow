@@ -119,6 +119,23 @@ const applicationSchema = new mongoose.Schema(
             default: null
         },
 
+        // Archived state when parent drive is deleted or archived
+        isArchived: {
+            type: Boolean,
+            default: false,
+            index: true
+        },
+        archivedAt: {
+            type: Date,
+            default: null
+        },
+        archivedDriveSnapshot: {
+            companyName: { type: String, trim: true, default: "" },
+            jobTitle: { type: String, trim: true, default: "" },
+            package: { type: Number, default: null },
+            driveId: { type: mongoose.Schema.Types.ObjectId, default: null }
+        },
+
         // Preserved eligibility evaluation snapshot & rule versioning
         eligibilitySnapshot: {
             status: {
