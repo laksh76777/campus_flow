@@ -365,7 +365,7 @@ export default function ManageAnnouncements({ drives = [], students = [] }) {
 
   const isSmtpConfigured = Boolean(smtpData?.configured);
   const isSmtpVerified = Boolean(smtpData?.verification?.verified);
-  const isSmtpReady = isSmtpVerified || isSmtpConfigured || Boolean(previewData?.senderAddress);
+  const isSmtpReady = isSmtpVerified;
   const smtpCategory = smtpData?.verification?.category || "NOT_CONFIGURED";
 
   return (
@@ -390,22 +390,28 @@ export default function ManageAnnouncements({ drives = [], students = [] }) {
         <div className="flex items-center gap-2">
           <div
             className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl border text-xs font-bold ${
-              isSmtpVerified || isSmtpConfigured
+              isSmtpVerified
                 ? "bg-emerald-50 text-emerald-800 border-emerald-300"
-                : "bg-slate-50 text-slate-700 border-slate-200"
+                : isSmtpConfigured
+                  ? "bg-amber-50 text-amber-900 border-amber-300"
+                  : "bg-slate-50 text-slate-700 border-slate-200"
             }`}
           >
             <span
               className={`h-2.5 w-2.5 rounded-full ${
-                isSmtpVerified || isSmtpConfigured
+                isSmtpVerified
                   ? "bg-emerald-500 animate-pulse"
-                  : "bg-slate-400"
+                  : isSmtpConfigured
+                    ? "bg-amber-500"
+                    : "bg-slate-400"
               }`}
             />
             <span>
-              {isSmtpVerified || isSmtpConfigured
-                ? "Email Delivery Active (Verified)"
-                : "Email Delivery Pending"}
+              {isSmtpVerified
+                ? "Email Delivery Verified"
+                : isSmtpConfigured
+                  ? "Email Delivery Unverified"
+                  : "Email Delivery Not Configured"}
             </span>
           </div>
         </div>
@@ -909,7 +915,7 @@ export default function ManageAnnouncements({ drives = [], students = [] }) {
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 flex items-start gap-2">
                   <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
                   <div className="text-[11px] leading-relaxed">
-                    <strong>SMTP Notice:</strong> Email server credentials are not set in environment variables. In-app notifications will be created, but emails will be skipped.
+                    <strong>Email Notice:</strong> Email delivery has not been verified. In-app notifications can still be created, but outbound emails may fail.
                   </div>
                 </div>
               )}
@@ -1324,8 +1330,8 @@ export default function ManageAnnouncements({ drives = [], students = [] }) {
                     </div>
                     <p>
                       {isSmtpConfigured
-                        ? "SMTP connection verification is failing (check SMTP Diagnostic tab). Real email delivery will fail until credentials are corrected."
-                        : "SMTP is not configured in .env. In-app alerts will be created, but outbound emails will be skipped."}
+                        ? smtpData?.verification?.message || `Email delivery verification failed (${smtpCategory}).`
+                        : "Email delivery is not configured. In-app alerts can still be created, but outbound emails will be skipped."}
                     </p>
                   </div>
                 ) : null

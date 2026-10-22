@@ -84,6 +84,7 @@ test("Password Recovery & Reset End-to-End Test Suite", async (t) => {
     const originalChallengeFindOneAndUpdate = PasswordResetChallenge.findOneAndUpdate;
     const originalChallengeUpdateMany = PasswordResetChallenge.updateMany;
     const originalChallengeCountDocuments = PasswordResetChallenge.countDocuments;
+    const originalChallengeDeleteOne = PasswordResetChallenge.deleteOne;
 
     // Seed test accounts
     const initialHashedPasswordA = await bcrypt.hash("OldPasswordA123", 10);
@@ -222,6 +223,9 @@ test("Password Recovery & Reset End-to-End Test Suite", async (t) => {
         }
         return count;
     };
+    PasswordResetChallenge.deleteOne = async ({ _id }) => ({
+        deletedCount: testChallenges.delete(_id.toString()) ? 1 : 0
+    });
 
     // Teardown hook
     t.after(() => {
@@ -232,6 +236,7 @@ test("Password Recovery & Reset End-to-End Test Suite", async (t) => {
         PasswordResetChallenge.findOneAndUpdate = originalChallengeFindOneAndUpdate;
         PasswordResetChallenge.updateMany = originalChallengeUpdateMany;
         PasswordResetChallenge.countDocuments = originalChallengeCountDocuments;
+        PasswordResetChallenge.deleteOne = originalChallengeDeleteOne;
         resetTransporterForTesting(null);
     });
 
@@ -538,5 +543,48 @@ test("Password Recovery & Reset End-to-End Test Suite", async (t) => {
         const responseString = JSON.stringify(res.jsonBody);
         assert.equal(responseString.includes("otp"), false, "Response body contains no 'otp' key");
         assert.equal(responseString.includes("resetToken"), false, "Response body contains no 'resetToken' key");
+    });
+
+    await t.test("23. Email transport failure returns 503 and removes the undelivered challenge", async () => {
+        for (const challenge of testChallenges.values()) {
+            if (challenge.user.toString() === userA._id.toString()) {
+                challenge.resendCooldownUntil = new Date(Date.now() - 1000);
+                challenge.createdAt = new Date(Date.now() - 20 * 60 * 1000);
+            }
+        }
+
+        resetTransporterForTesting({
+            sendMail: async () => {
+                const error = new Error("SMTP connection timed out");
+                error.code = "ETIMEDOUT";
+                throw error;
+            }
+        });
+
+        await assert.rejects(
+            () => callHandler(requestPasswordReset, { email: userA.email }),
+            (error) => {
+                assert.equal(error.statusCode, 503);
+                assert.match(error.message, /timed out/i);
+                return true;
+            }
+        );
+        assert.equal(
+            Array.from(testChallenges.values()).some(
+                (challenge) =>
+                    challenge.user.toString() === userA._id.toString() &&
+                    challenge.status === "PENDING" &&
+                    challenge.createdAt > new Date(Date.now() - 1000)
+            ),
+            false,
+            "An OTP that was not emailed must not remain active"
+        );
+
+        resetTransporterForTesting({
+            sendMail: async (mailOpts) => {
+                dispatchedEmails.push(mailOpts);
+                return { messageId: `msg-${Date.now()}` };
+            }
+        });
     });
 });

@@ -104,6 +104,37 @@ test("4. SMTP connection verification failure maps to sanitized category", async
     resetTransporterForTesting(null);
 });
 
+test("4a. Explicit Gmail SMTP port is respected in production", () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    const originalRender = process.env.RENDER;
+    const originalPort = process.env.SMTP_PORT;
+    const originalSecure = process.env.SMTP_SECURE;
+    const originalHost = process.env.SMTP_HOST;
+
+    try {
+        process.env.NODE_ENV = "production";
+        process.env.RENDER = "true";
+        process.env.SMTP_HOST = "smtp.gmail.com";
+        process.env.SMTP_PORT = "587";
+        process.env.SMTP_SECURE = "false";
+
+        const config = getSmtpConfigStatus();
+        assert.equal(config.port, 587);
+        assert.equal(config.secure, false);
+    } finally {
+        for (const [name, value] of Object.entries({
+            NODE_ENV: originalNodeEnv,
+            RENDER: originalRender,
+            SMTP_PORT: originalPort,
+            SMTP_SECURE: originalSecure,
+            SMTP_HOST: originalHost
+        })) {
+            if (value === undefined) delete process.env[name];
+            else process.env[name] = value;
+        }
+    }
+});
+
 test("5. Mocked successful message acceptance returns TEST_EMAIL_ACCEPTED", async () => {
     let captured = null;
     resetTransporterForTesting({

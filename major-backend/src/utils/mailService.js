@@ -41,21 +41,43 @@ export const isPlaceholderValue = (val) => {
 };
 
 /**
- * Safe SMTP configuration status (never leaks passwords or secrets).
+ * Detects whether an HTTPS-based email delivery provider (Resend API) is configured.
+ * HTTPS APIs communicate over port 443 and bypass all cloud SMTP firewall blocks.
+ */
+export const isResendConfigured = () => {
+    const key = (process.env.RESEND_API_KEY || "").trim();
+    return Boolean(key && !isPlaceholderValue(key));
+};
+
+/**
+ * Safe SMTP / Email configuration status (never leaks passwords or secrets).
  */
 export const getSmtpConfigStatus = () => {
+    const resendActive = isResendConfigured();
+    if (resendActive) {
+        return {
+            configured: true,
+            hasUser: true,
+            hasPass: true,
+            isPlaceholder: false,
+            host: "api.resend.com (HTTPS API / Port 443)",
+            port: 443,
+            secure: true,
+            sender: getSenderAddress(),
+            missing: [],
+            isHttpApi: true
+        };
+    }
+
     const emailUser = (process.env.EMAIL_USER || process.env.SMTP_USER || "").trim();
     const emailPass = (process.env.EMAIL_PASS || process.env.SMTP_PASS || "").trim();
     const smtpHost = (process.env.SMTP_HOST || "smtp.gmail.com").trim();
 
-    // Auto-detect secure port: Cloud hosts like Render block or throttle port 587 (STARTTLS).
-    // When running on Render / production cloud, automatically upgrade Gmail to port 465 (SSL/TLS).
-    const isCloudEnv = Boolean(process.env.RENDER || process.env.VERCEL || process.env.NODE_ENV === "production");
     const rawPort = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : null;
     let smtpPort = rawPort;
     let isSecure = process.env.SMTP_SECURE === "true";
 
-    if (smtpHost.includes("gmail.com") && (isCloudEnv || rawPort === 465 || !rawPort)) {
+    if (smtpHost.includes("gmail.com") && (rawPort === 465 || !rawPort)) {
         smtpPort = 465;
         isSecure = true;
     } else if (!smtpPort) {
@@ -89,6 +111,7 @@ export const getSmtpConfigStatus = () => {
  * Checks whether SMTP credentials are fully present and not placeholder values.
  */
 export const isSmtpConfigured = () => {
+    if (isResendConfigured()) return true;
     const status = getSmtpConfigStatus();
     return status.configured;
 };
@@ -99,6 +122,9 @@ export const isSmtpConfigured = () => {
 export const getSenderAddress = () => {
     if (process.env.EMAIL_FROM && process.env.EMAIL_FROM.trim()) {
         return process.env.EMAIL_FROM.trim();
+    }
+    if (isResendConfigured()) {
+        return "CampusFlow Notifications <onboarding@resend.dev>";
     }
     const user = (process.env.EMAIL_USER || process.env.SMTP_USER || "no-reply@campusflow.edu").trim();
     return `"Training & Placement Cell" <${user}>`;
@@ -187,9 +213,12 @@ export const sanitizeSmtpError = (err) => {
         };
     }
     if (code === "ETIMEDOUT" || code === "ESOCKETTIMEDOUT") {
+        const isRender = Boolean(process.env.RENDER);
         return {
             category: "CONNECTION_TIMEOUT",
-            message: "Connection to SMTP server timed out (check host and port connectivity)."
+            message: isRender
+                ? "Outbound SMTP blocked by Render free tier firewall. To send real emails from Render, add RESEND_API_KEY to your Render environment variables or upgrade your Render plan."
+                : "Connection to SMTP server timed out (check host and port connectivity)."
         };
     }
     if (code === "ECONNREFUSED") {
@@ -219,13 +248,35 @@ export const sanitizeSmtpError = (err) => {
 
 /**
  * Verifies live SMTP connection and authentication with provider without exposing credentials.
- */
-/**
- * Verifies live SMTP connection and authentication with provider without exposing credentials.
- * If connection times out on port 587 (common on Render/cloud networks), seamlessly verifies
- * fallback to port 465 SSL.
+ * If Resend HTTPS API key is configured, verifies directly via port 443 (immune to firewall blocks).
  */
 export const verifySmtpConnection = async () => {
+    if (isResendConfigured() && !isTestingMock) {
+        try {
+            const res = await fetch("https://api.resend.com/api-keys", {
+                headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY.trim()}` }
+            });
+            if (res.ok) {
+                return {
+                    verified: true,
+                    category: "VERIFIED",
+                    message: "Email delivery verified successfully via Resend HTTPS API (Port 443 - zero firewall blocks)."
+                };
+            }
+            return {
+                verified: false,
+                category: "AUTH_FAILED",
+                message: "Resend API key was rejected by provider (invalid API key)."
+            };
+        } catch (fetchErr) {
+            return {
+                verified: false,
+                category: "CONNECTION_FAILED",
+                message: `Failed to connect to Resend API: ${fetchErr.message}`
+            };
+        }
+    }
+
     const configStatus = getSmtpConfigStatus();
 
     if (!configStatus.hasUser || !configStatus.hasPass) {
@@ -287,11 +338,46 @@ export const verifySmtpConnection = async () => {
 };
 
 /**
- * Safely dispatches an email using the active transporter.
- * If a cloud firewall connection timeout occurs on port 587, automatically retries
- * once via port 465 SSL, providing 100% reliability across local and deployed environments (like Render).
+ * Safely dispatches an email using the active transporter or HTTPS API.
+ * 1. If RESEND_API_KEY is present, sends via standard HTTPS (Port 443), bypassing Render SMTP blocks.
+ * 2. If SMTP is used and a timeout occurs on port 587, automatically retries via port 465 SSL.
  */
 export const dispatchMailWithFallback = async (mailOptions) => {
+    if (isResendConfigured() && !isTestingMock) {
+        try {
+            const recipient = Array.isArray(mailOptions.to) ? mailOptions.to[0] : mailOptions.to;
+            const res = await fetch("https://api.resend.com/emails", {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${process.env.RESEND_API_KEY.trim()}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    from: getSenderAddress(),
+                    to: [recipient.trim()],
+                    subject: mailOptions.subject,
+                    html: mailOptions.html,
+                    text: mailOptions.text
+                })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                return { accepted: true, messageId: data.id };
+            }
+            return {
+                accepted: false,
+                category: "DELIVERY_FAILED",
+                error: data.message || "Resend API rejected message dispatch"
+            };
+        } catch (fetchErr) {
+            return {
+                accepted: false,
+                category: "CONNECTION_FAILED",
+                error: `Resend HTTPS API connection failed: ${fetchErr.message}`
+            };
+        }
+    }
+
     let mailer = getTransporter();
     if (!mailer) {
         return { accepted: false, category: "NOT_CONFIGURED", error: "SMTP server is not configured in system environment variables." };
@@ -841,4 +927,3 @@ export const sendPasswordResetOtpEmail = async ({
         return { accepted: false, category: sanitized.category, error: sanitized.message };
     }
 };
-

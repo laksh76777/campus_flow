@@ -387,12 +387,15 @@ CampusFlow V2 is architected for zero-downtime production deployment with the fr
    | `ADMIN_SECRET_KEY` | Your secure TPO administrative signup passkey |
    | `CORS_ORIGIN` | Your Vercel frontend URL (e.g. `https://campus-flow.vercel.app`, set once Vercel is deployed) |
    | `CLOUDINARY_*` | *(Optional)* Cloudinary CDN keys if document storage is enabled |
-   | `SMTP_*` | *(Optional)* SMTP credentials for transactional emails |
+   | `RESEND_API_KEY` | *(Recommended for Render free services)* Resend API key for transactional email over HTTPS |
+   | `EMAIL_FROM` | *(Required with Resend in production)* Sender address on a domain verified with Resend |
+   | `SMTP_*` | *(Optional)* SMTP credentials; Render free services block outbound SMTP, so changing ports does not enable email delivery |
 5. Click **Create Web Service**. Wait for the build and deployment to succeed.
 6. Verify backend liveness: Open `https://<your-render-backend-url>/health` in your browser. It should return:
    ```json
    { "status": "ok", "database": "connected", "databaseName": "Place-on" }
    ```
+7. To enable transactional email on Render's free plan, create a Resend API key, verify a sender domain with Resend, then set `RESEND_API_KEY` and `EMAIL_FROM` on the Render service. Save the changes and redeploy. SMTP ports 465 and 587 are not a workaround for the free-plan SMTP block.
 
 ---
 
@@ -436,4 +439,3 @@ CampusFlow V2 is architected for zero-downtime production deployment with the fr
 
 ## 📄 License
 This repository is developed for collegiate placement management and recruitment automation.
-
