@@ -259,9 +259,11 @@ export const updateSupportConversationStatus = asyncHandler(async (req, res) => 
 
 export const handleAdminCopilotPrompt = asyncHandler(async (req, res) => {
     const prompt = cleanText(req.body.prompt, "Prompt");
+    const messages = Array.isArray(req.body.messages) ? req.body.messages : [];
     const result = await processAdminCopilotPrompt({
         prompt,
         adminUser: req.user,
+        messages,
     });
     return res.status(200).json(
         new ApiResponse(200, result, "Admin Copilot response generated successfully.")

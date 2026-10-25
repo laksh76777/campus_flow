@@ -144,12 +144,13 @@ export default function AdminSupportInbox() {
       createdAt: new Date(),
     };
 
-    setCopilotHistory((prev) => [...prev, userMsg]);
+    const updatedHistory = [...copilotHistory, userMsg];
+    setCopilotHistory(updatedHistory);
     setCopilotPrompt("");
     setCopilotLoading(true);
 
     try {
-      const res = await sendAdminCopilotPrompt(textToSend.trim());
+      const res = await sendAdminCopilotPrompt(textToSend.trim(), copilotHistory);
       const botResponse = res?.data;
 
       const botMsg = {
@@ -160,6 +161,7 @@ export default function AdminSupportInbox() {
         driveId: botResponse?.driveId,
         driveTitle: botResponse?.driveTitle,
         metadata: botResponse?.metadata,
+        driveParams: botResponse?.driveParams,
         createdAt: new Date(),
       };
 
@@ -187,20 +189,20 @@ export default function AdminSupportInbox() {
 
   const quickPills = [
     {
-      label: "🎯 Host Microsoft Drive (18 LPA, 7.5 CGPA)",
-      prompt: "Host a drive for Microsoft, Role: Software Engineer, Package: 18 LPA, Min CGPA: 7.5, Max Backlogs: 0, Branches: CSE, ISE, ECE",
+      label: "🎯 Host Drive (Interactive)",
+      prompt: "I want to host a new placement drive, please guide me through the criteria",
+    },
+    {
+      label: "📄 Paste / Extract JD Criteria",
+      prompt: "I have a Job Description (JD) text from a recruiter. Can you extract the criteria and stage the drive?",
     },
     {
       label: "⚡ Automated Drive: Google (3 Rounds)",
-      prompt: "Create an automated drive for Google with 3 rounds: Online Coding, Technical Round 1, Leadership Round, Package: 22 LPA, Min CGPA: 8.0",
+      prompt: "Create an automated drive for Google with 3 rounds: Online Coding, Technical Round 1, Leadership Round, Package: 22 LPA, Min CGPA: 8.0, 0 backlogs, CSE and ISE",
     },
     {
-      label: "📊 Directory & CGPA Statistics",
-      prompt: "Give me the live placement directory statistics, average CGPA, and backlog breakdown",
-    },
-    {
-      label: "🔍 Pending Student Verifications",
-      prompt: "How many students have pending academic verification dossiers?",
+      label: "📊 Talent Pool & CGPA Statistics",
+      prompt: "How many students are verified and how many have CGPA above 8.0?",
     },
   ];
 
@@ -325,6 +327,94 @@ export default function AdminSupportInbox() {
                   </div>
 
                   <div className="whitespace-pre-wrap break-words">{msg.content}</div>
+
+                  {/* Staged Placement Drive - Ready for Admin Confirmation */}
+                  {msg.action === "DRIVE_READY" && msg.driveParams && (
+                    <div className="mt-3 rounded-2xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50/90 via-white to-violet-50/70 p-4 text-slate-800 shadow-xs">
+                      <div className="flex items-center justify-between gap-2 border-b border-indigo-100 pb-2.5 mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-xs">
+                            <Briefcase size={15} />
+                          </span>
+                          <div>
+                            <h4 className="text-sm font-extrabold text-slate-900">
+                              {msg.driveParams.companyName || "Corporate Partner"}
+                            </h4>
+                            <p className="text-xs text-indigo-700 font-semibold">
+                              {msg.driveParams.jobTitle || "Software Engineer"}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="rounded-full bg-indigo-100 px-2.5 py-1 text-[10px] font-black text-indigo-800 border border-indigo-300">
+                          ⚡ Staged · Awaiting Approval
+                        </span>
+                      </div>
+
+                      {/* Criteria Grid */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs mb-3">
+                        <div className="bg-white/80 p-2 rounded-xl border border-indigo-100/80">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Package (CTC)</span>
+                          <span className="text-xs font-black text-emerald-700">₹{msg.driveParams.package} LPA</span>
+                        </div>
+                        <div className="bg-white/80 p-2 rounded-xl border border-indigo-100/80">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">CGPA Cutoff</span>
+                          <span className="text-xs font-black text-slate-800">≥ {msg.driveParams.minimumCGPA ?? 7.0}</span>
+                        </div>
+                        <div className="bg-white/80 p-2 rounded-xl border border-indigo-100/80">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Max Backlogs</span>
+                          <span className="text-xs font-black text-slate-800">≤ {msg.driveParams.maximumBacklogs ?? 0}</span>
+                        </div>
+                        <div className="col-span-2 sm:col-span-3 bg-white/80 p-2 rounded-xl border border-indigo-100/80">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Target Programs</span>
+                          <span className="text-xs font-medium text-slate-700">
+                            {Array.isArray(msg.driveParams.eligibleBranches)
+                              ? msg.driveParams.eligibleBranches.join(", ")
+                              : msg.driveParams.eligibleBranches || "CSE, ISE, ECE"}
+                          </span>
+                        </div>
+                        {Array.isArray(msg.driveParams.rounds) && msg.driveParams.rounds.length > 0 && (
+                          <div className="col-span-2 sm:col-span-3 bg-white/80 p-2 rounded-xl border border-indigo-100/80">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Selection Pipeline</span>
+                            <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                              {msg.driveParams.rounds.map((r, i) => (
+                                <span key={i} className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700 border border-indigo-200">
+                                  <span>{r.roundNumber || i + 1}.</span> {r.roundName}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {msg.driveParams.eligibleCount !== null && msg.driveParams.eligibleCount !== undefined && (
+                          <div className="col-span-2 sm:col-span-3 bg-emerald-50/80 p-2 rounded-xl border border-emerald-200">
+                            <span className="text-xs font-bold text-emerald-800 flex items-center gap-1">
+                              🎯 <strong>{msg.driveParams.eligibleCount} verified students</strong> meet these criteria and qualify immediately.
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Action Confirmation Buttons */}
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => submitCopilotPrompt("Yes, confirm and publish this drive live!")}
+                          disabled={copilotLoading}
+                          className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-3.5 py-2 text-xs font-black text-white hover:from-indigo-700 hover:to-violet-700 shadow-sm shadow-indigo-600/30 transition disabled:opacity-50"
+                        >
+                          <span>🚀 Confirm & Publish Drive Live</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCopilotPrompt(`Change criteria for ${msg.driveParams.companyName || "the drive"}: `);
+                          }}
+                          className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition"
+                        >
+                          <span>✏️ Adjust Criteria</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* If a Placement Drive was created via Copilot */}
                   {msg.action === "DRIVE_CREATED" && msg.driveId && (
