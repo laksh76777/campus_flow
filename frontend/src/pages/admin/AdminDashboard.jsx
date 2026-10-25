@@ -85,12 +85,14 @@ export default function AdminDashboard({ initialTab = "overview" }) {
   // Sync tab with URL
   useEffect(() => {
     setActiveTab(tabParam);
+    window.scrollTo({ top: 0, behavior: "instant" });
   }, [tabParam]);
 
   const handleTabChange = (newTab) => {
     if (!ADMIN_TABS.includes(newTab)) return;
     setActiveTab(newTab);
     setSearchParams({ tab: newTab });
+    window.scrollTo({ top: 0, behavior: "instant" });
   };
 
   // Load Admin Data from API
@@ -294,7 +296,7 @@ export default function AdminDashboard({ initialTab = "overview" }) {
         />
 
           {/* Page Body */}
-          <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6">
+          <main className="flex-1 min-h-[calc(100vh-5rem)] p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6">
           {/* Global Cohort Scope & Sync Banner */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-2xs">
             {/* Session Filter Dropdown */}

@@ -86,16 +86,16 @@ export default function AdminSidebar({
   const displayEmail = adminUser?.email || "Admin account";
 
   const sidebarContent = (
-    <div className="flex h-full flex-col justify-between bg-slate-900 text-slate-300">
-      {/* Top Header */}
-      <div>
-        <div className="flex h-18 items-center justify-between border-b border-slate-800 px-5">
+    <div className="flex h-full flex-col bg-slate-900 text-slate-300 select-none">
+      {/* Top Header & Admin Profile */}
+      <div className="shrink-0">
+        <div className="flex h-16 items-center justify-between border-b border-slate-800 px-4">
           <Link
             to="/"
             aria-label="JSSATEB Placement Portal home"
             className="flex items-center gap-3 group"
           >
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white p-1 border border-amber-400/30 shadow-md shadow-orange-500/10 group-hover:scale-105 transition-transform shrink-0">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white p-1 border border-amber-400/30 shadow-md shadow-orange-500/10 group-hover:scale-105 transition-transform shrink-0">
               <img
                 src="/images/jssateb/college-logo.png"
                 alt="JSSATEB Logo"
@@ -104,7 +104,7 @@ export default function AdminSidebar({
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="font-extrabold tracking-tight text-white text-base">
+                <span className="font-extrabold tracking-tight text-white text-base leading-tight">
                   JSSATEB
                 </span>
                 <span className="rounded-md bg-orange-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-300 border border-orange-500/30">
@@ -128,64 +128,67 @@ export default function AdminSidebar({
         </div>
 
         {/* Admin User Chip */}
-        <div className="p-4 border-b border-slate-800/80">
-          <div className="flex items-center gap-3 rounded-xl bg-slate-800/60 p-3 border border-slate-800">
+        <div className="p-3 border-b border-slate-800/80">
+          <div className="flex items-center gap-3 rounded-xl bg-slate-800/60 p-2.5 border border-slate-800">
             <div className="relative shrink-0">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-red-800 via-orange-700 to-amber-600 text-sm font-bold text-white shadow-xs">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-red-800 via-orange-700 to-amber-600 text-xs font-bold text-white shadow-xs">
                 {displayName.charAt(0).toUpperCase()}
               </div>
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-bold text-white">{displayName}</p>
-              <p className="truncate text-[11px] text-amber-300 font-medium">JSS Placement Officer</p>
+              <p className="truncate text-[10px] text-amber-300 font-medium">JSS Placement Officer</p>
               <p className="truncate text-[10px] text-slate-400 font-mono">{displayEmail}</p>
             </div>
           </div>
         </div>
-
-        {/* Navigation Menu */}
-        <nav aria-label="Admin navigation" className="p-3 space-y-1">
-          <p className="px-3 pt-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-            Console Management
-          </p>
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeTab === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                aria-current={isActive ? "page" : undefined}
-                onClick={() => {
-                  setActiveTab(item.id);
-                  setIsOpen(false);
-                }}
-                className={`group flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-xs font-semibold transition-all ${
-                  isActive
-                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                    : "text-slate-400 hover:bg-slate-800/70 hover:text-white"
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Icon
-                    className={`h-4 w-4 transition-colors ${
-                      isActive ? "text-white" : "text-slate-400 group-hover:text-indigo-400"
-                    }`}
-                  />
-                  <span>{item.label}</span>
-                </div>
-
-                <div className="flex items-center gap-1">
-                  {isActive && <ChevronRight className="h-3.5 w-3.5 text-indigo-200" />}
-                </div>
-              </button>
-            );
-          })}
-        </nav>
       </div>
 
-      {/* Bottom Footer Actions */}
-      <div className="p-3 border-t border-slate-800/80 space-y-1.5">
+      {/* Navigation Menu (Scrollable, never pushes footer out) */}
+      <nav
+        aria-label="Admin navigation"
+        className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-1 dark-scrollbar"
+      >
+        <p className="px-3 pt-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+          Console Management
+        </p>
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = activeTab === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              aria-current={isActive ? "page" : undefined}
+              onClick={() => {
+                setActiveTab(item.id);
+                setIsOpen(false);
+              }}
+              className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
+                isActive
+                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                  : "text-slate-400 hover:bg-slate-800/70 hover:text-white"
+              }`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Icon
+                  className={`h-4 w-4 shrink-0 transition-colors ${
+                    isActive ? "text-white" : "text-slate-400 group-hover:text-indigo-400"
+                  }`}
+                />
+                <span className="truncate">{item.label}</span>
+              </div>
+
+              <div className="flex items-center gap-1 shrink-0">
+                {isActive && <ChevronRight className="h-3.5 w-3.5 text-indigo-200" />}
+              </div>
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* Bottom Footer Actions (Permanently pinned, fully visible) */}
+      <div className="shrink-0 p-3 border-t border-slate-800/80 space-y-1.5 bg-slate-900">
         <button
           type="button"
           onClick={() => navigate("/")}

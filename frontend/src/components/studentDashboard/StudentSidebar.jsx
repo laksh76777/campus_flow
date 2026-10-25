@@ -62,22 +62,22 @@ export default function StudentSidebar({
 
   // Reusable sidebar navigation content
   const sidebarContent = (
-    <div className="flex h-full flex-col justify-between bg-white">
+    <div className="flex h-full flex-col bg-white select-none">
       {/* Top Section */}
-      <div>
+      <div className="shrink-0">
         {/* Brand Header */}
-        <div className="flex h-18 items-center justify-between border-b border-slate-100 px-5">
+        <div className="flex h-16 items-center justify-between border-b border-slate-100 px-4">
           <Link
             to="/"
             aria-label="CampusFlow home"
             className="flex items-center gap-3 group"
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20 group-hover:scale-105 transition-transform">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20 group-hover:scale-105 transition-transform shrink-0">
               <GraduationCap className="h-5 w-5" />
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="font-extrabold tracking-tight text-slate-900 text-base">
+                <span className="font-extrabold tracking-tight text-slate-900 text-base leading-tight">
                   CampusFlow
                 </span>
                 <span className="rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-600 border border-blue-100">
@@ -100,83 +100,83 @@ export default function StudentSidebar({
         </div>
 
         {/* Student Profile Quick Card */}
-        <div className="p-4 border-b border-slate-100">
-          <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-3 border border-slate-100">
+        <div className="p-3 border-b border-slate-100">
+          <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-2.5 border border-slate-100">
             <div className="relative shrink-0">
               {user?.avatar?.url ? (
                 <img
                   src={user.avatar.url}
                   alt={displayName}
-                  className="h-10 w-10 rounded-full object-cover ring-2 ring-blue-500/30"
+                  className="h-9 w-9 rounded-full object-cover ring-2 ring-blue-500/30"
                 />
               ) : (
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 text-sm font-bold text-white shadow-xs">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 text-xs font-bold text-white shadow-xs">
                   {avatarLetter}
                 </div>
               )}
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-bold text-slate-900">{displayName}</p>
-              <p className="truncate text-[11px] text-slate-400">{branch}</p>
+              <p className="truncate text-[10px] text-slate-400">{branch}</p>
               <p className="truncate text-[10px] text-slate-400 font-mono">{displayEmail}</p>
             </div>
           </div>
         </div>
-
-        {/* Nav Links */}
-        <nav aria-label="Student navigation" className="p-3 space-y-1">
-          <p className="px-3 pt-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            Menu
-          </p>
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeTab === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                aria-current={isActive ? "page" : undefined}
-                onClick={() => {
-                  setActiveTab(item.id);
-                  setIsOpen(false);
-                }}
-                className={`group flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-xs font-semibold transition-all ${
-                  isActive
-                    ? "bg-blue-600 text-white shadow-sm shadow-blue-500/25"
-                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Icon
-                    className={`h-4 w-4 transition-colors ${
-                      isActive ? "text-white" : "text-slate-400 group-hover:text-blue-600"
-                    }`}
-                  />
-                  <span>{item.label}</span>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  {item.badge > 0 && (
-                    <span
-                      className={`inline-flex items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none ${
-                        isActive
-                          ? "bg-white text-blue-600 shadow-xs"
-                          : "bg-rose-500 text-white shadow-xs"
-                      }`}
-                    >
-                      {item.badge > 99 ? "99+" : item.badge}
-                    </span>
-                  )}
-                  {isActive && <ChevronRight className="h-3.5 w-3.5 text-blue-200" />}
-                </div>
-              </button>
-            );
-          })}
-        </nav>
       </div>
 
-      {/* Bottom Footer Actions */}
-      <div className="p-3 border-t border-slate-100 space-y-1.5">
+      {/* Nav Links (Scrollable, never pushes footer out) */}
+      <nav aria-label="Student navigation" className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-1">
+        <p className="px-3 pt-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+          Menu
+        </p>
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = activeTab === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              aria-current={isActive ? "page" : undefined}
+              onClick={() => {
+                setActiveTab(item.id);
+                setIsOpen(false);
+              }}
+              className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
+                isActive
+                  ? "bg-blue-600 text-white shadow-sm shadow-blue-500/25"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+              }`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Icon
+                  className={`h-4 w-4 shrink-0 transition-colors ${
+                    isActive ? "text-white" : "text-slate-400 group-hover:text-blue-600"
+                  }`}
+                />
+                <span className="truncate">{item.label}</span>
+              </div>
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                {item.badge > 0 && (
+                  <span
+                    className={`inline-flex items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none ${
+                      isActive
+                        ? "bg-white text-blue-600 shadow-xs"
+                        : "bg-rose-500 text-white shadow-xs"
+                    }`}
+                  >
+                    {item.badge > 99 ? "99+" : item.badge}
+                  </span>
+                )}
+                {isActive && <ChevronRight className="h-3.5 w-3.5 text-blue-200" />}
+              </div>
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* Bottom Footer Actions (Permanently pinned, fully visible) */}
+      <div className="shrink-0 p-3 border-t border-slate-100 space-y-1.5 bg-white">
         <button
           type="button"
           onClick={() => navigate("/")}
