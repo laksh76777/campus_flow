@@ -3,6 +3,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { SupportConversation } from "../models/supportConversation.model.js";
+import { StudentProfile } from "../models/studentProfile.model.js";
 import { getLiveDriveFacts, generateSupportAnswer, answerFromLocalKnowledge } from "../services/supportAssistant.service.js";
 import { processAdminCopilotPrompt } from "../services/adminCopilot.service.js";
 
@@ -44,36 +45,59 @@ const addStudentMessage = (conversation, user, content) => {
     conversation.lastMessageAt = new Date();
 };
 
-const addAssistantReply = async (conversation) => {
+const addAssistantReply = async (conversation, studentUser = null) => {
     let response;
     const lastStudentMsg = conversation.messages
         .filter((m) => m.senderRole === "student")
         .slice(-1)[0]?.content || "";
+
+    let studentProfile = null;
+    const studentId = studentUser?._id || conversation.student?._id || conversation.student;
+    if (studentId) {
+        try {
+            studentProfile = await StudentProfile.findOne({ user: studentId })
+                .select("cgpa activeBacklogs program graduationYear fullName academicVerificationStatus")
+                .maxTimeMS(2000)
+                .lean();
+        } catch {}
+    }
+
+    let geminiFailed = false;
 
     try {
         const liveDrives = await getLiveDriveFacts();
         response = await generateSupportAnswer({
             messages: conversation.messages,
             liveDrives,
+            studentProfile,
         });
     } catch (error) {
-        console.warn("CampusFlow assistant active fallback:", error.status || error.name || "using local knowledge base");
+        console.warn("CampusFlow Gemini assistant error, falling back:", error.status || error.name || error.message);
+        geminiFailed = true;
         const liveDrives = await getLiveDriveFacts().catch(() => []);
-        response = answerFromLocalKnowledge(lastStudentMsg, liveDrives);
+        response = answerFromLocalKnowledge(lastStudentMsg, liveDrives, studentProfile);
     }
 
-    const needsAdmin = response.handoffRecommended || response.confidence < 0.55;
+    // Connect to human TPO only if:
+    // 1. Student explicitly requests human escalation, OR
+    // 2. Gemini completely failed and local engine flagged handoff
+    const explicitlyRequestsHuman = /\b(tpo|officer|talk to (a )?human|speak to (a )?(human|person|officer)|human assistance|contact tpo|connect (me )?to tpo)\b/i.test(lastStudentMsg);
+    const needsAdmin = explicitlyRequestsHuman || (geminiFailed && response.handoffRecommended);
+
     conversation.messages.push({
         senderRole: "assistant",
         content: response.answer,
-        confidence: response.confidence,
+        confidence: response.confidence ?? 0.95,
         handoffRecommended: needsAdmin,
         readByStudent: false,
         readByAdmin: true,
     });
     conversation.lastMessageAt = new Date();
-    if (needsAdmin && conversation.status !== "closed") conversation.status = "open";
-    else if (conversation.status !== "closed" && conversation.status !== "answered") conversation.status = "bot_answered";
+    if (needsAdmin && conversation.status !== "closed") {
+        conversation.status = "open";
+    } else if (conversation.status !== "closed" && conversation.status !== "answered") {
+        conversation.status = "bot_answered";
+    }
     return { ...response, handoffRequired: needsAdmin };
 };
 
@@ -98,11 +122,11 @@ export const createSupportConversation = asyncHandler(async (req, res) => {
     const conversation = new SupportConversation({
         student: req.user._id,
         subject,
-        status: "open",
+        status: "bot_answered",
         messages: [],
     });
     addStudentMessage(conversation, req.user, message);
-    const assistant = await addAssistantReply(conversation);
+    const assistant = await addAssistantReply(conversation, req.user);
     await conversation.save();
 
     return res.status(201).json(new ApiResponse(201, {
@@ -111,7 +135,7 @@ export const createSupportConversation = asyncHandler(async (req, res) => {
             confidence: assistant.confidence,
             handoffRequired: assistant.handoffRequired,
         },
-    }, "Your question was sent to CampusFlow support."));
+    }, "Your question was processed by CampusFlow AI Support."));
 });
 
 export const getMySupportConversations = asyncHandler(async (req, res) => {
@@ -189,11 +213,8 @@ export const sendStudentSupportMessage = asyncHandler(async (req, res) => {
     if (conversation.messages.length >= MAX_MESSAGES_PER_CONVERSATION - 2) {
         throw new ApiError(409, "This conversation reached its message limit. Please open a new support question.");
     }
-    if (conversation.status === "closed") conversation.status = "open";
-    else if (conversation.status === "answered" || conversation.status === "bot_answered") conversation.status = "open";
-
     addStudentMessage(conversation, req.user, message);
-    const assistant = await addAssistantReply(conversation);
+    const assistant = await addAssistantReply(conversation, req.user);
     await conversation.save();
     return res.status(201).json(new ApiResponse(201, {
         conversation: serializeConversation(conversation),
