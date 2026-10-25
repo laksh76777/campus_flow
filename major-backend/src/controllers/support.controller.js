@@ -3,7 +3,8 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { SupportConversation } from "../models/supportConversation.model.js";
-import { getLiveDriveFacts, generateSupportAnswer } from "../services/supportAssistant.service.js";
+import { getLiveDriveFacts, generateSupportAnswer, answerFromLocalKnowledge } from "../services/supportAssistant.service.js";
+import { processAdminCopilotPrompt } from "../services/adminCopilot.service.js";
 
 const MAX_MESSAGE_LENGTH = 4000;
 const MAX_MESSAGES_PER_CONVERSATION = 200;
@@ -45,6 +46,10 @@ const addStudentMessage = (conversation, user, content) => {
 
 const addAssistantReply = async (conversation) => {
     let response;
+    const lastStudentMsg = conversation.messages
+        .filter((m) => m.senderRole === "student")
+        .slice(-1)[0]?.content || "";
+
     try {
         const liveDrives = await getLiveDriveFacts();
         response = await generateSupportAnswer({
@@ -52,12 +57,9 @@ const addAssistantReply = async (conversation) => {
             liveDrives,
         });
     } catch (error) {
-        console.warn("CampusFlow assistant unavailable:", error.status || error.name || "request failed");
-        response = {
-            answer: "I can't verify that right now. Your message is saved, and you can send it to the TPO team for a confirmed answer.",
-            confidence: 0,
-            handoffRecommended: true,
-        };
+        console.warn("CampusFlow assistant active fallback:", error.status || error.name || "using local knowledge base");
+        const liveDrives = await getLiveDriveFacts().catch(() => []);
+        response = answerFromLocalKnowledge(lastStudentMsg, liveDrives);
     }
 
     const needsAdmin = response.handoffRecommended || response.confidence < 0.55;
@@ -253,4 +255,15 @@ export const updateSupportConversationStatus = asyncHandler(async (req, res) => 
     if (status === "open") conversation.assignedAdmin = req.user._id;
     await conversation.save();
     return res.status(200).json(new ApiResponse(200, serializeConversation(conversation), "Conversation status updated."));
+});
+
+export const handleAdminCopilotPrompt = asyncHandler(async (req, res) => {
+    const prompt = cleanText(req.body.prompt, "Prompt");
+    const result = await processAdminCopilotPrompt({
+        prompt,
+        adminUser: req.user,
+    });
+    return res.status(200).json(
+        new ApiResponse(200, result, "Admin Copilot response generated successfully.")
+    );
 });

@@ -8,3 +8,4 @@ export const requestAdminReply = async (id) => (await api.post(`/support/convers
 export const getAdminSupportInbox = async (status = "open") => (await api.get("/support/admin/inbox", { params: { status } })).data;
 export const sendAdminSupportReply = async (id, message) => (await api.post(`/support/admin/${id}/reply`, { message })).data;
 export const updateSupportStatus = async (id, status) => (await api.patch(`/support/admin/${id}/status`, { status })).data;
+export const sendAdminCopilotPrompt = async (prompt) => (await api.post("/support/admin/copilot", { prompt })).data;

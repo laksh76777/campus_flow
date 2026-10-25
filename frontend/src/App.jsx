@@ -95,6 +95,14 @@ function App() {
 
         {/* Protected Admin / TPO Portal Routes */}
         <Route
+          path="/admin"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/admin-dashboard"
           element={
             <ProtectedRoute requiredRole="admin">
@@ -131,6 +139,30 @@ function App() {
           element={
             <ProtectedRoute requiredRole="admin">
               <AdminDashboard initialTab="applications" />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/support"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminDashboard initialTab="support" />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/students"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminDashboard initialTab="students" />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/analytics"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminDashboard initialTab="analytics" />
             </ProtectedRoute>
           }
         />

@@ -10,12 +10,14 @@ import {
     requestAdminReply,
     replyToSupportConversation,
     updateSupportConversationStatus,
+    handleAdminCopilotPrompt,
 } from "../controllers/support.controller.js";
 
 const router = Router();
 router.use(verifyJWT);
 
 router.get("/admin/inbox", verifyAdmin, getAdminSupportInbox);
+router.post("/admin/copilot", verifyAdmin, handleAdminCopilotPrompt);
 router.get("/my-conversations", verifyStudent, getMySupportConversations);
 router.post("/conversations", verifyStudent, supportAssistantLimiter, createSupportConversation);
 router.get("/conversations/:conversationId", getSupportConversation);
