@@ -47,6 +47,19 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const showDemoAccounts = import.meta.env.DEV;
+
+  const fillDemoAccount = (demoRole) => {
+    const account = demoRole === "admin"
+      ? { email: "admin@campusflow.edu", password: "Admin@12345", redirect: "/admin-dashboard" }
+      : { email: "student@campusflow.edu", password: "Student@12345", redirect: "/student-dashboard" };
+    setRole(demoRole);
+    setSearchParams({ role: demoRole, redirect: account.redirect });
+    setEmail(account.email);
+    setPassword(account.password);
+    setError("");
+    toast.success(`Filled local ${demoRole === "admin" ? "TPO" : "student"} demo account`);
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -62,7 +75,13 @@ export default function Login() {
 
       let resData;
       if (role === "student") {
-        resData = await loginStudent({ email: email.trim(), password });
+        const identifier = email.trim();
+        resData = await loginStudent({
+          ...(identifier.includes("@")
+            ? { email: identifier }
+            : { rollNumber: identifier.toUpperCase() }),
+          password,
+        });
       } else {
         resData = await loginAdmin({ email: email.trim(), password });
       }
@@ -120,25 +139,6 @@ export default function Login() {
     } finally {
       setLoading(false);
     }
-  };
-
-  // Quick fill for testing & evaluator convenience
-  const fillDemoStudent = () => {
-    setRole("student");
-    setSearchParams({ role: "student", redirect: "/student-dashboard" });
-    setEmail("student@campusflow.edu");
-    setPassword("Student@12345");
-    setError("");
-    toast.success("Filled student credentials (student@campusflow.edu)");
-  };
-
-  const fillDemoAdmin = () => {
-    setRole("admin");
-    setSearchParams({ role: "admin", redirect: "/admin-dashboard" });
-    setEmail("admin@campusflow.edu");
-    setPassword("Admin@12345");
-    setError("");
-    toast.success("Filled TPO admin credentials (admin@campusflow.edu)");
   };
 
   return (
@@ -252,9 +252,11 @@ export default function Login() {
                   <Mail className="h-4 w-4" />
                 </div>
                 <input
-                  type="email"
+                  type={role === "student" ? "text" : "email"}
                   required
-                  placeholder={role === "student" ? "student@campusflow.edu" : "admin@campusflow.edu"}
+                  autoComplete="username"
+                  inputMode={role === "student" ? "text" : "email"}
+                  placeholder={role === "student" ? "name@college.edu or USN" : "name@college.edu"}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/70 py-2 pr-3 pl-9 text-xs sm:text-sm text-slate-900 placeholder-slate-400 transition focus:bg-white focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 focus:outline-none"
@@ -314,44 +316,32 @@ export default function Login() {
             </button>
           </form>
 
-          {/* Quick Demo Fillers for Evaluator (Compact Light Theme) */}
-          <div className="mt-3.5 border-t border-slate-100 pt-2.5">
-            <div className="flex items-center justify-between mb-1.5">
-              <p className="text-[10px] font-bold tracking-wider uppercase text-slate-400">
-                Quick 1-Click Demo Fill:
-              </p>
-              <span className="text-[9px] text-orange-700 font-semibold bg-orange-100/70 px-1.5 py-0.2 rounded-full border border-orange-200">
-                Evaluator Mode
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={fillDemoStudent}
-                className="group flex flex-col items-center justify-center rounded-xl border border-slate-200 bg-slate-50/70 p-2 text-center transition-all duration-200 hover:border-orange-400 hover:bg-orange-50/40 hover:shadow-2xs"
-              >
-                <div className="flex items-center gap-1 text-[11px] font-bold text-orange-600 group-hover:text-orange-700">
-                  <CheckCircle2 className="h-3 w-3 text-orange-600" />
-                  <span>Student Demo</span>
-                </div>
-                <span className="mt-0.5 text-[9px] text-slate-700 font-mono">student@campusflow.edu</span>
-                <span className="text-[9px] text-slate-400 font-mono">Student@12345</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={fillDemoAdmin}
-                className="group flex flex-col items-center justify-center rounded-xl border border-slate-200 bg-slate-50/70 p-2 text-center transition-all duration-200 hover:border-amber-400 hover:bg-amber-50/40 hover:shadow-2xs"
-              >
-                <div className="flex items-center gap-1 text-[11px] font-bold text-amber-700 group-hover:text-amber-800">
-                  <CheckCircle2 className="h-3 w-3 text-amber-600" />
-                  <span>Admin / TPO</span>
-                </div>
-                <span className="mt-0.5 text-[9px] text-slate-700 font-mono">admin@campusflow.edu</span>
-                <span className="text-[9px] text-slate-400 font-mono">Admin@12345</span>
-              </button>
-            </div>
-          </div>
+          {showDemoAccounts && (
+            <section className="mt-4 border-t border-slate-100 pt-3" aria-label="Local demo accounts">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Quick demo login</p>
+                <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-bold text-amber-800">Local development only</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => fillDemoAccount("student")}
+                  className="group rounded-xl border border-slate-200 bg-slate-50/70 p-2.5 text-left transition hover:border-orange-300 hover:bg-orange-50/60"
+                >
+                  <span className="flex items-center gap-1.5 text-xs font-bold text-orange-700"><CheckCircle2 className="h-3.5 w-3.5"/> Student demo</span>
+                  <span className="mt-1 block truncate font-mono text-[10px] text-slate-600">student@campusflow.edu</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fillDemoAccount("admin")}
+                  className="group rounded-xl border border-slate-200 bg-slate-50/70 p-2.5 text-left transition hover:border-amber-300 hover:bg-amber-50/60"
+                >
+                  <span className="flex items-center gap-1.5 text-xs font-bold text-amber-800"><CheckCircle2 className="h-3.5 w-3.5"/> Admin / TPO</span>
+                  <span className="mt-1 block truncate font-mono text-[10px] text-slate-600">admin@campusflow.edu</span>
+                </button>
+              </div>
+            </section>
+          )}
 
           {/* Register Link */}
           <div className="mt-3 text-center text-[11px] text-slate-500">

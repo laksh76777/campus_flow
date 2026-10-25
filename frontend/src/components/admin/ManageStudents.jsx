@@ -15,16 +15,13 @@ import {
   Calendar,
   GraduationCap,
   Layers,
-  ChevronRight,
   ChevronDown,
   ChevronUp,
   FileSpreadsheet,
   Minimize2,
   Maximize2,
-  SlidersHorizontal,
   ShieldAlert,
-  Lock,
-  Unlock,
+  X,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { getResumeViewUrl } from "../../utils/resumeHelper";
@@ -61,6 +58,10 @@ export default function ManageStudents({
       setInternalSessionFilter(activeSessionId);
     }
   }, [activeSessionId]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, internalSessionFilter, branchFilter, backlogFilter, placedFilter, onlyModificationRequests]);
 
   const handleSessionChange = (e) => {
     const val = e.target.value;
@@ -105,18 +106,22 @@ export default function ManageStudents({
       const program = programs.find((item) => item.code === s.programCode);
       const branch = program?.name || s.branch || s.department || "";
 
-      const matchesSearch =
-        fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        enrollment.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        branch.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesSearch = !searchQuery.trim() || [
+        fullName,
+        email,
+        enrollment,
+        s.usn,
+        s.phone,
+        s.alternatePhone,
+        branch,
+      ].some((value) => String(value ?? "").toLowerCase().includes(searchQuery.trim().toLowerCase()));
 
       const sSessId = s.placementSession?._id || s.placementSession;
       const sSessYear = s.placementSession?.sessionYear || s.graduationYear;
       const matchesSession =
         internalSessionFilter === "all"
           ? true
-          : sSessId === internalSessionFilter ||
+          : String(sSessId || "") === String(internalSessionFilter) ||
             String(sSessYear) === String(internalSessionFilter);
 
       const matchesBranch =
@@ -147,6 +152,12 @@ export default function ManageStudents({
       return matchesSearch && matchesSession && matchesBranch && matchesBacklog && matchesPlaced && matchesMod;
     });
   }, [students, programs, searchQuery, internalSessionFilter, branchFilter, backlogFilter, placedFilter, onlyModificationRequests]);
+
+  useEffect(() => {
+    if (pageSize === "all") return;
+    const lastPage = Math.max(1, Math.ceil(filteredStudents.length / Number(pageSize)));
+    setCurrentPage((page) => Math.min(page, lastPage));
+  }, [filteredStudents.length, pageSize]);
 
   // Group filtered students by Department for hierarchical drill-down
   const departmentGroups = useMemo(() => {
@@ -204,6 +215,24 @@ export default function ManageStudents({
   }, [filteredStudents, pageSize, currentPage]);
 
   const totalPages = pageSize === "all" ? 1 : Math.ceil(filteredStudents.length / Number(pageSize));
+  const activeFilterCount = [
+    searchQuery.trim(),
+    internalSessionFilter !== "all",
+    branchFilter !== "all",
+    backlogFilter !== "all",
+    placedFilter !== "all",
+    onlyModificationRequests,
+  ].filter(Boolean).length;
+
+  const clearFilters = () => {
+    setSearchQuery("");
+    setInternalSessionFilter("all");
+    onSelectSession?.("all");
+    setBranchFilter("all");
+    setBacklogFilter("all");
+    setPlacedFilter("all");
+    setOnlyModificationRequests(false);
+  };
 
   // Cohort statistics
   const stats = useMemo(() => {
@@ -305,74 +334,55 @@ export default function ManageStudents({
 
   return (
     <div className="space-y-6">
-      {/* Top Banner & Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/90 shadow-xs">
-        <div>
-          <h2 className="text-xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2.5">
-            <span>Registered Students Directory</span>
-            <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700 border border-blue-100">
-              {dataStatus === "loading" && students.length === 0
-                ? "Loading..."
-                : dataStatus === "error" && students.length === 0
-                ? "Unavailable"
-                : `${filteredStudents.length} Students`}
-            </span>
-          </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Verified candidate profiles, academic performance metrics, and portfolio credentials
-          </p>
+      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-4 border-b border-slate-100 bg-gradient-to-r from-white via-blue-50/40 to-indigo-50/50 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+          <div className="flex min-w-0 items-center gap-3.5">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-md shadow-indigo-600/20"><Users className="h-5 w-5" /></div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-lg font-extrabold tracking-tight text-slate-900 sm:text-xl">Registered Students</h2>
+                <span className="rounded-full border border-indigo-100 bg-white px-2.5 py-1 text-[11px] font-bold text-indigo-700 shadow-xs">{filteredStudents.length.toLocaleString()} shown</span>
+              </div>
+              <p className="mt-1 text-xs leading-5 text-slate-500">Review student profiles, academic readiness, placement outcomes, and pending record changes.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <span className="rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-xs font-semibold text-slate-600">{stats.total.toLocaleString()} records</span>
+            {onRefresh && <button type="button" onClick={handleManualRefresh} disabled={isRefreshing} aria-label="Refresh student records" title="Refresh student records" className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin text-indigo-600" : ""}`} /></button>}
+          </div>
         </div>
-
-        {/* Quick KPI Counters */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-center">
-            <span className="text-[10px] font-bold text-slate-400 uppercase">Avg CGPA</span>
-            <p className="text-sm font-extrabold text-blue-600">{stats.avgCgpa}</p>
-          </div>
-          <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-center">
-            <span className="text-[10px] font-bold text-slate-400 uppercase">Resumes</span>
-            <p className="text-sm font-extrabold text-emerald-600">{stats.withResume}</p>
-          </div>
-          <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-center">
-            <span className="text-[10px] font-bold text-slate-400 uppercase">0 Backlogs</span>
-            <p className="text-sm font-extrabold text-indigo-600">{stats.zeroBacklogs}</p>
-          </div>
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-center">
-            <span className="text-[10px] font-bold text-emerald-600 uppercase">✓ Placed</span>
-            <p className="text-sm font-extrabold text-emerald-700">{stats.placed}</p>
-          </div>
-          {onRefresh && (
-            <button
-              onClick={handleManualRefresh}
-              disabled={isRefreshing}
-              title="Refresh student records"
-              className="flex items-center justify-center h-11 w-11 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 active:scale-95 transition"
-            >
-              <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin text-blue-600" : ""}`} />
-            </button>
-          )}
+        <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 sm:p-5 lg:grid-cols-3 xl:grid-cols-6">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3"><span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Students</span><p className="mt-1 text-xl font-black text-slate-900">{stats.total.toLocaleString()}</p><p className="mt-0.5 text-[10px] text-slate-500">in selected cohort</p></div>
+          <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-3"><span className="text-[10px] font-bold uppercase tracking-wide text-blue-700">Average CGPA</span><p className="mt-1 text-xl font-black text-blue-800">{stats.avgCgpa}</p><p className="mt-0.5 text-[10px] text-blue-700/70">verified where available</p></div>
+          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-3"><span className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">Resume ready</span><p className="mt-1 text-xl font-black text-emerald-800">{stats.withResume.toLocaleString()}</p><p className="mt-0.5 text-[10px] text-emerald-700/70">profiles with a resume</p></div>
+          <div className="rounded-2xl border border-violet-100 bg-violet-50/60 p-3"><span className="text-[10px] font-bold uppercase tracking-wide text-violet-700">No active backlog</span><p className="mt-1 text-xl font-black text-violet-800">{stats.zeroBacklogs.toLocaleString()}</p><p className="mt-0.5 text-[10px] text-violet-700/70">clear academic standing</p></div>
+          <div className="rounded-2xl border border-teal-100 bg-teal-50/60 p-3"><span className="text-[10px] font-bold uppercase tracking-wide text-teal-700">Placed</span><p className="mt-1 text-xl font-black text-teal-800">{stats.placed.toLocaleString()}</p><p className="mt-0.5 text-[10px] text-teal-700/70">confirmed placements</p></div>
+          <button type="button" onClick={() => setOnlyModificationRequests((current) => !current)} className={`rounded-2xl border p-3 text-left transition ${onlyModificationRequests ? "border-amber-300 bg-amber-100" : "border-amber-100 bg-amber-50/60 hover:border-amber-200 hover:bg-amber-50"}`}><span className="text-[10px] font-bold uppercase tracking-wide text-amber-800">Needs review</span><p className="mt-1 text-xl font-black text-amber-900">{studentsWithPendingMod.length.toLocaleString()}</p><p className="mt-0.5 text-[10px] text-amber-800/80">pending changes{onlyModificationRequests ? " · filtered" : " · view requests"}</p></button>
         </div>
-      </div>
+      </section>
 
       {/* Search and Filters Toolbar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200/90 shadow-xs">
-        <div className="relative flex-1 max-w-md">
+      <div className="space-y-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+        <div className="relative min-w-0 flex-1">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <input
             type="text"
-            placeholder="Search student by name, enrollment, or branch..."
+            aria-label="Search students"
+            placeholder="Search by name, USN, email, phone, or department…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 pl-10 pr-4 py-2 text-xs text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:outline-hidden transition"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50/70 py-3 pl-10 pr-10 text-sm text-slate-800 placeholder-slate-400 transition focus:border-indigo-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10"
           />
+          {searchQuery && <button type="button" onClick={() => setSearchQuery("")} aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700"><X className="h-4 w-4"/></button>}
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0">
           {/* Placement Session Filter */}
           <select
             value={internalSessionFilter}
             onChange={handleSessionChange}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-800 focus:border-blue-500 focus:outline-hidden"
+            className="min-w-44 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/10"
           >
             <option value="all">All Placement Sessions</option>
             {sessions.map((sess) => (
@@ -386,7 +396,7 @@ export default function ManageStudents({
           <select
             value={branchFilter}
             onChange={(e) => setBranchFilter(e.target.value)}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 focus:border-blue-500 focus:outline-hidden"
+            className="min-w-40 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/10"
           >
             <option value="all">All Departments</option>
             {programs.map((program) => (
@@ -403,7 +413,7 @@ export default function ManageStudents({
           <select
             value={backlogFilter}
             onChange={(e) => setBacklogFilter(e.target.value)}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 focus:border-blue-500 focus:outline-hidden"
+            className="min-w-36 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/10"
           >
             <option value="all">All Standing</option>
             <option value="zero">Zero Backlogs</option>
@@ -414,40 +424,12 @@ export default function ManageStudents({
           <select
             value={placedFilter}
             onChange={(e) => setPlacedFilter(e.target.value)}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 focus:border-blue-500 focus:outline-hidden"
+            className="min-w-32 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/10"
           >
             <option value="all">All Status</option>
             <option value="placed">✓ Placed</option>
             <option value="unplaced">⏳ Unplaced</option>
           </select>
-
-          {/* Dedicated Requested Modifications Filter */}
-          <button
-            type="button"
-            onClick={() => setOnlyModificationRequests((prev) => !prev)}
-            title="Filter students who requested profile modifications (e.g., cleared backlogs, CGPA updates)"
-            className={`rounded-xl px-3 py-2 text-xs font-black transition flex items-center gap-1.5 border shadow-2xs ${
-              onlyModificationRequests
-                ? "bg-gradient-to-r from-red-900 to-orange-700 text-white border-red-900 shadow-xs"
-                : studentsWithPendingMod.length > 0
-                ? "bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100"
-                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-            }`}
-          >
-            <ShieldAlert className={`h-3.5 w-3.5 ${onlyModificationRequests ? "text-orange-200" : studentsWithPendingMod.length > 0 ? "text-amber-700" : "text-slate-400"}`} />
-            <span>Requested Modifications</span>
-            <span
-              className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
-                onlyModificationRequests
-                  ? "bg-white text-red-950"
-                  : studentsWithPendingMod.length > 0
-                  ? "bg-amber-500 text-white animate-pulse"
-                  : "bg-slate-100 text-slate-500"
-              }`}
-            >
-              {studentsWithPendingMod.length}
-            </span>
-          </button>
 
           {/* View Mode Toggle: Hierarchical vs Table */}
           <div className="flex items-center rounded-xl border border-slate-200 bg-slate-100 p-1">
@@ -528,6 +510,8 @@ export default function ManageStudents({
             <span>Export CSV</span>
           </button>
         </div>
+        {activeFilterCount > 0 && <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 text-xs"><span className="font-medium text-slate-500"><strong className="text-slate-700">{activeFilterCount}</strong> active filter{activeFilterCount === 1 ? "" : "s"} · {filteredStudents.length.toLocaleString()} matching student{filteredStudents.length === 1 ? "" : "s"}</span><button type="button" onClick={clearFilters} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 font-bold text-indigo-700 transition hover:bg-indigo-50"><X className="h-3.5 w-3.5"/>Clear all filters</button></div>}
+        </div>
       </div>
 
       {/* Empty State */}
@@ -552,6 +536,8 @@ export default function ManageStudents({
               ? "No registered students match the selected filter criteria."
               : "Students will appear here once they register and activate their academic profiles."}
           </p>
+          {activeFilterCount > 0 && <button type="button" onClick={clearFilters} className="mt-5 inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-indigo-700"><X className="h-3.5 w-3.5"/>Clear filters</button>}
+          {dataStatus === "error" && onRefresh && <button type="button" onClick={handleManualRefresh} disabled={isRefreshing} className="mt-5 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`}/>Try again</button>}
         </div>
       ) : viewMode === "hierarchical" ? (
         /* HIERARCHICAL VIEW: Session -> Department -> Student Names */
@@ -619,7 +605,11 @@ export default function ManageStudents({
                 {/* Department Header with Collapse Toggle */}
                 <div
                   onClick={() => toggleDeptCollapse(group.name)}
-                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 sm:p-5 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100 cursor-pointer select-none hover:bg-slate-100/70 transition-colors"
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={!isDeptCollapsed}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggleDeptCollapse(group.name); } }}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 sm:p-5 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100 cursor-pointer select-none hover:bg-slate-100/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 transition-colors"
                 >
                   <div className="flex items-center gap-3">
                     <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 text-white flex items-center justify-center font-bold shadow-xs shrink-0">
@@ -672,7 +662,6 @@ export default function ManageStudents({
                     <div className="p-3.5 sm:p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5 bg-slate-50/30">
                       {deptStudents.map((student) => {
                         const name = student.user?.fullName || student.fullName || "Candidate";
-                        const email = student.user?.email || student.email || "";
                         const initial = name.charAt(0).toUpperCase();
                         const cgpa = student.verifiedCGPA ?? student.cgpa;
                         const backlogs = student.activeBacklogs ?? student.backlogs;
@@ -799,7 +788,7 @@ export default function ManageStudents({
                           <div
                             key={student._id || student.enrollmentNumber}
                             onClick={() => setSelectedStudent(student)}
-                            className="flex flex-col justify-between rounded-xl border border-slate-200/90 bg-white p-4 hover:border-blue-400 hover:shadow-md cursor-pointer transition group"
+                            className="flex flex-col justify-between rounded-xl border border-slate-200/90 bg-white p-4 hover:border-indigo-300 hover:shadow-md cursor-pointer transition group"
                           >
                             <div>
                               <div className="flex items-start justify-between gap-2">
@@ -958,7 +947,7 @@ export default function ManageStudents({
                     <tr
                       key={student._id || student.enrollmentNumber}
                       onClick={() => setSelectedStudent(student)}
-                      className="hover:bg-blue-50/50 cursor-pointer transition-colors group"
+                      className="hover:bg-indigo-50/70 cursor-pointer transition-colors group"
                       title="Click to view full student dossier"
                     >
                       {/* Candidate Avatar & Name */}

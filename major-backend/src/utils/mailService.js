@@ -74,17 +74,13 @@ export const getSmtpConfigStatus = () => {
     const smtpHost = (process.env.SMTP_HOST || "smtp.gmail.com").trim();
 
     const rawPort = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : null;
-    let smtpPort = rawPort;
-    let isSecure = process.env.SMTP_SECURE === "true";
-
-    if (smtpHost.includes("gmail.com") && (rawPort === 465 || !rawPort)) {
-        smtpPort = 465;
-        isSecure = true;
-    } else if (!smtpPort) {
-        smtpPort = isSecure ? 465 : 587;
-    } else if (smtpPort === 465) {
-        isSecure = true;
-    }
+    const hasExplicitPort = Number.isInteger(rawPort) && rawPort > 0 && rawPort <= 65535;
+    const smtpPort = hasExplicitPort
+        ? rawPort
+        : smtpHost.includes("gmail.com")
+            ? 465
+            : process.env.SMTP_SECURE === "true" ? 465 : 587;
+    const isSecure = smtpPort === 465 || process.env.SMTP_SECURE === "true";
 
     const hasUser = Boolean(emailUser);
     const hasPass = Boolean(emailPass);

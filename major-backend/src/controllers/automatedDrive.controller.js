@@ -126,7 +126,7 @@ export const commitCompanyResults = asyncHandler(async (req, res) => {
         driveId,
         roundNumber: Number(roundNumber),
         mode,
-        autoRejectAbsent: Boolean(autoRejectAbsent),
+        autoRejectAbsent: autoRejectAbsent === true || autoRejectAbsent === "true",
         confirmedAdvances,
         confirmedRejections: Array.isArray(confirmedRejections) ? confirmedRejections : [],
         confirmedExceptionResolutions: Array.isArray(confirmedExceptionResolutions) ? confirmedExceptionResolutions : [],

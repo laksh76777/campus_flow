@@ -141,13 +141,36 @@ export const updateDriveRoundsConfig = async (driveId, customRounds) => {
     if (!Array.isArray(customRounds) || customRounds.length === 0) {
         throw new Error("At least one selection round must be configured.");
     }
+    if (customRounds.length > 10) {
+        throw new Error("A placement drive can have no more than 10 selection rounds.");
+    }
+    if (drive.isPlacementCompleted) {
+        throw new Error("Completed placement drives cannot change their selection stages.");
+    }
+    const currentRoundNumber = Number(drive.currentRoundNumber || 1);
+    if (customRounds.length < currentRoundNumber) {
+        throw new Error(`Keep at least ${currentRoundNumber} round(s); the drive has already reached Round ${currentRoundNumber}.`);
+    }
+    const normalizedNames = customRounds.map((round, index) => String(round?.roundName || round?.name || `Round ${index + 1}`).trim());
+    if (normalizedNames.some((name) => !name || name.length > 80)) {
+        throw new Error("Every selection stage needs a name between 1 and 80 characters.");
+    }
+    if (new Set(normalizedNames.map((name) => name.toLocaleLowerCase())).size !== normalizedNames.length) {
+        throw new Error("Selection stage names must be unique.");
+    }
+    const hasProgressAfterConfiguredRounds = (drive.selectionRounds || []).some((round) =>
+        round.roundNumber > customRounds.length && round.status === "completed"
+    );
+    if (hasProgressAfterConfiguredRounds) {
+        throw new Error("Cannot remove selection rounds that already contain completed results.");
+    }
 
     // Preserve completed round progress
     const updatedRounds = customRounds.map((r, idx) => {
         const existing = drive.selectionRounds?.find((er) => er.roundNumber === (idx + 1));
         return {
             roundNumber: idx + 1,
-            name: String(r.roundName || r.name || `Round ${idx + 1}`).trim(),
+            name: normalizedNames[idx],
             roundType: String(r.roundType || "Other").trim(),
             description: String(r.description || "").trim(),
             status: existing ? existing.status : (idx === 0 ? "in_progress" : "pending"),
@@ -339,6 +362,17 @@ const extractTextFromPdfBuffer = (buffer) => {
 export const parseCompanyResultFile = async (fileBuffer, originalFilename = "") => {
     const ext = (originalFilename.split(".").pop() || "").toLowerCase();
     const parsedRows = [];
+    const cellText = (cell) => {
+        const value = cell?.value;
+        if (value == null) return "";
+        if (typeof value === "object") {
+            if (Array.isArray(value.richText)) return value.richText.map((part) => part.text || "").join("");
+            if (typeof value.text === "string") return value.text;
+            if (value.result != null) return String(value.result);
+            if (value.hyperlink) return String(value.text || value.hyperlink);
+        }
+        return String(value);
+    };
 
     if (ext === "xlsx" || ext === "xls") {
         const workbook = new ExcelJS.Workbook();
@@ -356,7 +390,7 @@ export const parseCompanyResultFile = async (fileBuffer, originalFilename = "") 
         for (let r = 1; r <= Math.min(5, worksheet.rowCount); r++) {
             const row = worksheet.getRow(r);
             row.eachCell((cell, colNumber) => {
-                const val = String(cell.value || "").trim().toLowerCase();
+                const val = cellText(cell).trim().toLowerCase();
                 if (/usn|seat|reg(istration)?|roll|student\s*id/i.test(val) && colMap.usn === -1) {
                     colMap.usn = colNumber;
                 } else if (/name|candidate/i.test(val) && colMap.name === -1) {
@@ -384,14 +418,12 @@ export const parseCompanyResultFile = async (fileBuffer, originalFilename = "") 
         // Read data rows
         for (let r = headerRowIndex + 1; r <= worksheet.rowCount; r++) {
             const row = worksheet.getRow(r);
-            let rawUSN = colMap.usn !== -1 ? String(row.getCell(colMap.usn).value || "") : "";
-            // Handle ExcelJS formula or rich text
-            if (typeof rawUSN === "object" && rawUSN?.text) rawUSN = rawUSN.text;
+            const rawUSN = colMap.usn !== -1 ? cellText(row.getCell(colMap.usn)) : "";
             
-            const rawName = colMap.name !== -1 ? String(row.getCell(colMap.name).value || "") : "";
-            const rawEmail = colMap.email !== -1 ? String(row.getCell(colMap.email).value || "") : "";
-            const rawStatus = colMap.status !== -1 ? String(row.getCell(colMap.status).value || "") : "";
-            const rawBranch = colMap.branch !== -1 ? String(row.getCell(colMap.branch).value || "") : "";
+            const rawName = colMap.name !== -1 ? cellText(row.getCell(colMap.name)) : "";
+            const rawEmail = colMap.email !== -1 ? cellText(row.getCell(colMap.email)) : "";
+            const rawStatus = colMap.status !== -1 ? cellText(row.getCell(colMap.status)) : "";
+            const rawBranch = colMap.branch !== -1 ? cellText(row.getCell(colMap.branch)) : "";
 
             const cleanUSN = normalizeUSN(rawUSN);
             if (cleanUSN) {
@@ -494,6 +526,12 @@ export const previewRoundResults = async ({
     await ensureDriveRounds(drive);
 
     const currentRoundNum = Number(roundNumber);
+    if (!Number.isInteger(currentRoundNum) || currentRoundNum < 1 || currentRoundNum > drive.selectionRounds.length) {
+        throw new Error(`Round number must be between 1 and ${drive.selectionRounds.length}.`);
+    }
+    if (!["shortlist_only", "complete_results"].includes(mode)) {
+        throw new Error("Unsupported result import mode.");
+    }
 
     if (drive.isPlacementCompleted) {
         throw new Error("This placement drive is already completed and closed. Result previews cannot be generated.");
@@ -557,6 +595,7 @@ export const previewRoundResults = async ({
     const proposedRejections = [];
     const exceptions = [];
     const processedUSNs = new Set();
+    const candidatesPresentInFile = new Set();
 
     // Process each uploaded row
     for (const row of rawRows) {
@@ -605,6 +644,10 @@ export const previewRoundResults = async ({
             continue;
         }
 
+        // A matched row with an identity mismatch is accounted for in the exception queue,
+        // but cannot be proposed for advancement or counted as an absent candidate.
+        candidatesPresentInFile.add(String(appInPool._id));
+
         // Student is in the pool! Cross-check identity fields
         const actualName = appInPool.submittedSnapshot?.fullName || appInPool.student?.user?.fullName || "";
         const actualEmail = appInPool.submittedSnapshot?.email || appInPool.student?.user?.email || "";
@@ -643,12 +686,39 @@ export const previewRoundResults = async ({
                 rowNumber: row.rowNumber,
                 canResolve: true,
             });
+            continue;
         }
 
         // Determine action based on file mode and row status
-        const isNegativeOutcome = /reject|fail|eliminated/i.test(row.status);
+        const isNegativeOutcome = /reject|fail|eliminat|not\s+selected|unsuccessful|did\s+not\s+(clear|qualify)|not\s+shortlisted|no\s+hire/i.test(row.status);
+        const isPositiveOutcome = /shortlist|advance|pass|clear|selected|offer|qualif|proceed|next\s+round|\byes\b|hired/i.test(row.status);
 
-        if (mode === "complete_results" && isNegativeOutcome) {
+        if (mode === "shortlist_only" && isNegativeOutcome) {
+            exceptions.push({
+                type: "RESULT_MODE_CONFLICT",
+                usn: normUSN,
+                uploadedName: row.name,
+                applicationId: appInPool._id,
+                message: `This row says "${row.status}" but the selected mode expects a shortlist-only file. Confirm the row outcome manually.`,
+                rowNumber: row.rowNumber,
+                canResolve: true,
+            });
+            continue;
+        }
+        if (mode === "complete_results" && !isNegativeOutcome && !isPositiveOutcome) {
+            exceptions.push({
+                type: "UNRECOGNIZED_RESULT_STATUS",
+                usn: normUSN,
+                uploadedName: row.name,
+                applicationId: appInPool._id,
+                message: `The result "${row.status || "(blank)"}" is not a recognized pass or rejection outcome. Confirm it manually.`,
+                rowNumber: row.rowNumber,
+                canResolve: true,
+            });
+            continue;
+        }
+
+        if (isNegativeOutcome) {
             proposedRejections.push({
                 applicationId: appInPool._id,
                 usn: normUSN,
@@ -686,7 +756,7 @@ export const previewRoundResults = async ({
     const potentialAbsentCandidates = candidatePool
         .filter((app) => {
             const usn = normalizeUSN(app.submittedSnapshot?.usn || app.student?.usn);
-            return !advancedUSNSet.has(usn) && !rejectedUSNSet.has(usn);
+            return !candidatesPresentInFile.has(String(app._id)) && !advancedUSNSet.has(usn) && !rejectedUSNSet.has(usn);
         })
         .map((app) => ({
             applicationId: app._id,
@@ -796,6 +866,13 @@ export const commitRoundResults = async ({
     await ensureDriveRounds(drive);
 
     const currentRoundNum = Number(roundNumber);
+
+    if (!Number.isInteger(currentRoundNum) || currentRoundNum < 1 || currentRoundNum > (drive.selectionRounds?.length || 0)) {
+        throw new Error(`Round number must be between 1 and ${drive.selectionRounds?.length || 0}.`);
+    }
+    if (!["shortlist_only", "complete_results"].includes(mode)) {
+        throw new Error("Unsupported result import mode.");
+    }
 
     if (drive.isPlacementCompleted) {
         throw new Error("This placement drive is already completed and closed. No further round results can be imported.");
@@ -917,6 +994,14 @@ export const commitRoundResults = async ({
                     action: "advance",
                     targetStatus: targetAdvanceStatus,
                     remarks: `TPO approved match: cleared ${roundName}`,
+                });
+            } else if (item.action === "reject_reviewed") {
+                seenAppIds.add(appId);
+                candidateActions.set(appId, {
+                    applicationId: appId,
+                    action: "reject",
+                    targetStatus: "rejected",
+                    remarks: `TPO reviewed the result and rejected this candidate for ${roundName}`,
                 });
             }
         }

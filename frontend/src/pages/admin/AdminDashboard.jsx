@@ -15,6 +15,7 @@ import ManageSessions from "../../components/admin/ManageSessions";
 import ExcelMigrationHub from "../../components/admin/ExcelMigrationHub";
 import ManageAnnouncements from "../../components/admin/ManageAnnouncements";
 import AutomatedPlacementDrives from "../../components/admin/AutomatedPlacementDrives";
+import AdminSupportInbox from "../../components/admin/AdminSupportInbox";
 
 import { useAuth } from "../../context/authContextDef";
 import {
@@ -27,7 +28,7 @@ import {
   deletePlacementDrive,
   getAllApplications,
   updateApplicationStatus,
-  getAllStudentProfiles,
+  getCompleteStudentDirectory,
 } from "../../services/adminService";
 import { getAllPlacementSessions } from "../../services/sessionService";
 
@@ -42,6 +43,7 @@ const ADMIN_TABS = [
   "sessions",
   "excel_hub",
   "announcements",
+  "support",
 ];
 
 export default function AdminDashboard({ initialTab = "overview" }) {
@@ -94,112 +96,38 @@ export default function AdminDashboard({ initialTab = "overview" }) {
   // Load Admin Data from API
   const loadDashboardData = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
-
     const failedSections = [];
+    const loadSection = async (label, request, validate, apply) => {
+      try {
+        const value = await request();
+        if (!validate(value)) throw new Error("Unexpected response format");
+        apply(value);
+      } catch (error) {
+        failedSections.push(label);
+        console.warn(`Failed to fetch ${label}:`, error.message);
+        if (label === "student records") setStudentsLoadState("error");
+      }
+    };
 
     try {
-      // 1. Fetch Placement Sessions
-      try {
-        const sessRes = await getAllPlacementSessions({ includeArchived: "true" });
-        if (Array.isArray(sessRes?.data)) {
-          setSessions(sessRes.data);
-          // Default to active session if not selected yet
-          const activeSess = sessRes.data.find((s) => s.isActive);
-          if (activeSess && selectedSessionId === "all") {
-            // Keep "all" or select active
-          }
-        } else {
-          failedSections.push("placement sessions (unexpected response)");
-        }
-      } catch (err) {
-        console.warn("Failed to fetch sessions:", err.message);
-        failedSections.push("placement sessions");
-      }
-
-      // 2. Fetch Stats
-      try {
-        const statsRes = await getAdminDashboardStats();
-        if (statsRes?.data && typeof statsRes.data === "object") {
-          setStats(statsRes.data);
-        } else {
-          failedSections.push("dashboard statistics (unexpected response)");
-        }
-      } catch (err) {
-        console.warn("Failed to fetch dashboard stats:", err.message);
-        failedSections.push("dashboard statistics");
-      }
-
-      // 3. Fetch Students Cohort
-      try {
-        const studentsRes = await getAllStudentProfiles({ limit: 200 });
-        const studentsData = studentsRes?.data?.students || studentsRes?.data;
-        if (Array.isArray(studentsData)) {
-          setStudents(studentsData);
+      await Promise.all([
+        loadSection("placement sessions", () => getAllPlacementSessions({ includeArchived: "true" }), (res) => Array.isArray(res?.data), (res) => setSessions(res.data)),
+        loadSection("dashboard statistics", getAdminDashboardStats, (res) => res?.data && typeof res.data === "object", (res) => setStats(res.data)),
+        loadSection("student records", getCompleteStudentDirectory, Array.isArray, (data) => {
+          setStudents(data);
           setStudentsLoadState("loaded");
-        } else {
-          setStudentsLoadState("error");
-          failedSections.push("student records (unexpected response)");
-        }
-      } catch (err) {
-        console.warn("Failed to fetch students:", err.message);
-        setStudentsLoadState("error");
-        failedSections.push("student records");
-      }
-
-      // 4. Fetch Companies
-      try {
-        const compRes = await getAllCompanies();
-        if (Array.isArray(compRes?.data)) {
-          setCompanies(compRes.data);
-        } else {
-          failedSections.push("companies (unexpected response)");
-        }
-      } catch (err) {
-        console.warn("Failed to fetch companies:", err.message);
-        failedSections.push("companies");
-      }
-
-      // 5. Fetch Drives
-      try {
-        const driveRes = await getAllPlacementDrives();
-        if (Array.isArray(driveRes?.data)) {
-          setDrives(driveRes.data);
-        } else {
-          failedSections.push("placement drives (unexpected response)");
-        }
-      } catch (err) {
-        console.warn("Failed to fetch placement drives:", err.message);
-        failedSections.push("placement drives");
-      }
-
-      // 6. Fetch all applications
-      try {
-        const appsRes = await getAllApplications({ limit: 200 });
-        const appsData = appsRes?.data?.applications || appsRes?.data;
-        if (Array.isArray(appsData)) {
-          setApplications(appsData);
-        } else {
-          failedSections.push("applications (unexpected response)");
-        }
-      } catch (err) {
-        console.warn("Failed to fetch applications:", err.message);
-        failedSections.push("applications");
-      }
-
+        }),
+        loadSection("companies", getAllCompanies, (res) => Array.isArray(res?.data), (res) => setCompanies(res.data)),
+        loadSection("placement drives", getAllPlacementDrives, (res) => Array.isArray(res?.data), (res) => setDrives(res.data)),
+        loadSection("applications", () => getAllApplications({ limit: 200 }), (res) => Array.isArray(res?.data?.applications || res?.data), (res) => setApplications(res.data?.applications || res.data)),
+      ]);
       if (failedSections.length > 0) {
-        toast.error(
-          `Unable to load ${failedSections.join(", ")}. Check the API connection and admin session.`
-        );
+        toast.error(`Unable to load ${failedSections.join(", ")}. Check the API connection and admin session.`);
       }
-    } catch (err) {
-      console.warn("Failed to fetch fresh admin data:", err.message);
-      toast.error(
-        err.response?.data?.message || "Failed to load admin dashboard data."
-      );
     } finally {
       setRefreshing(false);
     }
-  }, [selectedSessionId]);
+  }, []);
 
   useEffect(() => {
     loadDashboardData();
@@ -239,36 +167,29 @@ export default function AdminDashboard({ initialTab = "overview" }) {
 
   // Handlers for Drive
   const handleCreateDrive = async (newDriveData) => {
-    try {
-      // Auto-assign active placement session if selected
-      let payload = newDriveData;
-      if (newDriveData instanceof FormData) {
-        if (activeSessionObj) {
-          if (!newDriveData.get("placementSession")) {
-            newDriveData.append("placementSession", activeSessionObj._id);
-          }
-          if (!newDriveData.get("graduationYear")) {
-            newDriveData.append("graduationYear", activeSessionObj.sessionYear);
-          }
+    // Auto-assign active placement session if selected
+    let payload = newDriveData;
+    if (newDriveData instanceof FormData) {
+      if (activeSessionObj) {
+        if (!newDriveData.get("placementSession")) {
+          newDriveData.append("placementSession", activeSessionObj._id);
         }
-      } else {
-        payload = { ...newDriveData };
-        if (activeSessionObj) {
-          payload.placementSession = activeSessionObj._id;
-          payload.graduationYear = activeSessionObj.sessionYear;
+        if (!newDriveData.get("graduationYear")) {
+          newDriveData.append("graduationYear", activeSessionObj.sessionYear);
         }
       }
-      const res = await createPlacementDrive(payload);
-      const created = res?.data;
-      if (created) {
-        setDrives((prev) => [created, ...prev]);
-        toast.success("Placement drive created successfully");
-        return created;
+    } else {
+      payload = { ...newDriveData };
+      if (activeSessionObj) {
+        payload.placementSession = activeSessionObj._id;
+        payload.graduationYear = activeSessionObj.sessionYear;
       }
-    } catch (err) {
-      const msg = err.response?.data?.message || err.message || "Failed to create placement drive";
-      toast.error(msg);
-      throw err;
+    }
+    const res = await createPlacementDrive(payload);
+    const created = res?.data;
+    if (created) {
+      setDrives((prev) => [created, ...prev]);
+      return created;
     }
   };
 
@@ -321,25 +242,19 @@ export default function AdminDashboard({ initialTab = "overview" }) {
     remarks,
     extraDetails = {}
   ) => {
-    try {
-      await updateApplicationStatus(appId, newStatus, remarks, extraDetails);
-      toast.success(`Application status updated to ${newStatus}`);
-      setApplications((prev) =>
-        prev.map((app) =>
-          app._id === appId
-            ? {
-                ...app,
-                status: newStatus,
-                remarks: remarks || app.remarks,
-                ...extraDetails,
-              }
-            : app
-        )
-      );
-    } catch (err) {
-      const msg = err.response?.data?.message || err.message || "Failed to update application status";
-      toast.error(msg);
-    }
+    await updateApplicationStatus(appId, newStatus, remarks, extraDetails);
+    setApplications((prev) =>
+      prev.map((app) =>
+        app._id === appId
+          ? {
+              ...app,
+              status: newStatus,
+              remarks: remarks || app.remarks,
+              ...extraDetails,
+            }
+          : app
+      )
+    );
   };
 
   const handleViewApplicants = (driveId) => {
@@ -541,6 +456,7 @@ export default function AdminDashboard({ initialTab = "overview" }) {
               students={students}
             />
           )}
+          {activeTab === "support" && <AdminSupportInbox />}
         </main>
       </div>
 

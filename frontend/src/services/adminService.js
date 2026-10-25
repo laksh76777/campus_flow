@@ -113,6 +113,22 @@ export const getAllStudentProfiles = async (params = {}) => {
   return response.data;
 };
 
+export const getCompleteStudentDirectory = async (pageSize = 200) => {
+  const firstPage = await getAllStudentProfiles({ page: 1, limit: pageSize });
+  const firstStudents = firstPage?.data?.students || (Array.isArray(firstPage?.data) ? firstPage.data : []);
+  const totalPages = Math.max(1, Number(firstPage?.data?.pagination?.pages) || 1);
+  const remainingPages = Array.from({ length: totalPages - 1 }, (_, index) => index + 2);
+  const rest = [];
+
+  for (let index = 0; index < remainingPages.length; index += 5) {
+    const batch = remainingPages.slice(index, index + 5);
+    const responses = await Promise.all(batch.map((page) => getAllStudentProfiles({ page, limit: pageSize })));
+    rest.push(...responses.flatMap((response) => response?.data?.students || []));
+  }
+
+  return [...firstStudents, ...rest];
+};
+
 export const getStudentProfileById = async (studentId) => {
   const response = await api.get(`/studentprofile/${studentId}`);
   return response.data;

@@ -1,12 +1,12 @@
 # CampusFlow V2 — Modern Collegiate Placement Management System
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-2.0.0-blue.svg?style=for-the-badge" alt="Version 2.0.0" />
+  <img src="https://img.shields.io/badge/Version-2.1.0-blue.svg?style=for-the-badge" alt="Version 2.1.0" />
   <img src="https://img.shields.io/badge/Frontend-React_19_%7C_Vite-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React 19" />
   <img src="https://img.shields.io/badge/Backend-Node.js_%7C_Express-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node.js" />
   <img src="https://img.shields.io/badge/Database-MongoDB_%7C_Mongoose-47A248?style=for-the-badge&logo=mongodb&logoColor=white" alt="MongoDB" />
   <img src="https://img.shields.io/badge/Styling-Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind CSS" />
-  <img src="https://img.shields.io/badge/Tests-47%20Passing-brightgreen?style=for-the-badge" alt="Tests" />
+  <img src="https://img.shields.io/badge/Tests-106%20Passing-brightgreen?style=for-the-badge" alt="Tests" />
 </p>
 
 ## 🌐 Live Production Deployment
@@ -385,6 +385,8 @@ CampusFlow V2 is architected for zero-downtime production deployment with the fr
    | `REFRESH_TOKEN_SECRET` | Strong random 256-bit string |
    | `REFRESH_TOKEN_EXPIRY` | `10d` |
    | `ADMIN_SECRET_KEY` | Your secure TPO administrative signup passkey |
+| `GEMINI_API_KEY` | *(Optional; required for AI student support)* Server-side Google Gemini API key. Never put this key in a `VITE_` frontend variable. |
+| `GEMINI_MODEL` | *(Optional)* Model ID for support responses; defaults to `gemini-3.8-flash` |
    | `CORS_ORIGIN` | Your Vercel frontend URL (e.g. `https://campus-flow.vercel.app`, set once Vercel is deployed) |
    | `CLOUDINARY_*` | *(Optional)* Cloudinary CDN keys if document storage is enabled |
    | `RESEND_API_KEY` | *(Recommended for Render free services)* Resend API key for transactional email over HTTPS |
@@ -433,7 +435,12 @@ CampusFlow V2 is architected for zero-downtime production deployment with the fr
 - [ ] Verify student dashboard displays academic profile data and eligible placement drives.
 - [ ] Test admin sign in and verify the TPO analytics dashboard loads live statistics.
 - [ ] In Automated Placement Drives, open an active drive workspace and verify candidate pipeline and roster export.
+- [ ] Preview a company result file, resolve every identity mismatch and missing outcome, then confirm the round commit.
+- [ ] Configure a student-only support question and administrator reply from both dashboards; confirm Gemini fallback still creates a TPO inbox item when unavailable.
 - [ ] Test direct URL refresh on a nested route (e.g., `/student` or `/admin`) to confirm SPA routing works without 404s.
+
+### AI Student Support
+Student questions use Gemini's Interactions API from the backend only. The assistant receives general active-drive facts, is instructed to hand off private eligibility or administrator decisions, and sends requests with `store: false`; this is prompt-grounded behavior rather than fine-tuning. Configure `GEMINI_API_KEY` on Render to enable it. If Gemini is unavailable, students can still save the question and request a TPO reply.
 
 ---
 

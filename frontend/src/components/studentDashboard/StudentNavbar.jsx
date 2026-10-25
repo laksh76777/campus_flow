@@ -33,6 +33,7 @@ export default function StudentNavbar({
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(externalUnreadCount ?? 0);
   const [loadingNotifs, setLoadingNotifs] = useState(false);
+  const [notificationError, setNotificationError] = useState("");
   const notificationRef = useRef(null);
 
   useEffect(() => {
@@ -47,12 +48,14 @@ export default function StudentNavbar({
   const fetchNotifications = useCallback(async () => {
     try {
       setLoadingNotifs(true);
+      setNotificationError("");
       const res = await getMyNotifications();
       if (res?.data) {
         setNotifications(res.data.notifications || []);
         setUnreadCount(res.data.unreadCount || 0);
       }
     } catch (err) {
+      setNotificationError("Couldn't load notifications. Please try again.");
       console.warn("Notifications sync notice:", err.message);
     } finally {
       setLoadingNotifs(false);
@@ -186,6 +189,7 @@ export default function StudentNavbar({
     applications: "My Applications",
     notifications: "Message & Notification Center",
     profile: "Academic Profile",
+    support: "Student Support",
   };
 
   return (
@@ -277,7 +281,23 @@ export default function StudentNavbar({
               </div>
 
               <div className="mt-2 divide-y divide-slate-100 max-h-80 overflow-y-auto">
-                {notifications.length === 0 ? (
+                {notifications.length === 0 && loadingNotifs ? (
+                  <div className="py-8 text-center text-slate-500" role="status">
+                    <span className="mx-auto mb-2 block h-5 w-5 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+                    <p className="text-xs font-medium">Loading notifications…</p>
+                  </div>
+                ) : notifications.length === 0 && notificationError ? (
+                  <div className="py-8 text-center" role="alert">
+                    <p className="text-xs font-medium text-rose-700">{notificationError}</p>
+                    <button
+                      type="button"
+                      onClick={fetchNotifications}
+                      className="mt-2 text-xs font-semibold text-blue-700 hover:underline"
+                    >
+                      Try again
+                    </button>
+                  </div>
+                ) : notifications.length === 0 ? (
                   <div className="py-8 text-center text-slate-400">
                     <Bell className="h-8 w-8 mx-auto mb-2 text-slate-300 stroke-1" />
                     <p className="text-xs font-medium">No notifications yet</p>

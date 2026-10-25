@@ -84,6 +84,14 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/student-support"
+          element={
+            <ProtectedRoute requiredRole="student">
+              <StudentDashboard />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Protected Admin / TPO Portal Routes */}
         <Route

@@ -75,6 +75,7 @@ export default function AdminNavbar({
     companies: "Corporate Partners Directory",
     applications: "Applicant Review & Shortlisting",
     sessions: "Placement Sessions & Academic Cohorts",
+    support: "Student Support Inbox",
   };
 
   // Dynamically compute real admin alerts based on student registrations, profile edit permissions, and drive applications

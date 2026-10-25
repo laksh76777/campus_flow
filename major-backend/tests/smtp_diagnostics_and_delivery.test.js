@@ -18,12 +18,14 @@ test("1. Missing SMTP credentials reports NOT_CONFIGURED without leaking secrets
     const origPass = process.env.EMAIL_PASS;
     const origSmtpUser = process.env.SMTP_USER;
     const origSmtpPass = process.env.SMTP_PASS;
+    const origResendKey = process.env.RESEND_API_KEY;
 
     try {
         delete process.env.EMAIL_USER;
         delete process.env.EMAIL_PASS;
         delete process.env.SMTP_USER;
         delete process.env.SMTP_PASS;
+        delete process.env.RESEND_API_KEY;
 
         const config = getSmtpConfigStatus();
         assert.equal(config.configured, false);
@@ -41,16 +43,20 @@ test("1. Missing SMTP credentials reports NOT_CONFIGURED without leaking secrets
         process.env.EMAIL_PASS = origPass;
         process.env.SMTP_USER = origSmtpUser;
         process.env.SMTP_PASS = origSmtpPass;
+        if (origResendKey === undefined) delete process.env.RESEND_API_KEY;
+        else process.env.RESEND_API_KEY = origResendKey;
     }
 });
 
 test("2. Placeholder credentials detected without displaying secrets", async () => {
     const origUser = process.env.EMAIL_USER;
     const origPass = process.env.EMAIL_PASS;
+    const origResendKey = process.env.RESEND_API_KEY;
 
     try {
         process.env.EMAIL_USER = "your_email@gmail.com";
         process.env.EMAIL_PASS = "your_app_password";
+        delete process.env.RESEND_API_KEY;
 
         assert.equal(isPlaceholderValue("your_email@gmail.com"), true);
         assert.equal(isPlaceholderValue("your_app_password"), true);
@@ -67,6 +73,8 @@ test("2. Placeholder credentials detected without displaying secrets", async () 
     } finally {
         process.env.EMAIL_USER = origUser;
         process.env.EMAIL_PASS = origPass;
+        if (origResendKey === undefined) delete process.env.RESEND_API_KEY;
+        else process.env.RESEND_API_KEY = origResendKey;
     }
 });
 
@@ -110,6 +118,7 @@ test("4a. Explicit Gmail SMTP port is respected in production", () => {
     const originalPort = process.env.SMTP_PORT;
     const originalSecure = process.env.SMTP_SECURE;
     const originalHost = process.env.SMTP_HOST;
+    const originalResendKey = process.env.RESEND_API_KEY;
 
     try {
         process.env.NODE_ENV = "production";
@@ -117,6 +126,7 @@ test("4a. Explicit Gmail SMTP port is respected in production", () => {
         process.env.SMTP_HOST = "smtp.gmail.com";
         process.env.SMTP_PORT = "587";
         process.env.SMTP_SECURE = "false";
+        delete process.env.RESEND_API_KEY;
 
         const config = getSmtpConfigStatus();
         assert.equal(config.port, 587);
@@ -127,7 +137,8 @@ test("4a. Explicit Gmail SMTP port is respected in production", () => {
             RENDER: originalRender,
             SMTP_PORT: originalPort,
             SMTP_SECURE: originalSecure,
-            SMTP_HOST: originalHost
+            SMTP_HOST: originalHost,
+            RESEND_API_KEY: originalResendKey
         })) {
             if (value === undefined) delete process.env[name];
             else process.env[name] = value;

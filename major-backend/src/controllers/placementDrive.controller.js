@@ -10,7 +10,7 @@ import { EligibilityService } from "../services/eligibility.service.js";
 import { getCatalogProgram, PROGRAM_CATALOG, resolveProgram } from "../constants/programCatalog.js";
 import { studentMatchesDriveProgram } from "../services/programTargeting.service.js";
 import { syncDriveReminders } from "../services/reminderScheduler.service.js";
-import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import { uploadOnCloudinary, isCloudinaryConfigured } from "../utils/cloudinary.js";
 
 const normalizeEligiblePrograms = (programCodes, branches) => {
     let rawCodes = programCodes;
@@ -65,6 +65,9 @@ const normalizeEligiblePrograms = (programCodes, branches) => {
 const processJdPdfUpload = async (req) => {
     let jdAttachment = { url: "", fileName: "" };
     if (req.file) {
+        if (process.env.NODE_ENV === "production" && !isCloudinaryConfigured()) {
+            throw new ApiError(503, "Job description uploads are not configured. Add the Cloudinary environment variables or provide an online JD URL.");
+        }
         try {
             const uploadRes = await uploadOnCloudinary(req.file.path, {
                 folder: "campusflow/job_descriptions",
@@ -78,8 +81,11 @@ const processJdPdfUpload = async (req) => {
             }
         } catch (uploadErr) {
             console.warn("Cloudinary upload failed, using fallback:", uploadErr.message);
+            if (process.env.NODE_ENV === "production") {
+                throw new ApiError(503, "The job description could not be stored. Please try again or provide an online JD URL.");
+            }
             jdAttachment = {
-                url: `/uploads/${req.file.filename}`,
+                url: `/temp/${req.file.filename}`,
                 fileName: req.file.originalname || "Job_Description.pdf"
             };
         }
@@ -171,7 +177,7 @@ const createPlacementDrive = asyncHandler(async (req, res) => {
             "Application deadline must be after application start date"
         );
     }
-    if (placementDate < deadline) {
+    if (placementDate <= deadline) {
         throw new ApiError(
             400,
             "Drive date must be after application deadline"
@@ -536,7 +542,7 @@ const updatePlacementDrive = asyncHandler(async (req, res) => {
         );
     }
     if (
-        placementDrive.driveDate <
+        placementDrive.driveDate <=
         placementDrive.applicationDeadline
     ) {
         throw new ApiError(

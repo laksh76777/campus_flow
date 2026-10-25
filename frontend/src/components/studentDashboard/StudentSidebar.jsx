@@ -9,6 +9,7 @@ import {
   ExternalLink,
   ChevronRight,
   Bell,
+  MessageCircle,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -46,6 +47,7 @@ export default function StudentSidebar({
       icon: Bell,
       badge: unreadCount,
     },
+    { id: "support", label: "Ask TPO / Support", icon: MessageCircle },
     {
       id: "profile",
       label: "Academic Profile",

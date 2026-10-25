@@ -40,6 +40,7 @@ import RecentApplications from "../../components/studentDashboard/RecentApplicat
 import ApplyModal from "../../components/studentDashboard/ApplyModal";
 import ProfileDrawer, { cleanCertificateTitle, getEffectiveCredentialUrl } from "../../components/studentDashboard/ProfileDrawer";
 import ProfileModificationModal from "../../components/studentDashboard/ProfileModificationModal";
+import StudentSupportChat from "../../components/studentDashboard/StudentSupportChat";
 
 import {
   getStudentDashboardStats,
@@ -66,6 +67,7 @@ const STUDENT_ROUTE_TABS = {
   "/my-applications": "applications",
   "/notifications": "notifications",
   "/student-profile": "profile",
+  "/student-support": "support",
 };
 
 export default function StudentDashboard() {
@@ -1101,6 +1103,8 @@ export default function StudentDashboard() {
               />
             </div>
           )}
+
+          {activeTab === "support" && <StudentSupportChat />}
 
           {/* TAB 4: ACADEMIC PROFILE */}
           {activeTab === "profile" && !studentProfile && (

@@ -11,12 +11,14 @@ import {
 test("SMTP configuration status is truthfully determined from environment", () => {
     const originalUser = process.env.EMAIL_USER;
     const originalPass = process.env.EMAIL_PASS;
+    const originalResendKey = process.env.RESEND_API_KEY;
 
     try {
         delete process.env.EMAIL_USER;
         delete process.env.SMTP_USER;
         delete process.env.EMAIL_PASS;
         delete process.env.SMTP_PASS;
+        delete process.env.RESEND_API_KEY;
         assert.equal(isSmtpConfigured(), false, "Reports false when credentials missing");
 
         process.env.EMAIL_USER = "placement@campusflow.edu";
@@ -25,12 +27,16 @@ test("SMTP configuration status is truthfully determined from environment", () =
     } finally {
         process.env.EMAIL_USER = originalUser;
         process.env.EMAIL_PASS = originalPass;
+        if (originalResendKey === undefined) delete process.env.RESEND_API_KEY;
+        else process.env.RESEND_API_KEY = originalResendKey;
     }
 });
 
 test("Sender identity uses configured EMAIL_FROM or defaults safely", () => {
     const originalFrom = process.env.EMAIL_FROM;
+    const originalResendKey = process.env.RESEND_API_KEY;
     try {
+        delete process.env.RESEND_API_KEY;
         process.env.EMAIL_FROM = '"Campus Placement Office" <tpo@campusflow.edu>';
         assert.equal(getSenderAddress(), '"Campus Placement Office" <tpo@campusflow.edu>');
 
@@ -39,6 +45,8 @@ test("Sender identity uses configured EMAIL_FROM or defaults safely", () => {
         assert.match(fallback, /Training & Placement Cell/);
     } finally {
         process.env.EMAIL_FROM = originalFrom;
+        if (originalResendKey === undefined) delete process.env.RESEND_API_KEY;
+        else process.env.RESEND_API_KEY = originalResendKey;
     }
 });
 

@@ -38,17 +38,16 @@ const isOriginAllowed = (origin) => {
         .filter(Boolean);
 
     if (
-        envOrigins.includes("*") ||
         envOrigins.includes(normalizedOrigin) ||
-        deployedFrontendOrigins.includes(normalizedOrigin) ||
-        /^https:\/\/campus-flow[a-z0-9-]*\.vercel\.app$/i.test(normalizedOrigin)
+        deployedFrontendOrigins.includes(normalizedOrigin)
     ) {
         return true;
     }
 
     if (
-        defaultAllowedOrigins.includes(normalizedOrigin) ||
-        /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalizedOrigin)
+        process.env.NODE_ENV !== "production" &&
+        (defaultAllowedOrigins.includes(normalizedOrigin) ||
+            /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalizedOrigin))
     ) {
         return true;
     }
@@ -136,6 +135,7 @@ import notificationRouter from "./routes/notification.routes.js";
 import sessionRouter from "./routes/placementSession.routes.js";
 import departmentRouter from "./routes/department.routes.js";
 import excelRouter from "./routes/excel.routes.js";
+import supportRouter from "./routes/support.routes.js";
 
 app.use("/api/v1/users", userRouter);
 app.use("/api/v1/studentprofile", studentRouter);
@@ -148,6 +148,7 @@ app.use("/api/v1/notifications", notificationRouter);
 app.use("/api/v1/sessions", sessionRouter);
 app.use("/api/v1/departments", departmentRouter);
 app.use("/api/v1/excel", excelRouter);
+app.use("/api/v1/support", supportRouter);
 
 app.use((req, res, next) => {
     next(new ApiError(404, `Route not found: ${req.method} ${req.path}`));
@@ -160,7 +161,9 @@ app.use((err, req, res, next) => {
     }
 
     const statusCode =
-        Number.isInteger(err.statusCode) && err.statusCode >= 400
+        err.name === "MulterError" && err.code === "LIMIT_FILE_SIZE"
+            ? 413
+            : Number.isInteger(err.statusCode) && err.statusCode >= 400
             ? err.statusCode
             : 500;
     const isServerError = statusCode >= 500;
@@ -176,7 +179,9 @@ app.use((err, req, res, next) => {
     return res.status(statusCode).json({
         statusCode,
         success: false,
-        message: err.message || (isServerError ? "Internal Server Error" : "An error occurred"),
+        message: statusCode === 413
+            ? "Uploaded file is too large. Please upload a smaller file."
+            : err.message || (isServerError ? "Internal Server Error" : "An error occurred"),
         errors: !Array.isArray(err.errors) ? [] : err.errors
     });
 });

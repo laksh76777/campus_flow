@@ -103,6 +103,13 @@ export const certificateValidationLimiter = new InMemoryRateLimiter({
     message: "Too many certificate validation attempts. Please try again after 15 minutes."
 }).middleware();
 
+// Protect Gemini-backed student support endpoints from repeated AI requests.
+export const supportAssistantLimiter = new InMemoryRateLimiter({
+    windowMs: 5 * 60 * 1000,
+    max: 20,
+    message: "Too many support messages. Please wait a few minutes before trying again."
+}).middleware();
+
 /**
  * Security headers middleware setting OWASP-recommended HTTP headers
  */

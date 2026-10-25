@@ -185,6 +185,10 @@ test("Automated Placement Drive Integrity & Regression Test Suite", async (t) =>
         assert.equal(preview.roundNumber, 1);
         assert.ok(preview.batchId, "Preview must generate and return a batchId");
         assert.ok(preview.proposedAdvances.some((p) => p.usn === "1MS25CS001"));
+        assert.ok(!preview.proposedAdvances.some((p) => p.usn === "1MS25CS002"), "Identity mismatches must never be advanced by default");
+        assert.ok(preview.potentialAbsentCandidates.some((candidate) => candidate.usn === "1MS25CS002") === false, "Identity mismatches require an explicit resolution instead of being treated as absent");
+        const mismatch = preview.exceptions.find((exception) => exception.type === "IDENTITY_MISMATCH");
+        assert.ok(mismatch?.applicationId, "Mismatch exceptions must include an application ID for explicit TPO resolution");
 
         // Verify exceptions detected
         const exTypes = preview.exceptions.map((e) => e.type);
@@ -194,6 +198,25 @@ test("Automated Placement Drive Integrity & Regression Test Suite", async (t) =>
 
         // Verify ImportBatch preview persistence
         assert.ok(batchesStore.some((b) => b.batchId === preview.batchId && b.status === "PREVIEWED"));
+    });
+
+    await t.test("1a. Complete-results rows with an unknown outcome are held for explicit review", async () => {
+        const wb = new ExcelJS.Workbook();
+        const ws = wb.addWorksheet("Round 1");
+        ws.addRow(["USN", "Candidate Name", "Status"]);
+        ws.addRow(["1MS25CS001", "Candidate 1", "Pending"]);
+        const buffer = await wb.xlsx.writeBuffer();
+        const preview = await previewRoundResults({
+            driveId: driveAId,
+            roundNumber: 1,
+            fileBuffer: Buffer.from(buffer),
+            originalFilename: "R1_Results.xlsx",
+            mode: "complete_results",
+            adminUserId,
+        });
+        assert.ok(!preview.proposedAdvances.some((item) => item.usn === "1MS25CS001"));
+        assert.ok(!preview.proposedRejections.some((item) => item.usn === "1MS25CS001"));
+        assert.ok(preview.exceptions.some((item) => item.type === "UNRECOGNIZED_RESULT_STATUS" && item.usn === "1MS25CS001"));
     });
 
     // -------------------------------------------------------------------------

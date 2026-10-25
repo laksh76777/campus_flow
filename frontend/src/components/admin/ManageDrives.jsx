@@ -240,6 +240,38 @@ export default function ManageDrives({
       toast.error("Please provide a valid package in LPA");
       return;
     }
+    if (!Number.isFinite(Number(formData.package)) || Number(formData.package) > 10000) {
+      toast.error("Enter a valid compensation amount");
+      return;
+    }
+    if (formData.checkCgpa && (!Number.isFinite(Number(formData.minimumCGPA)) || Number(formData.minimumCGPA) < 0 || Number(formData.minimumCGPA) > 10)) {
+      toast.error("Minimum CGPA must be between 0 and 10");
+      return;
+    }
+    if (formData.checkBacklogs && (!Number.isInteger(Number(formData.maximumBacklogs)) || Number(formData.maximumBacklogs) < 0)) {
+      toast.error("Maximum active backlogs must be a non-negative whole number");
+      return;
+    }
+    if (formData.checkTenthMarks && (!Number.isFinite(Number(formData.minimumTenthPercentage)) || Number(formData.minimumTenthPercentage) < 0 || Number(formData.minimumTenthPercentage) > 100)) {
+      toast.error("Class 10 percentage must be between 0 and 100");
+      return;
+    }
+    if (formData.checkTwelfthMarks && (!Number.isFinite(Number(formData.minimumTwelfthPercentage)) || Number(formData.minimumTwelfthPercentage) < 0 || Number(formData.minimumTwelfthPercentage) > 100)) {
+      toast.error("Class 12 / diploma percentage must be between 0 and 100");
+      return;
+    }
+    if (formData.applicationDeadline <= formData.applicationStartDate) {
+      toast.error("Application deadline must be after the start date");
+      return;
+    }
+    if (formData.driveDate <= formData.applicationDeadline) {
+      toast.error("Drive date must be after the application deadline");
+      return;
+    }
+    if (jdFile && (jdFile.type !== "application/pdf" || jdFile.size > 25 * 1024 * 1024)) {
+      toast.error("Upload a PDF job description smaller than 25 MB");
+      return;
+    }
     if (!formData.placementSession || !formData.eligibleProgramCodes.length) {
       toast.error("Select a placement session and at least one approved academic program");
       return;

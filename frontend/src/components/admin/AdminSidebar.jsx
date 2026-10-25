@@ -14,6 +14,7 @@ import {
   Calendar,
   FileSpreadsheet,
   Bell,
+  MessageCircle,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -78,6 +79,7 @@ export default function AdminSidebar({
       label: "Broadcasts & Alerts",
       icon: Bell,
     },
+    { id: "support", label: "Student Support Inbox", icon: MessageCircle },
   ];
 
   const displayName = adminUser?.fullName || "Placement Administrator";

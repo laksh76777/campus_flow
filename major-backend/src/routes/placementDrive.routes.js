@@ -19,7 +19,7 @@ import {
     verifyJWT,
     verifyAdmin
 } from "../middlewares/auth.middleware.js";
-import { upload } from "../middlewares/multer.middleware.js";
+import { upload, validateJobDescriptionPdf } from "../middlewares/multer.middleware.js";
 import multer from "multer";
 import {
     getAutomatedDriveWorkspace,
@@ -40,6 +40,7 @@ router
         verifyJWT,
         verifyAdmin,
         upload.single("jdPdf"),
+        validateJobDescriptionPdf,
         createPlacementDrive
     );
 router
@@ -97,6 +98,7 @@ router
         verifyJWT,
         verifyAdmin,
         upload.single("jdPdf"),
+        validateJobDescriptionPdf,
         updatePlacementDrive
     )
     .delete(

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import {
   Workflow,
   Search,
@@ -69,6 +69,8 @@ export default function AutomatedPlacementDrives({
   const [parsingFile, setParsingFile] = useState(false);
   const [previewData, setPreviewData] = useState(null);
   const [exceptionResolutions, setExceptionResolutions] = useState({}); // { usn: "accept" | "skip" }
+  const [absentRejections, setAbsentRejections] = useState({});
+  const workspaceRequestId = useRef(0);
   const [committingResults, setCommittingResults] = useState(false);
 
   // Round Configuration State
@@ -176,9 +178,11 @@ export default function AutomatedPlacementDrives({
 
   // Load detailed automated workspace data when opening a drive
   const loadWorkspaceDetails = async (driveId) => {
+    const requestId = ++workspaceRequestId.current;
     try {
       setLoadingWorkspace(true);
       const res = await getAutomatedDriveWorkspace(driveId);
+      if (requestId !== workspaceRequestId.current) return;
       if (res?.data) {
         setWorkspaceData(res.data);
         if (res.data.drive) {
@@ -188,20 +192,31 @@ export default function AutomatedPlacementDrives({
         }
       }
     } catch (err) {
+      if (requestId !== workspaceRequestId.current) return;
       console.error("Failed to load workspace details:", err);
       toast.error(err.response?.data?.message || "Failed to load automated drive details");
     } finally {
-      setLoadingWorkspace(false);
+      if (requestId === workspaceRequestId.current) setLoadingWorkspace(false);
     }
   };
 
   const handleOpenWorkspace = (drive) => {
+    workspaceRequestId.current += 1;
+    setWorkspaceData(null);
     setActiveDriveWorkspace(drive);
     setActiveWorkspaceTab("pipeline");
     setPreviewData(null);
     setSelectedFile(null);
     setExceptionResolutions({});
+    setAbsentRejections({});
     loadWorkspaceDetails(drive._id);
+  };
+
+  const handleCloseWorkspace = () => {
+    workspaceRequestId.current += 1;
+    setLoadingWorkspace(false);
+    setWorkspaceData(null);
+    setActiveDriveWorkspace(null);
   };
 
   // 1-Click Cohort Student Auto-Enrollment into Drive
@@ -269,6 +284,15 @@ export default function AutomatedPlacementDrives({
       toast.error("Please select a company result file (.xlsx, .csv, or .pdf)");
       return;
     }
+    const extension = selectedFile.name.split(".").pop()?.toLowerCase();
+    if (!new Set(["xlsx", "xls", "csv", "pdf"]).has(extension)) {
+      toast.error("Choose an Excel (.xlsx, .xls), CSV, or text-readable PDF file.");
+      return;
+    }
+    if (selectedFile.size > 15 * 1024 * 1024) {
+      toast.error("Result files must be smaller than 15 MB.");
+      return;
+    }
 
     try {
       setParsingFile(true);
@@ -281,13 +305,8 @@ export default function AutomatedPlacementDrives({
       if (res?.data) {
         setPreviewData(res.data);
         // Initialize default exception decisions
-        const initialResolutions = {};
-        res.data.exceptions?.forEach((exc) => {
-          if (exc.canResolve) {
-            initialResolutions[exc.usn] = "accept"; // default to accept if plausible
-          }
-        });
-        setExceptionResolutions(initialResolutions);
+        setExceptionResolutions({});
+        setAbsentRejections({});
         toast.success(`Parsed ${res.data.totalRowsDetected} candidate row(s) successfully!`);
       }
     } catch (err) {
@@ -310,7 +329,7 @@ export default function AutomatedPlacementDrives({
 
       // Convert exception resolutions
       const confirmedExceptionResolutions = [];
-      if (autoRejectAbsent && previewData.potentialAbsentCandidates) {
+      if (autoRejectAbsent && resultMode === "shortlist_only" && previewData.potentialAbsentCandidates) {
         previewData.potentialAbsentCandidates.forEach((cand) => {
           confirmedExceptionResolutions.push({
             applicationId: cand.applicationId,
@@ -322,19 +341,33 @@ export default function AutomatedPlacementDrives({
 
       // Add resolved identity mismatches
       previewData.exceptions?.forEach((exc) => {
-        if (exc.canResolve && exceptionResolutions[exc.usn] === "accept") {
+        const resolution = exceptionResolutions[String(exc.applicationId || exc.usn)];
+        if (["IDENTITY_MISMATCH", "RESULT_MODE_CONFLICT", "UNRECOGNIZED_RESULT_STATUS"].includes(exc.type) && resolution === "accept") {
           confirmedExceptionResolutions.push({
             applicationId: exc.applicationId,
             usn: exc.usn,
             action: "force_advance",
           });
+        } else if (["IDENTITY_MISMATCH", "RESULT_MODE_CONFLICT", "UNRECOGNIZED_RESULT_STATUS"].includes(exc.type) && resolution === "reject") {
+          confirmedExceptionResolutions.push({
+            applicationId: exc.applicationId,
+            usn: exc.usn,
+            action: "reject_reviewed",
+          });
         }
       });
+      if (!(autoRejectAbsent && resultMode === "shortlist_only")) {
+        (previewData.potentialAbsentCandidates || []).forEach((candidate) => {
+          if (absentRejections[String(candidate.applicationId)]) {
+            confirmedExceptionResolutions.push({ applicationId: candidate.applicationId, usn: candidate.usn, action: "reject_absent" });
+          }
+        });
+      }
 
       const payload = {
         roundNumber: selectedRoundNumber,
         mode: resultMode,
-        autoRejectAbsent,
+        autoRejectAbsent: resultMode === "shortlist_only" && autoRejectAbsent,
         confirmedAdvances,
         confirmedRejections,
         confirmedExceptionResolutions,
@@ -488,6 +521,12 @@ export default function AutomatedPlacementDrives({
       setSubmittingStatus(false);
     }
   };
+
+  const identityExceptions = (previewData?.exceptions || []).filter((item) => ["IDENTITY_MISMATCH", "RESULT_MODE_CONFLICT", "UNRECOGNIZED_RESULT_STATUS"].includes(item.type));
+  const unresolvedIdentityCount = identityExceptions.filter((item) => !exceptionResolutions[String(item.applicationId || item.usn)]).length;
+  const automaticAbsenceRejection = resultMode === "shortlist_only" && autoRejectAbsent;
+  const unresolvedAbsentCount = automaticAbsenceRejection ? 0 : (previewData?.potentialAbsentCandidates || []).filter((item) => !absentRejections[String(item.applicationId)]).length;
+  const canCommitPreview = Boolean(previewData) && unresolvedIdentityCount === 0 && unresolvedAbsentCount === 0;
 
   return (
     <div className="space-y-6">
@@ -800,7 +839,7 @@ export default function AutomatedPlacementDrives({
                         comp,
                         activeDriveWorkspace.jobTitle
                       );
-                      setActiveDriveWorkspace(null);
+                      handleCloseWorkspace();
                     }}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition shadow-xs cursor-pointer"
                     title="Permanently delete this placement drive and clear applications"
@@ -834,7 +873,7 @@ export default function AutomatedPlacementDrives({
 
                 <button
                   type="button"
-                  onClick={() => setActiveDriveWorkspace(null)}
+                  onClick={handleCloseWorkspace}
                   className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 transition cursor-pointer"
                 >
                   <X className="h-4 w-4" />
@@ -1337,7 +1376,16 @@ export default function AutomatedPlacementDrives({
                             type="file"
                             accept=".xlsx, .xls, .csv, .pdf"
                             id="company-result-input"
-                            onChange={(e) => setSelectedFile(e.target.files[0] || null)}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file && file.size > 15 * 1024 * 1024) {
+                                toast.error("Result files must be smaller than 15 MB.");
+                                e.target.value = "";
+                                setSelectedFile(null);
+                                return;
+                              }
+                              setSelectedFile(file || null);
+                            }}
                             className="hidden"
                           />
                           <label
@@ -1413,29 +1461,29 @@ export default function AutomatedPlacementDrives({
                                   <span className="text-slate-600">{exc.message}</span>
                                 </div>
 
-                                {exc.canResolve && (
+                                {["IDENTITY_MISMATCH", "RESULT_MODE_CONFLICT", "UNRECOGNIZED_RESULT_STATUS"].includes(exc.type) && (
                                   <div className="flex items-center gap-2">
                                     <button
                                       type="button"
-                                      onClick={() => setExceptionResolutions(prev => ({ ...prev, [exc.usn]: "accept" }))}
+                                      onClick={() => setExceptionResolutions(prev => ({ ...prev, [String(exc.applicationId || exc.usn)]: "accept" }))}
                                       className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
-                                        exceptionResolutions[exc.usn] === "accept"
+                                        exceptionResolutions[String(exc.applicationId || exc.usn)] === "accept"
                                           ? "bg-emerald-600 text-white"
                                           : "bg-slate-100 text-slate-700"
                                       }`}
                                     >
-                                      Accept Match
+                                      {exc.type === "IDENTITY_MISMATCH" ? "Confirm identity" : "Confirm advance"}
                                     </button>
                                     <button
                                       type="button"
-                                      onClick={() => setExceptionResolutions(prev => ({ ...prev, [exc.usn]: "skip" }))}
+                                      onClick={() => setExceptionResolutions(prev => ({ ...prev, [String(exc.applicationId || exc.usn)]: "reject" }))}
                                       className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
-                                        exceptionResolutions[exc.usn] === "skip"
+                                        exceptionResolutions[String(exc.applicationId || exc.usn)] === "reject"
                                           ? "bg-rose-600 text-white"
                                           : "bg-slate-100 text-slate-700"
                                       }`}
                                     >
-                                      Skip
+                                      Reject candidate
                                     </button>
                                   </div>
                                 )}
@@ -1444,6 +1492,19 @@ export default function AutomatedPlacementDrives({
                           </div>
                         </div>
                       )}
+
+                      {(previewData.potentialAbsentCandidates || []).length > 0 && (
+                        <section className="rounded-2xl border border-rose-200 bg-rose-50/40 p-4 space-y-3">
+                          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                            <div><h4 className="text-xs font-bold text-rose-900">Candidates without a result ({previewData.potentialAbsentCandidates.length})</h4><p className="mt-1 text-[11px] text-rose-800">Confirm rejection for each candidate to complete this round.</p></div>
+                            {resultMode === "shortlist_only" && <label className="flex items-center gap-2 text-xs font-bold text-rose-900"><input type="checkbox" checked={autoRejectAbsent} onChange={(e) => setAutoRejectAbsent(e.target.checked)} className="h-4 w-4 rounded text-rose-600"/>Confirm rejection of all absent candidates</label>}
+                          </div>
+                          {!automaticAbsenceRejection && <div className="max-h-52 space-y-2 overflow-y-auto">{previewData.potentialAbsentCandidates.map((candidate) => <label key={candidate.applicationId} className="flex items-center gap-3 rounded-xl border border-rose-100 bg-white p-3 text-xs"><input type="checkbox" checked={Boolean(absentRejections[String(candidate.applicationId)])} onChange={(e) => setAbsentRejections((prev) => ({ ...prev, [String(candidate.applicationId)]: e.target.checked }))} className="h-4 w-4 rounded text-rose-600"/><span className="min-w-0 flex-1"><strong className="font-mono text-slate-900">{candidate.usn}</strong><span className="ml-2 text-slate-600">{candidate.name}</span></span><span className="shrink-0 font-bold text-rose-700">Reject absent</span></label>)}</div>}
+                          {unresolvedAbsentCount > 0 && <p className="text-[11px] font-semibold text-rose-800">{unresolvedAbsentCount} outcome(s) still need a decision.</p>}
+                        </section>
+                      )}
+
+                      {unresolvedIdentityCount > 0 && <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-900">Review each identity mismatch and choose to confirm the match or reject the candidate before committing.</p>}
 
                       {/* Matched Advances Table */}
                       <div className="space-y-2">
@@ -1490,13 +1551,13 @@ export default function AutomatedPlacementDrives({
 
                         <button
                           type="button"
-                          disabled={committingResults}
+                          disabled={committingResults || !canCommitPreview}
                           onClick={handleCommitResults}
                           className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-300 text-white text-xs font-bold shadow-md shadow-indigo-500/20 transition active:scale-95 cursor-pointer"
                         >
                           <ShieldCheck className="h-4 w-4" />
                           <span>
-                            {committingResults ? "Committing Updates..." : "Confirm & Apply Results in Bulk"}
+                            {committingResults ? "Committing Updates..." : !canCommitPreview ? "Resolve outcomes to continue" : "Confirm & Apply Results in Bulk"}
                           </span>
                         </button>
                       </div>
@@ -1592,7 +1653,7 @@ export default function AutomatedPlacementDrives({
 
               <button
                 type="button"
-                onClick={() => setActiveDriveWorkspace(null)}
+                onClick={handleCloseWorkspace}
                 className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-white transition cursor-pointer"
               >
                 Close Workspace

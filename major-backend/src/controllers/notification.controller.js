@@ -430,26 +430,26 @@ export const broadcastAnnouncement = asyncHandler(async (req, res) => {
             emailStatus = "SMTP_NOT_CONFIGURED";
             emailNote = "Email dispatch requested, but SMTP server credentials are not configured in system environment variables.";
         } else {
-            // Process bounded dispatch
-            for (const recipient of recipients) {
-                if (!recipient.email) {
-                    skippedMissingEmail++;
-                    continue;
-                }
-
-                const emailRes = await sendBroadcastAnnouncementEmail({
-                    studentEmail: recipient.email,
-                    studentName: recipient.fullName,
-                    title: title.trim(),
-                    message: message.trim(),
-                    priority: type === "urgent" ? "urgent" : "announcement"
-                });
-
-                if (emailRes.accepted) {
-                    emailsSent++;
-                } else {
-                    emailsFailed++;
-                }
+            // Keep provider load bounded while avoiding a slow one-by-one send loop.
+            const emailRecipients = recipients.filter((recipient) => {
+                if (recipient.email) return true;
+                skippedMissingEmail++;
+                return false;
+            });
+            const emailConcurrency = 5;
+            for (let index = 0; index < emailRecipients.length; index += emailConcurrency) {
+                const batch = emailRecipients.slice(index, index + emailConcurrency);
+                const results = await Promise.all(batch.map((recipient) =>
+                    sendBroadcastAnnouncementEmail({
+                        studentEmail: recipient.email,
+                        studentName: recipient.fullName,
+                        title: title.trim(),
+                        message: message.trim(),
+                        priority: type === "urgent" ? "urgent" : "announcement"
+                    }).catch(() => ({ accepted: false }))
+                ));
+                emailsSent += results.filter((result) => result.accepted).length;
+                emailsFailed += results.filter((result) => !result.accepted).length;
             }
 
             if (emailsSent > 0 && emailsFailed === 0) {

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import {
   FileCheck2,
   Search,
@@ -101,7 +101,7 @@ export default function ManageApplications({
   }, [activeDriveApplications]);
 
   // Helper matcher for status and search filters
-  const matchesSearchAndStatus = (app) => {
+  const matchesSearchAndStatus = useCallback((app) => {
     // Filter by Status
     if (statusFilter !== "all") {
       if (statusFilter === "selected") {
@@ -130,17 +130,17 @@ export default function ManageApplications({
       enrollmentNo.toLowerCase().includes(query) ||
       branch.toLowerCase().includes(query)
     );
-  };
+  }, [searchTerm, statusFilter]);
 
   // Filtered active applications (displayed outside in main view)
   const filteredActiveApplications = useMemo(() => {
     return activeDriveApplications.filter(matchesSearchAndStatus);
-  }, [activeDriveApplications, statusFilter, searchTerm]);
+  }, [activeDriveApplications, matchesSearchAndStatus]);
 
   // Filtered archived applications (stored and revealed only on company click)
   const filteredArchivedApplications = useMemo(() => {
     return archivedDriveApplications.filter(matchesSearchAndStatus);
-  }, [archivedDriveApplications, statusFilter, searchTerm]);
+  }, [archivedDriveApplications, matchesSearchAndStatus]);
 
   // Group active applications by Company & Placement Drive
   const applicationsByCompany = useMemo(() => {

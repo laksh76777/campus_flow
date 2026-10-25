@@ -16,12 +16,35 @@
     scroll-behavior: smooth;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    text-size-adjust: 100%;
   }
 
   body {
     background-color: #f8fafc;
     color: #0f172a;
     min-height: 100vh;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 3px solid #2563eb;
+    outline-offset: 3px;
+  }
+
+  ::selection {
+    background: #dbeafe;
+    color: #172554;
   }
 }
 
@@ -61,7 +84,7 @@
 
 .mesh-gradient-bg {
   background-color: #f8fafc;
-  background-image: 
+  background-image:
     radial-gradient(at 10% 20%, rgba(37, 99, 235, 0.08) 0px, transparent 50%),
     radial-gradient(at 90% 10%, rgba(79, 70, 229, 0.08) 0px, transparent 50%),
     radial-gradient(at 50% 80%, rgba(14, 165, 233, 0.06) 0px, transparent 50%);
@@ -69,7 +92,7 @@
 
 .auth-mesh-bg {
   background-color: #0f172a;
-  background-image: 
+  background-image:
     radial-gradient(circle at 15% 20%, rgba(37, 99, 235, 0.25) 0px, transparent 40%),
     radial-gradient(circle at 85% 80%, rgba(79, 70, 229, 0.25) 0px, transparent 40%),
     radial-gradient(circle at 50% 50%, rgba(14, 165, 233, 0.15) 0px, transparent 60%);
@@ -83,4 +106,15 @@
 .card-hover-effect:hover {
   transform: translateY(-3px);
   box-shadow: 0 12px 28px -6px rgba(15, 23, 42, 0.08), 0 4px 12px -2px rgba(15, 23, 42, 0.04);
-}
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+\n

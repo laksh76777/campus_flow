@@ -2,30 +2,20 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Bell,
   Send,
-  Users,
   Mail,
+  Users,
   AlertTriangle,
   CheckCircle2,
   Clock,
   RefreshCw,
-  Sparkles,
   ShieldAlert,
   Calendar,
   Briefcase,
   Layers,
-  ChevronRight,
   Info,
-  ShieldCheck,
-  AlertCircle,
-  ExternalLink,
-  Wrench,
-  Check,
   UserCheck,
   Search,
   X,
-  Trash2,
-  History,
-  RotateCcw,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
@@ -33,16 +23,13 @@ import {
   broadcastAnnouncement,
   getScheduledReminders,
   getSmtpStatus,
-  getBroadcastHistory,
-  deleteBroadcastAnnouncement,
-  freshstartNotifications,
 } from "../../services/notificationService";
 import { getPublicDepartments } from "../../services/authService";
 import { getAllPlacementSessions } from "../../services/sessionService";
 import { getAllStudentProfiles } from "../../services/adminService";
 
 export default function ManageAnnouncements({ drives = [], students = [] }) {
-  const [activeSubTab, setActiveSubTab] = useState("compose"); // "compose" | "reminders" | "smtp"
+  const [activeSubTab, setActiveSubTab] = useState("compose"); // "compose" | "reminders"
 
   // Form State
   const [title, setTitle] = useState("");
@@ -76,11 +63,6 @@ export default function ManageAnnouncements({ drives = [], students = [] }) {
   // SMTP Status State
   const [smtpData, setSmtpData] = useState(null);
   const [loadingSmtp, setLoadingSmtp] = useState(false);
-
-  // Broadcast History State
-  const [broadcastHistory, setBroadcastHistory] = useState([]);
-  const [loadingHistory, setLoadingHistory] = useState(false);
-  const [actionLoading, setActionLoading] = useState(false);
 
   // Sync passed students prop or fetch if empty
   useEffect(() => {
@@ -213,69 +195,6 @@ export default function ManageAnnouncements({ drives = [], students = [] }) {
     loadSmtpStatus();
   }, [loadSmtpStatus]);
 
-  // Load Broadcast History
-  const loadBroadcastHistory = useCallback(async () => {
-    try {
-      setLoadingHistory(true);
-      const res = await getBroadcastHistory();
-      if (Array.isArray(res?.data?.broadcasts)) {
-        setBroadcastHistory(res.data.broadcasts);
-      }
-    } catch (err) {
-      console.warn("Could not load broadcast history:", err.message);
-    } finally {
-      setLoadingHistory(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (activeSubTab === "history") {
-      loadBroadcastHistory();
-    }
-  }, [activeSubTab, loadBroadcastHistory]);
-
-  const handleRecallBroadcast = async (broadcast) => {
-    const identifier = broadcast.broadcastId || broadcast.title;
-    if (!identifier) return;
-    if (
-      !window.confirm(
-        `Are you sure you want to recall and delete "${broadcast.title}" from all ${broadcast.recipientCount} student inbox(es)?`
-      )
-    ) {
-      return;
-    }
-    try {
-      setActionLoading(true);
-      const res = await deleteBroadcastAnnouncement(identifier);
-      toast.success(res?.message || `Recalled announcement from ${broadcast.recipientCount} inboxes`);
-      loadBroadcastHistory();
-    } catch (err) {
-      toast.error(err.response?.data?.message || "Failed to recall announcement");
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleFreshstart = async () => {
-    if (
-      !window.confirm(
-        "CRITICAL: This will purge all broadcast test notifications and announcements across all students, giving you a completely fresh start. Do you wish to continue?"
-      )
-    ) {
-      return;
-    }
-    try {
-      setActionLoading(true);
-      const res = await freshstartNotifications();
-      toast.success(res?.message || "All broadcast notifications purged successfully!");
-      loadBroadcastHistory();
-    } catch (err) {
-      toast.error(err.response?.data?.message || "Failed to purge notifications");
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
   // Toggle delivery channels
   const toggleChannel = (ch) => {
     setChannels((prev) => {
@@ -352,6 +271,10 @@ export default function ManageAnnouncements({ drives = [], students = [] }) {
             `Notice: ${inAppCount} in-app alerts created. Emails skipped because SMTP server is not configured in .env.`,
             { icon: "ℹ️" }
           );
+        } else if (result.emailStatus === "NO_VALID_EMAILS") {
+          toast.error(`No valid student email addresses were available. ${result.skippedMissingEmail || 0} recipient(s) were skipped.`);
+        } else {
+          toast(`${inAppCount} in-app alerts created. Email dispatch status: ${result.emailStatus || "not available"}.`, { icon: "ℹ️" });
         }
       } else {
         toast.success(`Dispatched ${inAppCount} in-app announcement alerts.`);
@@ -386,35 +309,6 @@ export default function ManageAnnouncements({ drives = [], students = [] }) {
           </p>
         </div>
 
-        {/* Email Delivery Status Badge */}
-        <div className="flex items-center gap-2">
-          <div
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl border text-xs font-bold ${
-              isSmtpVerified
-                ? "bg-emerald-50 text-emerald-800 border-emerald-300"
-                : isSmtpConfigured
-                  ? "bg-amber-50 text-amber-900 border-amber-300"
-                  : "bg-slate-50 text-slate-700 border-slate-200"
-            }`}
-          >
-            <span
-              className={`h-2.5 w-2.5 rounded-full ${
-                isSmtpVerified
-                  ? "bg-emerald-500 animate-pulse"
-                  : isSmtpConfigured
-                    ? "bg-amber-500"
-                    : "bg-slate-400"
-              }`}
-            />
-            <span>
-              {isSmtpVerified
-                ? "Email Delivery Verified"
-                : isSmtpConfigured
-                  ? "Email Delivery Unverified"
-                  : "Email Delivery Not Configured"}
-            </span>
-          </div>
-        </div>
       </div>
 
       {/* Sub-tab Navigation */}
@@ -445,23 +339,6 @@ export default function ManageAnnouncements({ drives = [], students = [] }) {
           {reminders.length > 0 && (
             <span className="rounded-full bg-slate-700 text-white px-2 py-0.5 text-[10px]">
               {reminders.length}
-            </span>
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveSubTab("history")}
-          className={`flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-bold rounded-xl transition cursor-pointer ${
-            activeSubTab === "history"
-              ? "bg-slate-900 text-white shadow-sm"
-              : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-          }`}
-        >
-          <History className="h-4 w-4" />
-          <span>Broadcast History & Freshstart</span>
-          {broadcastHistory.length > 0 && (
-            <span className="rounded-full bg-slate-700 text-white px-2 py-0.5 text-[10px]">
-              {broadcastHistory.length}
             </span>
           )}
         </button>
@@ -1069,7 +946,9 @@ export default function ManageAnnouncements({ drives = [], students = [] }) {
                                   ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                                   : isCancelled
                                   ? "bg-slate-100 text-slate-600 border border-slate-200"
-                                  : "bg-rose-50 text-rose-700 border border-rose-200"
+                                  : isFailed
+                                  ? "bg-rose-50 text-rose-700 border border-rose-200"
+                                  : "bg-slate-100 text-slate-600 border border-slate-200"
                               }`}
                             >
                               <span
@@ -1080,7 +959,9 @@ export default function ManageAnnouncements({ drives = [], students = [] }) {
                                     ? "bg-emerald-500"
                                     : isCancelled
                                     ? "bg-slate-400"
-                                    : "bg-rose-500"
+                                    : isFailed
+                                    ? "bg-rose-500"
+                                    : "bg-slate-400"
                                 }`}
                               />
                               <span>{job.status}</span>
@@ -1117,142 +998,6 @@ export default function ManageAnnouncements({ drives = [], students = [] }) {
           )}
         </div>
       )}
-
-      {/* TAB 3: BROADCAST HISTORY & FRESHSTART */}
-      {activeSubTab === "history" && (
-        <div className="space-y-4">
-          {/* Action & Stats Bar */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white rounded-2xl border border-slate-200 p-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-slate-900">
-                  Broadcast History & Inbox Synchronization
-                </h3>
-                <span className="rounded-full bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 text-[11px] font-bold text-indigo-700">
-                  {broadcastHistory.length} Past Broadcast(s)
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Inspect past announcements sent to student inboxes, recall specific announcements, or fresh start notifications.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleFreshstart}
-                disabled={actionLoading}
-                className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl border border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100 transition shadow-2xs cursor-pointer disabled:opacity-50"
-                title="Purge all test/broadcast announcements"
-              >
-                <RotateCcw className={`h-3.5 w-3.5 ${actionLoading ? "animate-spin" : ""}`} />
-                <span>Fresh Start All Notifications</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={loadBroadcastHistory}
-                disabled={loadingHistory || actionLoading}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 transition cursor-pointer"
-              >
-                <RefreshCw
-                  className={`h-3.5 w-3.5 ${loadingHistory ? "animate-spin" : ""}`}
-                />
-                <span>Refresh</span>
-              </button>
-            </div>
-          </div>
-
-          {/* List or Table */}
-          {loadingHistory ? (
-            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
-              <RefreshCw className="h-6 w-6 text-indigo-600 animate-spin mx-auto mb-2" />
-              <p className="text-xs text-slate-500">Loading broadcast history...</p>
-            </div>
-          ) : broadcastHistory.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-dashed border-slate-200 p-12 text-center space-y-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 mx-auto">
-                <Bell className="h-6 w-6" />
-              </div>
-              <h4 className="text-sm font-bold text-slate-900">
-                No Broadcast Announcements Active
-              </h4>
-              <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                All broadcast announcements and test notifications have been cleared. Future broadcasts will appear here with recipient tracking and recall capability.
-              </p>
-            </div>
-          ) : (
-            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider">
-                    <tr>
-                      <th className="py-3 px-4">Announcement Details</th>
-                      <th className="py-3 px-4">Priority Type</th>
-                      <th className="py-3 px-4">Dispatched At</th>
-                      <th className="py-3 px-4">Recipients</th>
-                      <th className="py-3 px-4 text-right">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {broadcastHistory.map((item, idx) => (
-                      <tr key={item.broadcastId || idx} className="hover:bg-slate-50/50 transition">
-                        <td className="py-3.5 px-4 max-w-md">
-                          <div className="font-bold text-slate-900 text-sm">
-                            {item.title}
-                          </div>
-                          <div className="text-xs text-slate-500 line-clamp-2 mt-0.5 leading-relaxed">
-                            {item.message}
-                          </div>
-                        </td>
-                        <td className="py-3.5 px-4 whitespace-nowrap">
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              item.type === "urgent"
-                                ? "bg-rose-100 text-rose-800 border border-rose-200"
-                                : "bg-indigo-100 text-indigo-800 border border-indigo-200"
-                            }`}
-                          >
-                            {item.type === "urgent" ? "Urgent Alert" : "Standard Notice"}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4 whitespace-nowrap text-slate-600">
-                          <div>{new Date(item.createdAt).toLocaleDateString()}</div>
-                          <div className="text-[10px] text-slate-400">
-                            {new Date(item.createdAt).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </div>
-                        </td>
-                        <td className="py-3.5 px-4 whitespace-nowrap text-slate-700">
-                          <div className="font-bold">{item.recipientCount} inboxes</div>
-                          <div className="text-[10px] text-slate-400">
-                            {item.unreadCount} unread
-                          </div>
-                        </td>
-                        <td className="py-3.5 px-4 whitespace-nowrap text-right">
-                          <button
-                            type="button"
-                            onClick={() => handleRecallBroadcast(item)}
-                            disabled={actionLoading}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs transition cursor-pointer disabled:opacity-50"
-                            title="Recall and delete announcement from all inboxes"
-                          >
-                            <Trash2 className="h-3.5 w-3.5 text-rose-600" />
-                            <span>Recall / Delete</span>
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
 
 
       {/* REVIEW & CONFIRMATION MODAL */}
