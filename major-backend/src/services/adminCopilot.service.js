@@ -306,7 +306,10 @@ export const getAdminSystemContext = async ({ loadContext = queryAdminSystemCont
  */
 export const countEligibleStudents = async ({ minimumCGPA, maximumBacklogs, eligibleBranches, graduationYear } = {}) => {
     try {
-        const session = await PlacementSession.findOne({ isActive: true, isClosed: { $ne: true }, isArchived: { $ne: true } }).lean();
+        let session = await PlacementSession.findOne({ isActive: true, isClosed: { $ne: true }, isArchived: { $ne: true } }).lean();
+        if (!session) {
+            session = await PlacementSession.findOne({ isClosed: { $ne: true }, isArchived: { $ne: true } }).sort({ sessionYear: -1 }).lean();
+        }
         const targetYear = Number(graduationYear || session?.sessionYear);
         if (!Number.isFinite(targetYear)) return null;
         const programs = resolveProgramsFromPrompt(eligibleBranches);
