@@ -90,7 +90,7 @@ export default function StudentSupportChat() {
           <button type="button" onClick={() => { selectedIdRef.current = null; setSelected(null); setDraft(""); }} className="inline-flex items-center gap-1 rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700"><Plus size={15}/> New</button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
-          {loading ? <p className="p-4 text-sm text-slate-500">Loading conversations…</p> : conversations.length === 0 ? <p className="p-4 text-sm leading-6 text-slate-500">Ask any question to get started. The Gemini AI mentor provides instant guidance on drives, eligibility, prep, and portal actions.</p> : conversations.map((item) => (
+          {loading ? <p className="p-4 text-sm text-slate-500">Loading conversations…</p> : conversations.length === 0 ? <p className="p-4 text-sm leading-6 text-slate-500">Ask any question to get started. The Groq AI mentor provides instant guidance on drives, eligibility, prep, and portal actions.</p> : conversations.map((item) => (
             <button key={item._id} type="button" onClick={() => chooseConversation(item._id)} className={`mb-2 w-full rounded-2xl border p-3 text-left transition ${selected?._id === item._id ? "border-blue-200 bg-blue-50" : "border-transparent bg-white hover:border-slate-200"}`}>
               <span className="block truncate text-sm font-semibold text-slate-800">{item.subject}</span>
               <span className="mt-1 flex items-center justify-between gap-2">
@@ -118,7 +118,7 @@ export default function StudentSupportChat() {
           </div>
           <div className="min-w-0 flex-1">
             <h1 className="truncate font-bold text-slate-900">{selected?.subject || "CampusFlow AI Support"}</h1>
-            <p className="text-xs text-slate-500">Intelligent Gemini AI Mentor · Instant Answers</p>
+            <p className="text-xs text-slate-500">Intelligent Groq AI Mentor · Instant Answers</p>
           </div>
           {selected?.status === "open" ? (
             <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold capitalize text-amber-800 border border-amber-200">
@@ -139,7 +139,7 @@ export default function StudentSupportChat() {
               </div>
               <h3 className="mt-4 text-lg font-bold text-slate-900">Ask CampusFlow AI Anything</h3>
               <p className="mt-2 text-sm leading-6 text-slate-500">
-                Ask about upcoming placement drives, personal eligibility, coding preparation, resume tips, or portal workflows. Gemini AI answers directly in real time.
+                Ask about upcoming placement drives, personal eligibility, coding preparation, resume tips, or portal workflows. Groq AI answers directly in real time.
               </p>
               <div className="mt-5 flex flex-wrap justify-center gap-2">
                 <button type="button" onClick={() => setDraft("Am I eligible for upcoming placement drives?")} className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:border-blue-300 hover:text-blue-700">Check my eligibility</button>
@@ -169,7 +169,7 @@ export default function StudentSupportChat() {
                   {message.senderRole === "assistant" && (
                     <span className="mt-2 flex items-center gap-1 text-[10px] font-semibold text-slate-400">
                       <Sparkles size={11} className="text-indigo-500" />
-                      <span>Gemini AI Mentor</span>
+                      <span>Groq AI Mentor</span>
                       {message.handoffRecommended && <span className="ml-1 text-amber-600 font-bold">· Escalated to TPO</span>}
                     </span>
                   )}

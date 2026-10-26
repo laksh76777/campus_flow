@@ -962,12 +962,19 @@ export const extractRecipientFromWebpage = (htmlText) => {
 /**
  * AI Webpage Inspector: Analyzes live verification webpage HTML/content to extract verified recipient name & course details.
  */
-export const analyzeWebpageWithGemini = async ({
+/**
+ * AI Webpage Inspector: Analyzes live verification webpage HTML/content to extract verified recipient name & course details using Groq AI.
+ */
+export const analyzeWebpageWithGroq = async ({
     webpageText,
     studentName,
     url
 }) => {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey =
+        process.env.GROQ_API_KEY ||
+        process.env.grog_API_KEY ||
+        process.env.GEMINI_API_KEY ||
+        process.env.GOOGLE_API_KEY;
     if (!apiKey || !webpageText) return null;
 
     const sanitizedHtml = webpageText
@@ -1004,12 +1011,11 @@ Output JSON Schema:
 }`;
 
     const modelsToTry = [
-        "gemini-3.5-flash",
-        "gemini-3.6-flash",
-        "gemini-3.8-flash",
-        "gemini-3-flash-preview",
-        "gemini-3.1-flash-lite"
-    ];
+        process.env.GROQ_MODEL,
+        "qwen/qwen3.8-27b",
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b",
+    ].filter((m, idx, arr) => Boolean(m) && arr.indexOf(m) === idx);
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
@@ -1019,18 +1025,20 @@ Output JSON Schema:
         for (const model of modelsToTry) {
             try {
                 const res = await fetch(
-                    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+                    "https://api.groq.com/openai/v1/chat/completions",
                     {
                         method: "POST",
                         signal: controller.signal,
-                        headers: { "Content-Type": "application/json" },
+                        headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${apiKey}`,
+                        },
                         body: JSON.stringify({
-                            contents: [{ role: "user", parts: [{ text: prompt }] }],
-                            generationConfig: {
-                                temperature: 0.1,
-                                responseMimeType: "application/json"
-                            }
-                        })
+                            model,
+                            messages: [{ role: "user", content: prompt }],
+                            response_format: { type: "json_object" },
+                            temperature: 0.1,
+                        }),
                     }
                 );
                 if (res.ok) {
@@ -1046,7 +1054,9 @@ Output JSON Schema:
         if (!response || !response.ok) return null;
 
         const data = await response.json();
-        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        const text =
+            data?.choices?.[0]?.message?.content ||
+            data?.choices?.[0]?.message?.reasoning;
         if (!text) return null;
 
         const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
@@ -1056,12 +1066,13 @@ Output JSON Schema:
         return null;
     }
 };
+export const analyzeWebpageWithGemini = analyzeWebpageWithGroq;
 
 /**
- * Layer 5: Gemini AI Analysis with strict JSON schema and timeout.
- * Calls Gemini directly if GEMINI_API_KEY is configured. Falls back gracefully if missing or failed.
+ * Layer 5: Groq AI Analysis with strict JSON schema and timeout.
+ * Calls Groq AI directly if GROQ_API_KEY is configured. Falls back gracefully if missing or failed.
  */
-export const analyzeWithGemini = async ({
+export const analyzeWithGroq = async ({
     certificateText,
     url,
     studentName,
@@ -1069,11 +1080,15 @@ export const analyzeWithGemini = async ({
     fileBase64,
     fileMimeType
 }) => {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey =
+        process.env.GROQ_API_KEY ||
+        process.env.grog_API_KEY ||
+        process.env.GEMINI_API_KEY ||
+        process.env.GOOGLE_API_KEY;
     if (!apiKey) {
         return {
             used: false,
-            summary: "Heuristic inspection applied (Gemini API key not configured on backend).",
+            summary: "Heuristic inspection applied (Groq AI key not configured on backend).",
             warnings: [],
             inconsistencies: [],
             confidence: "standard"
@@ -1124,43 +1139,34 @@ Output JSON Schema:
     const timeout = setTimeout(() => controller.abort(), 25000);
 
     const modelsToTry = [
-        "gemini-3.5-flash",
-        "gemini-3.6-flash",
-        "gemini-3.8-flash",
-        "gemini-3-flash-preview",
-        "gemini-3.1-flash-lite"
-    ];
-
-    const parts = [];
-    if (fileBase64 && fileMimeType) {
-        parts.push({
-            inlineData: {
-                mimeType: fileMimeType,
-                data: fileBase64
-            }
-        });
-    }
-    parts.push({ text: `${systemPrompt}\n\n${userPrompt}` });
+        process.env.GROQ_MODEL,
+        "qwen/qwen3.8-27b",
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b",
+    ].filter((m, idx, arr) => Boolean(m) && arr.indexOf(m) === idx);
 
     try {
         let response = null;
         for (const model of modelsToTry) {
             try {
                 const res = await fetch(
-                    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+                    "https://api.groq.com/openai/v1/chat/completions",
                     {
                         method: "POST",
                         signal: controller.signal,
-                        headers: { "Content-Type": "application/json" },
+                        headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${apiKey}`,
+                        },
                         body: JSON.stringify({
-                            contents: [
-                                { role: "user", parts }
+                            model,
+                            messages: [
+                                { role: "system", content: systemPrompt },
+                                { role: "user", content: userPrompt },
                             ],
-                            generationConfig: {
-                                temperature: 0.1,
-                                responseMimeType: "application/json"
-                            }
-                        })
+                            response_format: { type: "json_object" },
+                            temperature: 0.1,
+                        }),
                     }
                 );
                 if (res.ok) {
@@ -1175,7 +1181,7 @@ Output JSON Schema:
         clearTimeout(timeout);
 
         if (!response || !response.ok) {
-            console.warn(`[Gemini API Notice] AI fallback completed via heuristic pipeline.`);
+            console.warn(`[Groq AI Notice] AI fallback completed via heuristic pipeline.`);
             return {
                 used: false,
                 summary: "AI service temporarily unavailable; standard verification completed.",
@@ -1186,9 +1192,11 @@ Output JSON Schema:
         }
 
         const data = await response.json();
-        const rawContent = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        const rawContent =
+            data?.choices?.[0]?.message?.content ||
+            data?.choices?.[0]?.message?.reasoning;
         if (!rawContent) {
-            throw new Error("Empty response from Gemini");
+            throw new Error("Empty response from Groq AI");
         }
 
         let parsed = null;
@@ -1200,7 +1208,7 @@ Output JSON Schema:
             if (jsonMatch) {
                 parsed = JSON.parse(jsonMatch[0]);
             } else {
-                throw new Error("Could not parse JSON from Gemini response");
+                throw new Error("Could not parse JSON from Groq AI response");
             }
         }
 
@@ -1214,14 +1222,14 @@ Output JSON Schema:
             issueDate: parsed.issueDate || "",
             expirationDate: parsed.expirationDate || "",
             category: parsed.category || "Course Completion",
-            summary: parsed.summary || "Gemini verified extracted metadata against document text.",
+            summary: parsed.summary || "Groq AI verified extracted metadata against document text.",
             warnings: Array.isArray(parsed.warnings) ? parsed.warnings : [],
             inconsistencies: Array.isArray(parsed.inconsistencies) ? parsed.inconsistencies : [],
             confidence: parsed.confidence || "medium"
         };
     } catch (err) {
         clearTimeout(timeout);
-        console.warn(`[Gemini Fallback] Non-blocking AI analysis notice: ${err.message}`);
+        console.warn(`[Groq AI Fallback] Non-blocking AI analysis notice: ${err.message}`);
         return {
             used: false,
             summary: "Heuristic verification applied (AI analysis timed out or unavailable).",
@@ -1231,6 +1239,7 @@ Output JSON Schema:
         };
     }
 };
+export const analyzeWithGemini = analyzeWithGroq;
 
 /**
  * Master Verification Pipeline:

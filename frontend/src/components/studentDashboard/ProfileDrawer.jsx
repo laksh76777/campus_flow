@@ -462,7 +462,7 @@ export default function ProfileDrawer({
     setCertValidationStage("Reading certificate details...");
 
     const stageTimer1 = setTimeout(() => {
-      setCertValidationStage("Auto-extracting metadata with Gemini AI...");
+      setCertValidationStage("Auto-extracting metadata with Groq AI...");
     }, 600);
 
     const stageTimer2 = setTimeout(() => {
@@ -2951,7 +2951,7 @@ export default function ProfileDrawer({
                   <span>{certValidationStage || "Processing certificate verification pipeline..."}</span>
                 </div>
                 <p className="text-[11px] text-purple-700/80 pl-5.5">
-                  Reading certificate details, extracting fields with Gemini AI, and verifying credentials.
+                  Reading certificate details, extracting fields with Groq AI, and verifying credentials.
                 </p>
               </div>
             )}

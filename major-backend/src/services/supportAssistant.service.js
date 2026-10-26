@@ -1,8 +1,8 @@
 import { PlacementDrive } from "../models/placementDrive.model.js";
 
-export const SUPPORT_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash";
+export const SUPPORT_MODEL = process.env.GROQ_MODEL || "qwen/qwen3.8-27b";
 
-export const SUPPORT_SYSTEM_INSTRUCTION = `You are CampusFlow Student Support, the official, intelligent placement mentor and collegiate assistant powered by Google Gemini for JSSATEB.
+export const SUPPORT_SYSTEM_INSTRUCTION = `You are CampusFlow Student Support, the official, intelligent placement mentor and collegiate assistant powered by Groq AI for JSSATEB.
 You speak naturally, warmly, smartly, and conversationally. You are NOT a rigid script or canned robot.
 Your goal is to answer the student's questions directly, thoroughly, and helpfully right here in the chat so they don't need to be transferred to human staff unless strictly necessary.
 
@@ -27,6 +27,8 @@ GUIDELINES & BEHAVIOR:
 
 export const parseAssistantOutput = (payload) => {
     let outputText = payload?.output_text
+        || payload?.choices?.[0]?.message?.content
+        || payload?.choices?.[0]?.message?.reasoning
         || payload?.candidates?.[0]?.content?.parts?.[0]?.text
         || payload?.steps
             ?.filter((step) => step?.type === "model_output")
@@ -36,7 +38,7 @@ export const parseAssistantOutput = (payload) => {
             .join("\n");
 
     if (typeof outputText !== "string" || !outputText.trim()) {
-        throw new Error("Gemini returned an empty response.");
+        throw new Error("AI returned an empty response.");
     }
 
     const cleaned = outputText.trim().replace(/^```(?:json)?\s*|\s*```$/gi, "");
@@ -53,7 +55,7 @@ export const parseAssistantOutput = (payload) => {
     }
 
     const answer = typeof parsed.answer === "string" ? parsed.answer.trim().slice(0, 3000) : "";
-    if (!answer) throw new Error("Gemini returned no answer text.");
+    if (!answer) throw new Error("AI returned no answer text.");
 
     const confidenceValue = Number(parsed.confidence);
     return {
@@ -216,35 +218,30 @@ export const answerFromLocalKnowledge = (question, liveDrives = [], studentProfi
     };
 };
 
-import { callGeminiAI } from "./geminiClient.service.js";
+import { callGroqAI } from "./groqClient.service.js";
 
 export const generateSupportAnswer = async ({ messages, liveDrives, studentProfile = null, fetchImpl = fetch }) => {
-    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-    if (!apiKey) throw new Error("Gemini is not configured.");
+    const apiKey =
+        process.env.GROQ_API_KEY ||
+        process.env.grog_API_KEY ||
+        process.env.GEMINI_API_KEY ||
+        process.env.GOOGLE_API_KEY;
+    if (!apiKey) throw new Error("Groq AI is not configured.");
 
     const lastMessage = messages[messages.length - 1]?.content || "";
 
-    const transcript = messages.slice(-12).map((message) => {
-        const speaker = message.senderRole === "student" ? "Student" : message.senderRole === "admin" ? "TPO administrator" : "CampusFlow assistant";
-        return `${speaker}: ${message.content}`;
-    }).join("\n");
-
-    // Check if running in mock/test environment (like tests/support_assistant.test.js)
-    const isMock = fetchImpl !== fetch;
-
-    if (!isMock) {
-        let studentInfo = "No authenticated student profile attached.";
-        if (studentProfile) {
-            studentInfo = `Authenticated Student Profile:
+    let studentInfo = "No authenticated student profile attached.";
+    if (studentProfile) {
+        studentInfo = `Authenticated Student Profile:
 - Name: ${studentProfile.fullName || "Student"}
 - Department / Program: ${studentProfile.program || "Engineering"}
 - Official CGPA: ${studentProfile.cgpa !== undefined ? studentProfile.cgpa : "Not verified yet"}
 - Active Backlogs: ${studentProfile.activeBacklogs ?? 0}
 - Verification Status: ${studentProfile.academicVerificationStatus || "VERIFIED"}
 - Enrolled Cohort: Class of ${studentProfile.graduationYear || new Date().getFullYear()}`;
-        }
+    }
 
-        const promptText = `PORTAL CONTEXT:
+    const promptText = `PORTAL CONTEXT:
 ${studentInfo}
 
 LIVE PLACEMENT DRIVES:
@@ -256,83 +253,14 @@ ${lastMessage}
 Respond as CampusFlow Student Support with a valid JSON object:
 {"answer": "string (natural, personalized, conversational, and helpful)", "confidence": 0.95, "handoffRecommended": false, "reason": "string"}`;
 
-        const geminiRes = await callGeminiAI({
-            systemInstruction: SUPPORT_SYSTEM_INSTRUCTION,
-            messages: messages.slice(0, -1),
-            prompt: promptText,
-            responseMimeType: "application/json",
-            temperature: 0.4,
-            maxTokens: 1200,
-        });
-        return parseAssistantOutput({ output_text: geminiRes.text });
-    }
-
-    const url = "https://generativelanguage.googleapis.com/v1beta/interactions";
-
-    const requestBody = isMock
-        ? {
-            model: SUPPORT_MODEL,
-            input: `CampusFlow reference rules:\n- Students can apply only to active drives while the application window is open.\n- Official CGPA is preserved without averaging.\n\nCurrent public drive listings:\n${JSON.stringify(liveDrives)}\n\nConversation so far:\n${transcript}`,
-            system_instruction: SUPPORT_SYSTEM_INSTRUCTION,
-            response_format: {
-                type: "text",
-                mime_type: "application/json",
-                schema: {
-                    type: "object",
-                    properties: {
-                        answer: { type: "string" },
-                        confidence: { type: "number" },
-                        handoffRecommended: { type: "boolean" },
-                        reason: { type: "string" },
-                    },
-                    required: ["answer", "confidence", "handoffRecommended", "reason"],
-                },
-            },
-            generation_config: {
-                max_output_tokens: 700,
-                thinking_level: "low",
-                thinking_summaries: "none",
-            },
-            store: false,
-        }
-        : {
-            systemInstruction: {
-                parts: [{ text: SUPPORT_SYSTEM_INSTRUCTION }],
-            },
-            contents: [
-                {
-                    role: "user",
-                    parts: [{
-                        text: `CampusFlow reference rules:\n- Students can apply only to active drives while the application window is open and server eligibility check passes.\n- Placement profile data and application snapshots are managed in student portal.\n- Never reveal internal admin notes, other students' records, or secret keys.\n\nCurrent public drive listings:\n${JSON.stringify(liveDrives)}\n\nConversation so far:\n${transcript}\n\nStudent question:\n${lastMessage}`,
-                    }],
-                },
-            ],
-            generationConfig: {
-                temperature: 0.2,
-                maxOutputTokens: 1000,
-                responseMimeType: "application/json",
-            },
-        };
-
-    const headers = { "Content-Type": "application/json" };
-    if (isMock) {
-        headers["x-goog-api-key"] = apiKey;
-    }
-
-    const response = await fetchImpl(url, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(requestBody),
-        signal: AbortSignal.timeout(20000),
+    const aiRes = await callGroqAI({
+        systemInstruction: SUPPORT_SYSTEM_INSTRUCTION,
+        messages: messages.slice(0, -1),
+        prompt: promptText,
+        responseMimeType: "application/json",
+        temperature: 0.4,
+        maxTokens: 1200,
+        fetchImpl,
     });
-
-    if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        const statusError = new Error(`Gemini request failed with status ${response.status}.`);
-        statusError.status = response.status;
-        statusError.providerMessage = error.error?.message;
-        throw statusError;
-    }
-
-    return parseAssistantOutput(await response.json());
+    return parseAssistantOutput({ output_text: aiRes.text });
 };

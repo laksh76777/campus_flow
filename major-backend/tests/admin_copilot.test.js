@@ -87,7 +87,7 @@ test("copilot requires explicit confirmation of the immediately staged card befo
         generateAnswer: async () => ({ text: "Please review the current details." }),
         createDrive: async () => { createCalls += 1; throw new Error("should not publish"); },
     });
-    assert.equal(notReady.action, "GEMINI_RESPONSE");
+    assert.equal(notReady.action, "GROQ_RESPONSE");
     assert.equal(createCalls, 0);
 
     const dates = {
@@ -119,7 +119,7 @@ test("confirmation matching is explicit and does not accept a publish question",
     assert.equal(isExplicitCopilotConfirmation("Should I publish the drive?"), false);
 });
 
-test("Gemini failures return a transparent no-action response", async () => {
+test("Groq AI failures return a transparent no-action response", async () => {
     const response = await processAdminCopilotPrompt({
         prompt: "How do I create a drive?",
         loadContext: async () => ({ available: true, activeDrives: [], approvedPrograms: [] }),

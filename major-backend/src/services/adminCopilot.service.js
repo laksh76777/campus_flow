@@ -6,7 +6,7 @@ import { PlacementSession } from "../models/placementSession.model.js";
 import { PROGRAM_CATALOG, resolveProgram } from "../constants/programCatalog.js";
 import { EligibilityService } from "./eligibility.service.js";
 import { updateDriveRoundsConfig } from "./automatedDrive.service.js";
-import { callGeminiAI } from "./geminiClient.service.js";
+import { callGroqAI } from "./groqClient.service.js";
 
 /**
  * Resolves program codes and branch names from raw text
@@ -331,14 +331,14 @@ const sanitizeCopilotMessages = (messages) => (Array.isArray(messages) ? message
     }));
 
 /**
- * Main handler for Admin AI Copilot backed by Google Gemini
+ * Main handler for Admin AI Copilot backed by Groq AI
  */
 export const processAdminCopilotPrompt = async ({
     prompt,
     adminUser,
     messages = [],
     loadContext = getAdminSystemContext,
-    generateAnswer = callGeminiAI,
+    generateAnswer = callGroqAI,
     createDrive = executeDriveCreation,
     getEligibleCount = countEligibleStudents,
 }) => {
@@ -392,7 +392,7 @@ export const processAdminCopilotPrompt = async ({
 
     if (isExplicitCopilotConfirmation(cleanPrompt)) {
         return {
-            action: "GEMINI_RESPONSE",
+            action: "GROQ_RESPONSE",
             answer: "There isn’t a drive awaiting confirmation in this conversation. Please stage and review the drive details first. No changes were made.",
         };
     }
@@ -401,9 +401,9 @@ export const processAdminCopilotPrompt = async ({
         ? `LIVE CAMPUSFLOW DATABASE FACTS (current at request time):\n- Registered Students: ${systemContext.totalStudents}\n- TPO-Verified Profiles: ${systemContext.verifiedStudents}\n- Pending Verification Dossiers: ${systemContext.pendingStudents}\n- High Academic Achievers (CGPA >= 8.0): ${systemContext.highCgpaStudents}\n- Candidates with Active Backlogs: ${systemContext.studentsWithBacklogs}\n- Total Placement Applications: ${systemContext.totalApplications}\n- Active Cohort Session: ${systemContext.activeSessionYear ?? "not configured"}\n- Currently Active Live Drives (${systemContext.activeDrives.length}): ${JSON.stringify(systemContext.activeDrives)}\n- Approved Academic Programs: ${systemContext.approvedPrograms.join("; ")}`
         : "LIVE CAMPUSFLOW DATABASE FACTS: unavailable. Do not estimate, invent, or infer counts, student records, drive details, or session information.";
 
-    const systemInstruction = `You are the JSSATEB Senior Placement Officer Copilot & AI Operations Executive.
+    const systemInstruction = `You are the JSSATEB Senior Placement Officer Copilot & AI Operations Executive powered by Groq AI.
 You converse naturally, professionally, and dynamically with the Administrator / Training & Placement Officer (TPO).
-You are NOT a simple canned responder. You use real Gemini AI reasoning and live database context.
+You are NOT a simple canned responder. You use real Groq AI reasoning and live database context.
 
 ${databaseFacts}
 
@@ -449,25 +449,25 @@ RULES FOR OPERATION & DIALOGUE:
        \`\`\`
  3. If the TPO asks about student directories, analytics, or verifications, answer only from the LIVE JSSATEB DATABASE FACTS. If they are unavailable, say you cannot verify the requested data.`;
 
-    let geminiResponse;
+    let aiResponse;
     try {
-        geminiResponse = await generateAnswer({
+        aiResponse = await generateAnswer({
             systemInstruction,
             prompt: cleanPrompt,
             messages: recentMessages,
             maxTokens: 1500,
         });
-    } catch (geminiErr) {
-        console.warn("[AdminCopilot] Gemini AI call failed:", geminiErr.message);
+    } catch (aiErr) {
+        console.warn("[AdminCopilot] Groq AI call failed:", aiErr.message);
         return {
             action: "AI_UNAVAILABLE",
             answer: "The AI copilot is temporarily unavailable. No drive or other data changes were made. Please try again shortly.",
         };
     }
 
-    const outputText = geminiResponse.text;
+    const outputText = aiResponse.text;
 
-    // Check if Gemini generated a drive creation intent block
+    // Check if AI generated a drive creation intent block
     const jsonMatch = outputText.match(/```json:drive_intent\s*([\s\S]*?)\s*```/);
     let driveParams = null;
 
@@ -478,7 +478,7 @@ RULES FOR OPERATION & DIALOGUE:
                 driveParams = parsed.driveParams;
             }
         } catch (pErr) {
-            console.warn("Could not parse drive_intent JSON from Gemini:", pErr.message);
+            console.warn("Could not parse drive_intent JSON from Groq:", pErr.message);
         }
     }
 
@@ -492,7 +492,7 @@ RULES FOR OPERATION & DIALOGUE:
         const validation = validateDriveParams(driveParams);
         if (!validation.valid) {
             return {
-                action: "GEMINI_RESPONSE",
+                action: "GROQ_RESPONSE",
                 answer: `${cleanDisplayAnswer || "I could not verify all drive details."}\n\nI can’t stage this drive yet. Please confirm: ${validation.errors.join("; ")}. No changes were made.`,
             };
         }
@@ -512,10 +512,10 @@ RULES FOR OPERATION & DIALOGUE:
         };
     }
 
-    // General dynamic Gemini response
+    // General dynamic Groq response
     return {
-        action: "GEMINI_RESPONSE",
+        action: "GROQ_RESPONSE",
         answer: cleanDisplayAnswer || outputText,
-        model: geminiResponse.model,
+        model: aiResponse.model,
     };
 };
