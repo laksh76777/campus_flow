@@ -168,27 +168,60 @@ export const buildStudentAssistantContext = async (userId, question) => {
 
 // --- TPO side -------------------------------------------------------------
 
-// VTU-style USN, e.g. 1JS21CS042 / 1js23mca015
+// VTU-style USN, e.g. 1JS21CS042 / 1js23mca015, or general college enrollment formats
 const USN_PATTERN = /\b\d[A-Z]{2}\d{2}[A-Z]{2,4}\d{3}\b/gi;
+const GENERAL_ENROLLMENT_PATTERN = /\b[0-9]{1,4}[A-Z]{1,5}[0-9]{2,5}\b/gi;
+const LABELED_ID_PATTERN = /\b(?:usn|roll(?:\s*(?:no\.?|number))?|enrollment(?:\s*(?:no\.?|number))?|student\s*id)\s*[:#=\s]\s*([a-zA-Z0-9_-]+)/gi;
 const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
+
+const COMMON_NON_NAMES = new Set([
+    "the", "this", "that", "these", "those", "with", "from", "into", "for", "about", "and", "or",
+    "all", "every", "each", "my", "our", "your", "his", "her", "their", "some", "any", "such",
+    "students", "candidates", "drives", "companies", "applications", "interviews", "placements",
+    "portal", "dashboard", "overview", "system", "details", "record", "records", "profile", "profiles",
+    "status", "marks", "grades", "backlogs", "semester", "eligible", "eligibility", "unverified",
+    "verified", "pending", "placed", "unplaced", "active", "closed", "campusflow", "copilot", "admin", "tpo",
+    "round", "rounds", "salary", "package", "compensation", "job", "jobs", "role", "roles", "what",
+    "how", "many", "count", "show", "tell", "about", "give", "who", "which", "check", "more", "view",
+    "is", "are", "was", "were", "has", "have", "had", "been", "will", "would", "could", "should"
+]);
+
 const NAME_PATTERNS = [
-    /\b(?:student|candidate)\s+(?:named\s+|called\s+)?([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/,
-    /\b(?:details|profile|record|status|applications?)\s+(?:of|for|about)\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/,
-    /\babout\s+([A-Z][a-zA-Z]+\s+[A-Z][a-zA-Z]+)/,
+    /\b(?:who\s+is|tell\s+me\s+about|info\s+(?:on|about)|(?:student\s+)?details?\s+(?:of|for|about)|profile\s+(?:of|for|about)|record\s+(?:of|for|about)|status\s+(?:of|for|about)|data\s+(?:of|for|about)|about|check|student|candidate)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+){0,2})/i,
+    /\b([a-zA-Z]+)(?:'s|’s)\b/i,
+    /\b([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)?)\s+(?:details|profile|record|status|data|applications)\b/,
+    /\b(?:is|can|does|has)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+){0,2})\s+(?:eligible|apply|have|placed|qualified)/i,
+    /\b(?:student|candidate)\s+(?:named\s+|called\s+)?([a-zA-Z]+(?:\s+[a-zA-Z]+){0,2})/i,
 ];
 const MAX_STUDENTS_IN_CONTEXT = 5;
 
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export const extractStudentIdentifiers = (text = "") => {
-    const usns = [...new Set((text.match(USN_PATTERN) || []).map((u) => u.toUpperCase()))];
+    if (!text || typeof text !== "string") return { usns: [], emails: [], names: [] };
+
+    const usns = new Set();
+    for (const m of text.match(USN_PATTERN) || []) usns.add(m.toUpperCase());
+    for (const m of text.match(GENERAL_ENROLLMENT_PATTERN) || []) usns.add(m.toUpperCase());
+    for (const match of text.matchAll(LABELED_ID_PATTERN)) {
+        if (match[1]) usns.add(match[1].toUpperCase());
+    }
+
     const emails = [...new Set((text.match(EMAIL_PATTERN) || []).map((e) => e.toLowerCase()))];
     const names = [];
+
     for (const pattern of NAME_PATTERNS) {
         const m = text.match(pattern);
-        if (m?.[1] && !/^(the|this|that|all|every|each|my|our)$/i.test(m[1].split(/\s+/)[0])) names.push(m[1].trim());
+        if (m?.[1]) {
+            const candidate = m[1].trim();
+            const words = candidate.split(/\s+/).map((w) => w.toLowerCase());
+            if (!words.some((w) => COMMON_NON_NAMES.has(w)) && candidate.length >= 2) {
+                names.push(candidate);
+            }
+        }
     }
-    return { usns, emails, names: [...new Set(names)] };
+
+    return { usns: [...usns], emails, names: [...new Set(names)] };
 };
 
 const hasIdentifiers = (ids) => ids.usns.length + ids.emails.length + ids.names.length > 0;
@@ -210,7 +243,6 @@ export const findStudentsForTpo = async (prompt, recentAdminMessages = []) => {
             }
         }
     }
-    if (!hasIdentifiers(ids)) return { requested: false, students: [], notFound: [], fromHistory };
 
     const found = new Map();
     const notFound = [];
@@ -227,10 +259,10 @@ export const findStudentsForTpo = async (prompt, recentAdminMessages = []) => {
     }
 
     for (const email of ids.emails) {
-        const user = await User.findOne({ email }).select("_id").maxTimeMS(QUERY_TIMEOUT_MS).lean();
+        const user = await User.findOne({ email: new RegExp(`^${escapeRegExp(email)}$`, "i") }).select("_id").maxTimeMS(QUERY_TIMEOUT_MS).lean();
         const profile = user
             ? await StudentProfile.findOne({ user: user._id }).maxTimeMS(QUERY_TIMEOUT_MS).lean()
-            : await StudentProfile.findOne({ collegeEmail: email }).maxTimeMS(QUERY_TIMEOUT_MS).lean();
+            : await StudentProfile.findOne({ collegeEmail: new RegExp(`^${escapeRegExp(email)}$`, "i") }).maxTimeMS(QUERY_TIMEOUT_MS).lean();
         if (profile) found.set(String(profile._id), profile);
         else notFound.push(`email ${email}`);
     }
@@ -248,8 +280,51 @@ export const findStudentsForTpo = async (prompt, recentAdminMessages = []) => {
         profiles.forEach((p) => found.set(String(p._id), p));
     }
 
+    // Dynamic Token Fallback:
+    // If no students found yet, check candidate words or bigrams from prompt against student Users
+    if (found.size === 0) {
+        const cleanPrompt = prompt.replace(/[^\w\s@.]/g, " ");
+        const words = cleanPrompt
+            .split(/\s+/)
+            .filter((w) => w.length >= 3 && !COMMON_NON_NAMES.has(w.toLowerCase()));
+
+        // Try exact fullName search for 2 consecutive words (e.g. "Aarav Sharma")
+        for (let i = 0; i < words.length - 1; i++) {
+            const bigram = `${words[i]} ${words[i + 1]}`;
+            const users = await User.find({ fullName: new RegExp(`\\b${escapeRegExp(bigram)}\\b`, "i"), role: "student" })
+                .select("_id")
+                .limit(MAX_STUDENTS_IN_CONTEXT)
+                .maxTimeMS(QUERY_TIMEOUT_MS)
+                .lean();
+            if (users.length > 0) {
+                const profiles = await StudentProfile.find({ user: { $in: users.map((u) => u._id) } }).limit(MAX_STUDENTS_IN_CONTEXT).maxTimeMS(QUERY_TIMEOUT_MS).lean();
+                profiles.forEach((p) => found.set(String(p._id), p));
+                if (found.size > 0) break;
+            }
+        }
+
+        // If still none found, try single distinctive name words (length >= 3)
+        if (found.size === 0) {
+            for (const word of words) {
+                if (/\b(?:host|create|publish|stage|drive|apply|check|give|view|show|open|close|export)\b/i.test(word)) continue;
+                const users = await User.find({ fullName: new RegExp(`\\b${escapeRegExp(word)}\\b`, "i"), role: "student" })
+                    .select("_id")
+                    .limit(MAX_STUDENTS_IN_CONTEXT)
+                    .maxTimeMS(QUERY_TIMEOUT_MS)
+                    .lean();
+                if (users.length > 0) {
+                    const profiles = await StudentProfile.find({ user: { $in: users.map((u) => u._id) } }).limit(MAX_STUDENTS_IN_CONTEXT).maxTimeMS(QUERY_TIMEOUT_MS).lean();
+                    profiles.forEach((p) => found.set(String(p._id), p));
+                    if (found.size > 0) break;
+                }
+            }
+        }
+    }
+
+    const requested = hasIdentifiers(ids) || found.size > 0;
+
     return {
-        requested: true,
+        requested,
         students: [...found.values()].slice(0, MAX_STUDENTS_IN_CONTEXT),
         truncated: found.size > MAX_STUDENTS_IN_CONTEXT,
         notFound,

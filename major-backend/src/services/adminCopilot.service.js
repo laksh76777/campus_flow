@@ -339,7 +339,20 @@ const hasStudentIdentifier = (prompt) => {
     return ids.usns.length > 0 || ids.emails.length > 0 || ids.names.length > 0;
 };
 
-export const isExplicitCopilotConfirmation = (prompt) => /^(?:yes|confirm|publish|proceed|go ahead|do it|create it)(?:[,.!\s]|$)/i.test(prompt.trim());
+export const isExplicitCopilotConfirmation = (prompt) => {
+    if (!prompt || typeof prompt !== "string") return false;
+    const clean = prompt.trim();
+    // Drive specification keywords: if the prompt specifies criteria for creating a drive, it is NEVER a confirmation
+    if (/\b(?:package|lpa|cgpa|backlog|stipend|ctc|branches?|rounds?|selection\s*rounds?|job\s*description|\bjd\b)\b/i.test(clean)) {
+        return false;
+    }
+    // Intent to host/create a drive
+    if (/\b(?:drive\s+for|host\s+|new\s+drive|create\s+(?:a\s+)?drive|publish\s+(?:a\s+)?(?:new\s+)?drive\s+for)/i.test(clean)) {
+        return false;
+    }
+    if (/\?/i.test(clean)) return false;
+    return /^(?:yes|confirm|publish|proceed|go ahead|do it|create it)(?:[,.!\s]+(?:yes|it|this|the|drive|this drive|this drive live|please|now|confirm|and|publish|go ahead|proceed|live))*[.!]*$/i.test(clean);
+};
 
 const sanitizeCopilotMessages = (messages) => (Array.isArray(messages) ? messages : [])
     .slice(-8)
@@ -484,14 +497,14 @@ RULES FOR OPERATION & DIALOGUE:
              { "roundNumber": 1, "roundName": "Online Coding Assessment", "roundType": "coding" },
              { "roundNumber": 2, "roundName": "Technical Interview", "roundType": "technical" },
              { "roundNumber": 3, "roundName": "HR Round", "roundType": "hr" }
-           ]
-         }
-       }
-       \`\`\`
- 3. If the TPO asks about student directories, analytics, or verifications, answer only from the LIVE CAMPUSFLOW DATABASE FACTS. If they are unavailable, say you cannot verify the requested data.
- 4. STUDENT & DRIVE QUESTIONS: When STUDENT RECORDS or DRIVE RECORDS are provided above, answer with the actual details from those records (profile, academics, eligibility verdicts and reasons, applications, interview information) in a clear, structured summary. Do not tell the TPO to go and open a page instead. Values marked "not recorded" are missing in the database — say so. If NO STUDENT RECORD FOUND is listed, say the student could not be found and suggest checking the USN. Never mix details between different students.
- 5. Eligibility verdicts come from the portal's eligibility engine as given; do not recompute or overrule them.
- 6. You can only stage new drives (via the drive_intent block). You cannot edit records, change application statuses, send emails or notifications. If asked, explain where the TPO can do it in the portal and state clearly that nothing was changed.`;
+            ]
+          }
+        }
+        \`\`\`
+  3. If the TPO asks about student directories, analytics, or verifications, answer only from the LIVE CAMPUSFLOW DATABASE FACTS. If they are unavailable, say you cannot verify the requested data.
+  4. STUDENT & DRIVE QUESTIONS: You have direct access to the student database. When STUDENT RECORDS or DRIVE RECORDS are provided above, you have full and complete knowledge of that student's records (academic dossier, semester SGPA, verified CGPA, active/historical backlogs, application history, and drive eligibility). Answer any question or perform any evaluation or task asked by the TPO using these real records in a clear, structured summary. Do not tell the TPO to go and open another page instead. Values marked "not recorded" are missing in the database — say so. If NO STUDENT RECORD FOUND is listed, say the student could not be found and suggest checking the USN. Never mix details between different students.
+  5. Eligibility verdicts come from the portal's eligibility engine as given; do not recompute or overrule them.
+  6. You can only stage new drives (via the drive_intent block). You cannot edit records, change application statuses, send emails or notifications. If asked, explain where the TPO can do it in the portal and state clearly that nothing was changed.`;
 
     let aiResponse;
     try {
@@ -512,23 +525,89 @@ RULES FOR OPERATION & DIALOGUE:
 
     const outputText = aiResponse.text;
 
-    // Check if AI generated a drive creation intent block
-    const jsonMatch = outputText.match(/```json:drive_intent\s*([\s\S]*?)\s*```/);
+    // Check if AI generated a drive creation intent block with flexible multi-pattern support
     let driveParams = null;
+    let cleanDisplayAnswer = outputText;
 
-    if (jsonMatch && jsonMatch[1]) {
-        try {
-            const parsed = JSON.parse(jsonMatch[1]);
-            if (parsed.driveParams && typeof parsed.driveParams === "object") {
-                driveParams = parsed.driveParams;
+    // 1. Try fenced blocks: ```json:drive_intent, ```json, or ```drive_intent
+    const fencedRegex = /```(?:json:drive_intent|drive_intent|json)?\s*([\s\S]*?)\s*```/gi;
+    let match;
+    let matchedBlock = null;
+
+    while ((match = fencedRegex.exec(outputText)) !== null) {
+        const candidate = match[1].trim();
+        if (candidate.startsWith("{") && candidate.endsWith("}")) {
+            try {
+                const parsed = JSON.parse(candidate);
+                if (parsed.driveParams && typeof parsed.driveParams === "object") {
+                    driveParams = parsed.driveParams;
+                    matchedBlock = match[0];
+                    break;
+                } else if (parsed.companyName && (parsed.package != null || parsed.salaryPackage != null)) {
+                    driveParams = parsed;
+                    matchedBlock = match[0];
+                    break;
+                }
+            } catch {
+                // not valid json block, keep looking
             }
-        } catch (pErr) {
-            console.warn("Could not parse drive_intent JSON from Groq:", pErr.message);
         }
     }
 
-    // Clean display text without raw internal json tags
-    const cleanDisplayAnswer = outputText.replace(/```json:drive_intent[\s\S]*?```/gi, "").trim();
+    // 2. Try raw JSON if no code fence matched
+    if (!driveParams) {
+        const rawJsonMatch = outputText.match(/\{[\s\S]*?"(?:companyName|driveParams)"[\s\S]*?\}/);
+        if (rawJsonMatch) {
+            try {
+                const parsed = JSON.parse(rawJsonMatch[0]);
+                if (parsed.driveParams && typeof parsed.driveParams === "object") {
+                    driveParams = parsed.driveParams;
+                    matchedBlock = rawJsonMatch[0];
+                } else if (parsed.companyName && (parsed.package != null || parsed.salaryPackage != null)) {
+                    driveParams = parsed;
+                    matchedBlock = rawJsonMatch[0];
+                }
+            } catch {
+                // ignore
+            }
+        }
+    }
+
+    // 3. Fallback: Direct extraction if TPO provided complete drive specs in prompt
+    if (!driveParams) {
+        try {
+            const combinedText = `${cleanPrompt}\n${outputText}`;
+            const companyMatch = combinedText.match(/\b(?:company|for)\s*[:\-]?\s*([A-Za-z0-9&.\s]{2,40})(?:,|\.|\n|role|package|cgpa)/i);
+            const roleMatch = combinedText.match(/\b(?:role|position|job\s*title)\s*[:\-]?\s*([A-Za-z0-9&.\s]{2,50})(?:,|\.|\n|package|cgpa|salary)/i);
+            const packageMatch = combinedText.match(/\b(?:package|ctc|salary|stipend)\s*[:\-]?\s*₹?\s*(\d+(?:\.\d+)?)\s*(?:lpa|lakhs?|inr)?/i);
+            const cgpaMatch = combinedText.match(/\b(?:cgpa|cutoff|min(?:imum)?\s*cgpa)\s*[:\-]?\s*(\d+(?:\.\d+)?)/i);
+            const backlogMatch = combinedText.match(/\b(?:backlogs?|max(?:imum)?\s*backlogs?)\s*[:\-]?\s*(\d+)/i);
+            const branchMatch = combinedText.match(/\b(?:branches?|programs?|eligible\s*(?:branches?|programs?))\s*[:\-]?\s*([A-Za-z0-9,\s/&]+?)(?:,|\.|\n|$)/i);
+
+            if (companyMatch && roleMatch && packageMatch && cgpaMatch && backlogMatch) {
+                const candidate = {
+                    companyName: companyMatch[1].trim(),
+                    jobTitle: roleMatch[1].trim(),
+                    package: parseFloat(packageMatch[1]),
+                    minimumCGPA: parseFloat(cgpaMatch[1]),
+                    maximumBacklogs: parseInt(backlogMatch[1], 10),
+                    eligibleBranches: branchMatch ? branchMatch[1].trim() : "All",
+                };
+                if (validateDriveParams(candidate).valid) {
+                    driveParams = candidate;
+                }
+            }
+        } catch {
+            // ignore fallback error
+        }
+    }
+
+    if (matchedBlock) {
+        cleanDisplayAnswer = cleanDisplayAnswer.replace(matchedBlock, "").trim();
+    }
+    cleanDisplayAnswer = cleanDisplayAnswer
+        .replace(/```(?:json:drive_intent|drive_intent|json)[\s\S]*?```/gi, "")
+        .trim();
 
     // If drive is ready for admin confirmation
     if (driveParams) {
