@@ -116,6 +116,7 @@ export function AuthProvider({ children }) {
       setUser(null);
       setUserRole(null);
       setStudentProfile(null);
+      setLoading(false);
       toast.error("Your session expired. Please sign in again.");
     };
 

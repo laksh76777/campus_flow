@@ -3,6 +3,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { User } from "../models/user.models.js";
 import { Admin } from "../models/admin.model.js";
+import { getAuthCookieOptions } from "../utils/authCookieOptions.js";
 
 
 const registerAdmin = asyncHandler(async (req, res) => {
@@ -128,11 +129,7 @@ const loginAdmin = asyncHandler(async (req, res) => {
     }
     const loggedInUser = await User.findById(user._id)
         .select("-password -refreshToken");
-    const options = {
-        httpOnly: true,
-        secure: true,
-        sameSite: "none"
-    };
+    const options = getAuthCookieOptions();
     return res
         .status(200)
         .cookie("accessToken", accessToken, options)
@@ -143,8 +140,7 @@ const loginAdmin = asyncHandler(async (req, res) => {
                 {
                     user: loggedInUser,
                     admin,
-                    accessToken,
-                    refreshToken
+                    accessToken
                 },
                 "Admin logged in successfully"
             )
@@ -163,11 +159,7 @@ const logoutAdmin = asyncHandler(async (req, res) => {
         }
     );
 
-    const options = {
-        httpOnly: true,
-        secure: true,
-        sameSite: "none"
-    };
+    const options = getAuthCookieOptions();
 
     return res
         .status(200)

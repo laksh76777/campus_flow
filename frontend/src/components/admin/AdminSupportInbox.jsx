@@ -10,9 +10,7 @@ import {
   Bot,
   Briefcase,
   Workflow,
-  BarChart3,
   ExternalLink,
-  ChevronRight,
   ShieldCheck,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -41,6 +39,7 @@ export default function AdminSupportInbox() {
   // Copilot State
   const [copilotPrompt, setCopilotPrompt] = useState("");
   const [copilotLoading, setCopilotLoading] = useState(false);
+  const copilotMessageSequence = useRef(0);
   const [copilotHistory, setCopilotHistory] = useState([
     {
       id: "welcome",
@@ -136,9 +135,10 @@ export default function AdminSupportInbox() {
   const submitCopilotPrompt = async (promptText) => {
     const textToSend = promptText || copilotPrompt;
     if (!textToSend.trim() || copilotLoading) return;
+    const messageSequence = ++copilotMessageSequence.current;
 
     const userMsg = {
-      id: `user_${Date.now()}`,
+      id: `user_${messageSequence}`,
       sender: "admin",
       content: textToSend.trim(),
       createdAt: new Date(),
@@ -150,13 +150,21 @@ export default function AdminSupportInbox() {
     setCopilotLoading(true);
 
     try {
-      const res = await sendAdminCopilotPrompt(textToSend.trim(), copilotHistory);
+      const recentHistory = copilotHistory.slice(-8).map(({ sender, content, action, driveParams }) => ({
+        sender,
+        content: String(content || "").slice(0, 1200),
+        ...(sender === "bot" && action === "DRIVE_READY" ? { action, driveParams } : {}),
+      }));
+      const res = await sendAdminCopilotPrompt(textToSend.trim(), recentHistory);
       const botResponse = res?.data;
+      if (typeof botResponse?.answer !== "string" || !botResponse.answer.trim()) {
+        throw new Error("The copilot returned an empty response. No action was confirmed.");
+      }
 
       const botMsg = {
-        id: `bot_${Date.now()}`,
+        id: `bot_${messageSequence}`,
         sender: "bot",
-        content: botResponse?.answer || "Action completed successfully.",
+        content: botResponse.answer,
         action: botResponse?.action,
         driveId: botResponse?.driveId,
         driveTitle: botResponse?.driveTitle,
@@ -175,7 +183,7 @@ export default function AdminSupportInbox() {
       setCopilotHistory((prev) => [
         ...prev,
         {
-          id: `bot_err_${Date.now()}`,
+          id: `bot_err_${messageSequence}`,
           sender: "bot",
           content: `⚠️ ${errMsg}`,
           createdAt: new Date(),
@@ -358,18 +366,18 @@ export default function AdminSupportInbox() {
                         </div>
                         <div className="bg-white/80 p-2 rounded-xl border border-indigo-100/80">
                           <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">CGPA Cutoff</span>
-                          <span className="text-xs font-black text-slate-800">≥ {msg.driveParams.minimumCGPA ?? 7.0}</span>
+                          <span className="text-xs font-black text-slate-800">≥ {msg.driveParams.minimumCGPA}</span>
                         </div>
                         <div className="bg-white/80 p-2 rounded-xl border border-indigo-100/80">
                           <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Max Backlogs</span>
-                          <span className="text-xs font-black text-slate-800">≤ {msg.driveParams.maximumBacklogs ?? 0}</span>
+                          <span className="text-xs font-black text-slate-800">≤ {msg.driveParams.maximumBacklogs}</span>
                         </div>
                         <div className="col-span-2 sm:col-span-3 bg-white/80 p-2 rounded-xl border border-indigo-100/80">
                           <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Target Programs</span>
                           <span className="text-xs font-medium text-slate-700">
                             {Array.isArray(msg.driveParams.eligibleBranches)
                               ? msg.driveParams.eligibleBranches.join(", ")
-                              : msg.driveParams.eligibleBranches || "CSE, ISE, ECE"}
+                              : msg.driveParams.eligibleBranches || "Not specified"}
                           </span>
                         </div>
                         {Array.isArray(msg.driveParams.rounds) && msg.driveParams.rounds.length > 0 && (
@@ -384,6 +392,25 @@ export default function AdminSupportInbox() {
                             </div>
                           </div>
                         )}
+                        <div className="col-span-2 sm:col-span-3 grid gap-2 sm:grid-cols-3">
+                          {[
+                            ["Applications open", msg.driveParams.applicationStartDate],
+                            ["Application deadline", msg.driveParams.applicationDeadline],
+                            ["Drive date", msg.driveParams.driveDate],
+                          ].map(([label, value]) => (
+                            <div key={label} className="rounded-xl border border-indigo-100/80 bg-white/80 p-2">
+                              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</span>
+                              <span className="text-xs font-semibold text-slate-800">
+                                {value && !Number.isNaN(new Date(value).getTime())
+                                  ? new Date(value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
+                                  : "Not set"}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="col-span-2 sm:col-span-3 rounded-xl border border-amber-200 bg-amber-50 p-2 text-[11px] leading-5 text-amber-900">
+                          These are the portal’s default dates. Review them before publishing; the drive date is four days after the default ten-day application window.
+                        </div>
                         {msg.driveParams.eligibleCount !== null && msg.driveParams.eligibleCount !== undefined && (
                           <div className="col-span-2 sm:col-span-3 bg-emerald-50/80 p-2 rounded-xl border border-emerald-200">
                             <span className="text-xs font-bold text-emerald-800 flex items-center gap-1">

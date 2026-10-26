@@ -3,8 +3,8 @@ import { StudentProfile } from "../models/studentProfile.model.js";
 import { Company } from "../models/company.model.js";
 import { Application } from "../models/application.model.js";
 import { PlacementSession } from "../models/placementSession.model.js";
-import { User } from "../models/user.models.js";
 import { PROGRAM_CATALOG, resolveProgram } from "../constants/programCatalog.js";
+import { EligibilityService } from "./eligibility.service.js";
 import { updateDriveRoundsConfig } from "./automatedDrive.service.js";
 import { callGeminiAI } from "./geminiClient.service.js";
 
@@ -12,87 +12,139 @@ import { callGeminiAI } from "./geminiClient.service.js";
  * Resolves program codes and branch names from raw text
  */
 export const resolveProgramsFromPrompt = (branchText) => {
-    if (!branchText || /all|any|open to all|all branches|all programs/i.test(branchText)) {
+    const text = Array.isArray(branchText) ? branchText.join(", ") : String(branchText || "").trim();
+    if (/^(all|all branches|all programs|all approved branches|all approved programs|any branch|any program|open to all)$/i.test(text)) {
         return {
             programCodes: PROGRAM_CATALOG.map((p) => p.code),
             branches: PROGRAM_CATALOG.map((p) => p.name),
         };
     }
-    const tokens = String(branchText).split(/[,/|&]+|\band\b/i).map((t) => t.trim()).filter(Boolean);
+    if (!text) throw new Error("Choose eligible programs or explicitly select all approved programs.");
+    const inputs = Array.isArray(branchText) ? branchText : [text];
+    const tokens = inputs.flatMap((input) => {
+        const value = String(input || "").trim();
+        if (resolveProgram(value)) return [value];
+        return value.split(/[,/|]+|\band\b|\s&\s/i).map((token) => token.trim()).filter(Boolean);
+    });
     const resolved = [];
     for (const token of tokens) {
         const prog = resolveProgram(token);
         if (prog && !resolved.some((r) => r.code === prog.code)) {
             resolved.push(prog);
+        } else if (!prog) {
+            throw new Error(`The eligible program “${token}” could not be matched to the approved program catalogue.`);
         }
     }
-    if (resolved.length === 0) {
-        return {
-            programCodes: ["CSE", "ISE", "ECE"],
-            branches: [
-                "Computer Science & Engineering (CSE)",
-                "Information Science & Engineering (ISE)",
-                "Electronics & Communication Engineering (ECE)",
-            ],
-        };
-    }
+    if (resolved.length === 0) throw new Error("Choose at least one approved eligible program.");
     return {
         programCodes: resolved.map((p) => p.code),
         branches: resolved.map((p) => p.name),
     };
 };
 
+export const validateDriveParams = (driveParams = {}) => {
+    const errors = [];
+    const companyName = typeof driveParams.companyName === "string" ? driveParams.companyName.trim() : "";
+    const jobTitle = typeof driveParams.jobTitle === "string" ? driveParams.jobTitle.trim() : "";
+    const salaryPackage = Number(driveParams.package ?? driveParams.salaryPackage);
+    const minimumCGPA = Number(driveParams.minimumCGPA);
+    const maximumBacklogs = Number(driveParams.maximumBacklogs);
+    let programs = null;
+
+    if (!companyName || companyName.length > 120) errors.push("a company name (up to 120 characters)");
+    if (!jobTitle || jobTitle.length > 120) errors.push("a job title (up to 120 characters)");
+    if (driveParams.package == null && driveParams.salaryPackage == null) errors.push("the compensation package in LPA");
+    else if (!Number.isFinite(salaryPackage) || salaryPackage < 0) errors.push("a valid non-negative compensation package");
+    if (driveParams.minimumCGPA == null) errors.push("the minimum CGPA cutoff");
+    else if (!Number.isFinite(minimumCGPA) || minimumCGPA < 0 || minimumCGPA > 10) errors.push("a CGPA cutoff from 0 to 10");
+    if (driveParams.maximumBacklogs == null) errors.push("the maximum active backlog count");
+    else if (!Number.isInteger(maximumBacklogs) || maximumBacklogs < 0) errors.push("a non-negative whole-number backlog limit");
+
+    try {
+        programs = resolveProgramsFromPrompt(driveParams.eligibleBranches);
+    } catch (error) {
+        errors.push(error.message);
+    }
+
+    const rounds = Array.isArray(driveParams.rounds) ? driveParams.rounds : [];
+    if (driveParams.isAutomated === true) {
+        if (rounds.length === 0 || rounds.length > 10) errors.push("between 1 and 10 selection rounds for an automated drive");
+        const names = rounds.map((round) => String(round?.roundName || round?.name || "").trim());
+        if (names.some((name) => !name || name.length > 80)) errors.push("a valid name for every selection round");
+        if (new Set(names.map((name) => name.toLowerCase())).size !== names.length) errors.push("unique names for each selection round");
+    }
+
+    return {
+        valid: errors.length === 0,
+        errors,
+        programs,
+        params: errors.length === 0 ? {
+            ...driveParams,
+            companyName,
+            jobTitle,
+            package: salaryPackage,
+            minimumCGPA,
+            maximumBacklogs,
+            eligibleBranches: programs.branches,
+        } : null,
+    };
+};
+
+const createDefaultSchedule = (now = new Date()) => ({
+    applicationStartDate: now,
+    applicationDeadline: new Date(now.getTime() + 10 * 24 * 60 * 60 * 1000),
+    driveDate: new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000),
+});
+
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 /**
  * Execute automated creation of a placement drive in MongoDB
  */
 export const executeDriveCreation = async ({ driveParams, adminUser }) => {
-    const companyName = String(driveParams.companyName || "Corporate Partner").trim();
-    const jobTitle = String(driveParams.jobTitle || "Software Engineer").trim();
-    const salaryPackage = Number(driveParams.package || driveParams.salaryPackage || 8.0);
-    const minimumCGPA = Number(driveParams.minimumCGPA ?? 7.0);
-    const maximumBacklogs = Number(driveParams.maximumBacklogs ?? 0);
-    const isAutomated = Boolean(driveParams.isAutomated);
+    const validation = validateDriveParams(driveParams);
+    if (!validation.valid) throw new Error(`Drive details are incomplete: ${validation.errors.join("; ")}.`);
 
-    const { programCodes, branches } = resolveProgramsFromPrompt(
-        Array.isArray(driveParams.eligibleBranches)
-            ? driveParams.eligibleBranches.join(", ")
-            : driveParams.eligibleBranches
-    );
+    const { params: normalized } = validation;
+    const { companyName, jobTitle, minimumCGPA, maximumBacklogs } = normalized;
+    const salaryPackage = normalized.package;
+    const isAutomated = normalized.isAutomated === true;
+    const { programCodes, branches } = validation.programs;
+    const adminId = adminUser?._id || adminUser?.id;
+    if (!adminId) throw new Error("The authenticated administrator could not be resolved.");
 
-    // Resolve Admin ID
-    let adminId = adminUser?._id || adminUser?.id;
-    if (!adminId) {
-        const fallbackAdmin = await User.findOne({ role: "admin" }).select("_id").lean();
-        adminId = fallbackAdmin?._id;
+    // 1. Resolve the active cohort before writing any records.
+    const session = await PlacementSession.findOne({
+        isActive: true,
+        isClosed: { $ne: true },
+        isArchived: { $ne: true },
+    });
+    if (!session) throw new Error("There is no active placement session. Set an open session before publishing a drive.");
+    const sessionYear = session.sessionYear;
+    const sessionId = session._id;
+
+    const schedule = {
+        applicationStartDate: new Date(normalized.applicationStartDate),
+        applicationDeadline: new Date(normalized.applicationDeadline),
+        driveDate: new Date(normalized.driveDate),
+    };
+    if (Object.values(schedule).some((date) => Number.isNaN(date.getTime())) || schedule.applicationDeadline <= schedule.applicationStartDate || schedule.driveDate < schedule.applicationDeadline) {
+        throw new Error("The staged application and drive dates are invalid. Please review the schedule and try again.");
     }
 
-    // 1. Find or create Company record
+    // 2. Find or create Company record.
     let companyDoc = await Company.findOne({
-        companyName: { $regex: new RegExp(`^${companyName}$`, "i") },
+        companyName: { $regex: new RegExp(`^${escapeRegExp(companyName)}$`, "i") },
+        isActive: true,
     });
     if (!companyDoc) {
         companyDoc = await Company.create({
             companyName: companyName,
-            companyDescription: `${companyName} corporate recruitment partner.`,
-            industry: "Technology & Professional Services",
-            companyWebsite: `https://www.${companyName.toLowerCase().replace(/[^a-z0-9]/g, "")}.com`,
             createdBy: adminId,
         });
     }
 
-    // 2. Resolve Active Placement Session
-    let session = await PlacementSession.findOne({ isActive: true });
-    if (!session) {
-        session = await PlacementSession.findOne().sort({ sessionYear: -1 });
-    }
-    const sessionYear = session ? session.sessionYear : new Date().getFullYear();
-    const sessionId = session ? session._id : null;
-
-    // 3. Application Windows (Opens now, closes in 10 days, drive in 14 days)
-    const now = new Date();
-    const deadline = new Date(now.getTime() + 10 * 24 * 60 * 60 * 1000);
-    const driveDate = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
-
+    // 3. Use the schedule shown in the confirmation card.
     // Normalize jobType to valid schema enum ("full-time", "internship", "internship-to-full-time")
     let jobType = "full-time";
     const rawJobType = String(driveParams.jobType || "").toLowerCase();
@@ -102,14 +154,16 @@ export const executeDriveCreation = async ({ driveParams, adminUser }) => {
         jobType = "internship";
     }
 
-    // 4. Create Placement Drive
-    const drive = await PlacementDrive.create({
+    // 4. Create Placement Drive.
+    let drive;
+    try {
+        drive = await PlacementDrive.create({
         company: companyDoc._id,
         jobTitle: jobTitle,
-        jobDescription: driveParams.jobDescription || `Campus Recruitment Drive for ${companyName} (${jobTitle}). Package: ₹${salaryPackage} LPA, Min CGPA: ${minimumCGPA}, Max Backlogs: ${maximumBacklogs}.`,
+        jobDescription: driveParams.jobDescription || "",
         jobType: jobType,
         package: salaryPackage,
-        location: driveParams.location || "Bengaluru, Karnataka (Hybrid / Onsite)",
+        location: driveParams.location || "",
         eligibleBranches: branches,
         eligibleProgramCodes: programCodes,
         minimumCGPA: minimumCGPA,
@@ -118,13 +172,14 @@ export const executeDriveCreation = async ({ driveParams, adminUser }) => {
         checkBacklogs: true,
         graduationYear: sessionYear,
         placementSession: sessionId,
-        applicationStartDate: now,
-        applicationDeadline: deadline,
-        driveDate: driveDate,
-        venue: "JSSATEB Campus Placement Cell / Virtual Assessment",
+        ...schedule,
+        venue: driveParams.venue || "",
         isActive: true,
-        createdBy: adminId,
-    });
+            createdBy: adminId,
+        });
+    } catch (error) {
+        throw error;
+    }
 
     // 5. If automated drive or rounds requested, initialize selection rounds
     const rounds = Array.isArray(driveParams.rounds) && driveParams.rounds.length > 0
@@ -139,7 +194,14 @@ export const executeDriveCreation = async ({ driveParams, adminUser }) => {
         try {
             await updateDriveRoundsConfig(drive._id, rounds);
         } catch (roundErr) {
-            console.warn("Could not attach automated rounds:", roundErr.message);
+            let driveDeactivated = false;
+            try {
+                await PlacementDrive.findByIdAndUpdate(drive._id, { $set: { isActive: false } });
+                driveDeactivated = true;
+            } catch {
+                // Keep the error actionable if even the safety update cannot be persisted.
+            }
+            throw new Error(`Automated round setup failed. ${driveDeactivated ? "The drive was deactivated." : "The drive status could not be verified; check the admin drive list before retrying."} ${roundErr.message}`);
         }
     }
 
@@ -155,6 +217,10 @@ export const executeDriveCreation = async ({ driveParams, adminUser }) => {
             eligibleBranches: branches,
             isAutomated,
             rounds,
+            graduationYear: sessionYear,
+            ...schedule,
+            location: driveParams.location || "",
+            venue: driveParams.venue || "",
         },
     };
 };
@@ -162,177 +228,187 @@ export const executeDriveCreation = async ({ driveParams, adminUser }) => {
 /**
  * Fetch real-time database context for Gemini
  */
-export const getAdminSystemContext = async () => {
-    try {
-        const totalStudents = await StudentProfile.countDocuments().maxTimeMS(3000);
-        const verifiedStudents = await StudentProfile.countDocuments({
-            $or: [{ academicVerificationStatus: "VERIFIED" }, { verificationStatus: "VERIFIED" }],
-        }).maxTimeMS(3000);
-        const pendingStudents = await StudentProfile.countDocuments({
-            $or: [{ academicVerificationStatus: "PENDING" }, { verificationStatus: "PENDING" }],
-        }).maxTimeMS(3000);
-        const highCgpaStudents = await StudentProfile.countDocuments({ cgpa: { $gte: 8.0 } }).maxTimeMS(3000);
-        const studentsWithBacklogs = await StudentProfile.countDocuments({ activeBacklogs: { $gt: 0 } }).maxTimeMS(3000);
-        const activeDrives = await PlacementDrive.find({ isActive: true, isDeleted: { $ne: true } })
-            .populate("company", "companyName")
-            .select("jobTitle package minimumCGPA maximumBacklogs applicationDeadline company")
-            .limit(6)
-            .maxTimeMS(3000)
-            .lean();
-        const totalApplications = await Application.countDocuments().maxTimeMS(3000);
-        const currentSession = await PlacementSession.findOne({ isActive: true }).maxTimeMS(3000).lean();
+const queryAdminSystemContext = async () => {
+    const totalStudents = await StudentProfile.countDocuments().maxTimeMS(3000);
+    const verifiedStudents = await StudentProfile.countDocuments({ verificationStatus: "VERIFIED" }).maxTimeMS(3000);
+    const pendingStudents = await StudentProfile.countDocuments({ verificationStatus: "PENDING" }).maxTimeMS(3000);
+    const highCgpaStudents = await StudentProfile.countDocuments({ cgpa: { $gte: 8.0 } }).maxTimeMS(3000);
+    const studentsWithBacklogs = await StudentProfile.countDocuments({ activeBacklogs: { $gt: 0 } }).maxTimeMS(3000);
+    const activeDrives = await PlacementDrive.find({ isActive: true, isDeleted: { $ne: true } })
+        .populate("company", "companyName")
+        .select("jobTitle package minimumCGPA maximumBacklogs applicationDeadline company")
+        .limit(6)
+        .maxTimeMS(3000)
+        .lean();
+    const totalApplications = await Application.countDocuments().maxTimeMS(3000);
+    const currentSession = await PlacementSession.findOne({ isActive: true, isClosed: { $ne: true }, isArchived: { $ne: true } })
+        .maxTimeMS(3000)
+        .lean();
 
-        return {
-            totalStudents,
-            verifiedStudents,
-            pendingStudents,
-            highCgpaStudents,
-            studentsWithBacklogs,
-            totalApplications,
-            activeSessionYear: currentSession ? currentSession.sessionYear : new Date().getFullYear(),
-            activeDrives: activeDrives.map((d) => ({
-                company: d.company?.companyName || "Company",
-                role: d.jobTitle,
-                packageLpa: d.package,
-                minCgpa: d.minimumCGPA,
-                deadline: d.applicationDeadline,
-            })),
-            approvedPrograms: PROGRAM_CATALOG.map((p) => `${p.code} (${p.name})`),
-        };
+    return {
+        totalStudents,
+        verifiedStudents,
+        pendingStudents,
+        highCgpaStudents,
+        studentsWithBacklogs,
+        totalApplications,
+        activeSessionYear: currentSession?.sessionYear ?? null,
+        activeDrives: activeDrives.map((d) => ({
+            company: d.company?.companyName || "Company",
+            role: d.jobTitle,
+            packageLpa: d.package,
+            minCgpa: d.minimumCGPA,
+            deadline: d.applicationDeadline,
+        })),
+        approvedPrograms: PROGRAM_CATALOG.map((p) => `${p.code} (${p.name})`),
+    };
+};
+
+const unavailableAdminSystemContext = () => ({
+    available: false,
+    totalStudents: null,
+    verifiedStudents: null,
+    pendingStudents: null,
+    highCgpaStudents: null,
+    studentsWithBacklogs: null,
+    totalApplications: null,
+    activeSessionYear: null,
+    activeDrives: [],
+    approvedPrograms: PROGRAM_CATALOG.map((p) => `${p.code} (${p.name})`),
+});
+
+export const getAdminSystemContext = async ({ loadContext = queryAdminSystemContext } = {}) => {
+    try {
+        return { available: true, ...(await loadContext()) };
     } catch (dbErr) {
         console.warn("[AdminCopilot] Database context query skipped:", dbErr.message);
-        return {
-            totalStudents: 162,
-            verifiedStudents: 160,
-            pendingStudents: 2,
-            highCgpaStudents: 54,
-            studentsWithBacklogs: 8,
-            totalApplications: 120,
-            activeSessionYear: new Date().getFullYear(),
-            activeDrives: [],
-            approvedPrograms: PROGRAM_CATALOG.map((p) => `${p.code} (${p.name})`),
-        };
+        return unavailableAdminSystemContext();
     }
 };
 
 /**
  * Calculate count of verified students who meet criteria
  */
-export const countEligibleStudents = async ({ minimumCGPA = 0, maximumBacklogs = 0 } = {}) => {
+export const countEligibleStudents = async ({ minimumCGPA, maximumBacklogs, eligibleBranches, graduationYear } = {}) => {
     try {
-        const query = {
-            $or: [{ academicVerificationStatus: "VERIFIED" }, { verificationStatus: "VERIFIED" }],
+        const session = await PlacementSession.findOne({ isActive: true, isClosed: { $ne: true }, isArchived: { $ne: true } }).lean();
+        const targetYear = Number(graduationYear || session?.sessionYear);
+        if (!Number.isFinite(targetYear)) return null;
+        const programs = resolveProgramsFromPrompt(eligibleBranches);
+        const profiles = await StudentProfile.find({ verificationStatus: "VERIFIED", graduationYear: targetYear })
+            .maxTimeMS(5000)
+            .lean();
+        const criteria = {
+            isActive: true,
+            applicationDeadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
+            graduationYear: targetYear,
+            eligibleProgramCodes: programs.programCodes,
+            eligibleBranches: programs.branches,
+            checkCgpa: true,
+            minimumCGPA: Number(minimumCGPA),
+            checkBacklogs: true,
+            maximumBacklogs: Number(maximumBacklogs),
         };
-        const minCgpaNum = Number(minimumCGPA);
-        if (Number.isFinite(minCgpaNum) && minCgpaNum > 0) {
-            query.cgpa = { $gte: minCgpaNum };
-        }
-        const maxBacklogsNum = Number(maximumBacklogs);
-        if (Number.isFinite(maxBacklogsNum)) {
-            query.activeBacklogs = { $lte: maxBacklogsNum };
-        }
-        return await StudentProfile.countDocuments(query).maxTimeMS(3000);
+        return profiles.filter((profile) => EligibilityService.evaluate(profile, criteria).isEligible).length;
     } catch {
         return null;
     }
 };
 
+const isLiveDataQuestion = (prompt) => /\b(how many|count|statistics|analytics|list (?:the )?(?:students|drives|applications)|show (?:me )?(?:the )?(?:students|drives|applications|verifications)|pending verification|verified students|active drives|eligible students|candidate pool|student directory|cgpa above|cgpa distribution)\b/i.test(prompt);
+
+export const isExplicitCopilotConfirmation = (prompt) => /^(?:yes|confirm|publish|proceed|go ahead|do it|create it)(?:[,.!\s]|$)/i.test(prompt.trim());
+
+const sanitizeCopilotMessages = (messages) => (Array.isArray(messages) ? messages : [])
+    .slice(-8)
+    .filter((message) => message && ["admin", "bot"].includes(message.sender))
+    .map((message) => ({
+        sender: message.sender,
+        content: typeof message.content === "string" ? message.content.slice(0, 1200) : "",
+        ...(message.sender === "bot" && message.action === "DRIVE_READY" && message.driveParams && typeof message.driveParams === "object"
+            ? { action: "DRIVE_READY", driveParams: message.driveParams }
+            : {}),
+    }));
+
 /**
  * Main handler for Admin AI Copilot backed by Google Gemini
  */
-export const processAdminCopilotPrompt = async ({ prompt, adminUser, messages = [] }) => {
+export const processAdminCopilotPrompt = async ({
+    prompt,
+    adminUser,
+    messages = [],
+    loadContext = getAdminSystemContext,
+    generateAnswer = callGeminiAI,
+    createDrive = executeDriveCreation,
+    getEligibleCount = countEligibleStudents,
+}) => {
     if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
         throw new Error("Prompt is required.");
     }
 
     const cleanPrompt = prompt.trim();
-    const systemContext = await getAdminSystemContext();
+    const systemContext = await loadContext();
+    const recentMessages = sanitizeCopilotMessages(messages);
 
-    // Check if the prompt is an explicit confirmation
-    const normalizedPrompt = cleanPrompt.replace(/^[!.,?\s]+|[!.,?\s]+$/g, "").toLowerCase();
-    const isExplicitConfirmation =
-        /^(yes|confirm|publish|proceed|go ahead|do it|create it)\b/i.test(normalizedPrompt) ||
-        /(publish (it|this|live|the drive)|confirm and publish)/i.test(normalizedPrompt);
-
-    // Look for previously staged driveParams in previous messages
-    let stagedParams = null;
-    if (Array.isArray(messages)) {
-        for (let i = messages.length - 1; i >= 0; i--) {
-            const m = messages[i];
-            if (m.driveParams && m.driveParams.companyName) {
-                stagedParams = m.driveParams;
-                break;
-            }
-            const match = String(m.content || "").match(/```json:drive_intent\s*([\s\S]*?)\s*```/);
-            if (match && match[1]) {
-                try {
-                    const parsed = JSON.parse(match[1]);
-                    if (parsed.driveParams && parsed.driveParams.companyName) {
-                        stagedParams = parsed.driveParams;
-                        break;
-                    }
-                } catch {}
-            }
-        }
+    if (!systemContext.available && isLiveDataQuestion(cleanPrompt)) {
+        return {
+            action: "DATA_UNAVAILABLE",
+            answer: "I can’t access current CampusFlow data right now, so I can’t confirm those counts or records. No data changes were made. Please try again when the database connection is available.",
+        };
     }
 
-    // If admin is confirming a previously staged drive, execute publish right now!
-    if (isExplicitConfirmation && stagedParams) {
-        try {
-            const { drive, company, params } = await executeDriveCreation({
-                driveParams: stagedParams,
-                adminUser,
-            });
-            const eligibleCount = await countEligibleStudents(params);
-            return {
-                action: "DRIVE_CREATED",
-                answer: `🎉 **Placement Drive Officially Published Live!**\n\n` +
-                    `• **Company:** **${company.companyName}**\n` +
-                    `• **Role:** ${params.jobTitle}\n` +
-                    `• **Package:** ₹${params.salaryPackage} LPA\n` +
-                    `• **Eligibility Cutoff:** CGPA ≥ ${params.minimumCGPA} • Max Backlogs: ${params.maximumBacklogs}\n` +
-                    `• **Target Programs:** ${params.eligibleBranches.join(", ")}\n` +
-                    (eligibleCount !== null ? `• **Eligible Candidates:** ${eligibleCount} verified students qualify immediately\n` : "") +
-                    `• **Status:** 🟢 Live on Student Portal & Accepting Applications\n\n` +
-                    `The drive is now linked across the entire admin dashboard. You can track applications in **Placement Drives** and view automated pipeline stages in **Automated Placement Drive**.`,
+    const lastMessage = recentMessages.at(-1);
+    const stagedParams = lastMessage?.sender === "bot" && lastMessage.action === "DRIVE_READY"
+        ? lastMessage.driveParams
+        : null;
+
+    if (isExplicitCopilotConfirmation(cleanPrompt) && stagedParams) {
+        const { drive, company, params } = await createDrive({ driveParams: stagedParams, adminUser });
+        const eligibleCount = await getEligibleCount({ ...params, graduationYear: params.graduationYear });
+        return {
+            action: "DRIVE_CREATED",
+            answer: `**Placement drive published successfully.**\n\n` +
+                `• **Company:** ${company.companyName}\n` +
+                `• **Role:** ${params.jobTitle}\n` +
+                `• **Package:** ₹${params.salaryPackage} LPA\n` +
+                `• **Eligibility:** CGPA ≥ ${params.minimumCGPA}; maximum ${params.maximumBacklogs} active backlogs\n` +
+                `• **Programs:** ${params.eligibleBranches.join(", ")}\n` +
+                `• **Application deadline:** ${new Date(params.applicationDeadline).toLocaleDateString()}\n` +
+                `• **Drive date:** ${new Date(params.driveDate).toLocaleDateString()}\n` +
+                (eligibleCount !== null ? `• **Students meeting the configured eligibility checks:** ${eligibleCount}\n` : "") +
+                `• **Status:** Active on the student portal.`,
+            driveId: drive._id,
+            driveTitle: `${company.companyName} — ${params.jobTitle}`,
+            metadata: {
                 driveId: drive._id,
-                driveTitle: `${company.companyName} — ${params.jobTitle}`,
-                metadata: {
-                    driveId: drive._id,
-                    companyName: company.companyName,
-                    jobTitle: params.jobTitle,
-                    package: params.salaryPackage,
-                    minimumCGPA: params.minimumCGPA,
-                    eligibleCount,
-                },
-            };
-        } catch (createErr) {
-            console.error("Direct confirmation drive publishing failed:", createErr);
-            return {
-                action: "DRIVE_READY",
-                answer: `⚠️ Error during drive publishing: ${createErr.message}`,
-                driveParams: stagedParams,
-            };
-        }
+                companyName: company.companyName,
+                jobTitle: params.jobTitle,
+                package: params.salaryPackage,
+                minimumCGPA: params.minimumCGPA,
+                eligibleCount,
+            },
+        };
     }
+
+    if (isExplicitCopilotConfirmation(cleanPrompt)) {
+        return {
+            action: "GEMINI_RESPONSE",
+            answer: "There isn’t a drive awaiting confirmation in this conversation. Please stage and review the drive details first. No changes were made.",
+        };
+    }
+
+    const databaseFacts = systemContext.available
+        ? `LIVE CAMPUSFLOW DATABASE FACTS (current at request time):\n- Registered Students: ${systemContext.totalStudents}\n- TPO-Verified Profiles: ${systemContext.verifiedStudents}\n- Pending Verification Dossiers: ${systemContext.pendingStudents}\n- High Academic Achievers (CGPA >= 8.0): ${systemContext.highCgpaStudents}\n- Candidates with Active Backlogs: ${systemContext.studentsWithBacklogs}\n- Total Placement Applications: ${systemContext.totalApplications}\n- Active Cohort Session: ${systemContext.activeSessionYear ?? "not configured"}\n- Currently Active Live Drives (${systemContext.activeDrives.length}): ${JSON.stringify(systemContext.activeDrives)}\n- Approved Academic Programs: ${systemContext.approvedPrograms.join("; ")}`
+        : "LIVE CAMPUSFLOW DATABASE FACTS: unavailable. Do not estimate, invent, or infer counts, student records, drive details, or session information.";
 
     const systemInstruction = `You are the JSSATEB Senior Placement Officer Copilot & AI Operations Executive.
 You converse naturally, professionally, and dynamically with the Administrator / Training & Placement Officer (TPO).
 You are NOT a simple canned responder. You use real Gemini AI reasoning and live database context.
 
-LIVE JSSATEB DATABASE FACTS:
-- Registered Students: ${systemContext.totalStudents} candidates
-- TPO-Verified Profiles: ${systemContext.verifiedStudents}
-- Pending Verification Dossiers: ${systemContext.pendingStudents}
-- High Academic Achievers (CGPA >= 8.0): ${systemContext.highCgpaStudents}
-- Candidates with Active Backlogs: ${systemContext.studentsWithBacklogs}
-- Total Placement Applications: ${systemContext.totalApplications}
-- Active Cohort Session: Class of ${systemContext.activeSessionYear}
-- Currently Active Live Drives (${systemContext.activeDrives.length}): ${JSON.stringify(systemContext.activeDrives)}
-- Approved Academic Programs: ${systemContext.approvedPrograms.slice(0, 8).join("; ")}
+${databaseFacts}
 
 RULES FOR OPERATION & DIALOGUE:
-1. Answer naturally, warmly, and conversationally. Never use generic repetitive responses. Use real data when asked about students, analytics, drives, or candidates.
+1. Answer naturally, warmly, and conversationally. Never make up live facts. If database facts are unavailable, say so. Do not claim an operation ran; the application confirms all writes separately.
 2. DRIVE HOSTING & JOB DESCRIPTION (JD) WORKFLOW:
    - Required Criteria for a placement drive:
      a) Company Name
@@ -347,7 +423,8 @@ RULES FOR OPERATION & DIALOGUE:
        Also let them know: "You can also paste the Job Description (JD) text directly, and I'll extract all criteria automatically!"
        DO NOT output any \`\`\`json:drive_intent block until all key criteria are gathered!
      * When the TPO provides all criteria OR pastes a Job Description (JD):
-       Thoroughly parse and extract all criteria: Company Name, Role, Package (in LPA), CGPA cutoff, Backlogs, Eligible Branches, and Selection Rounds.
+        Thoroughly parse and extract all criteria: Company Name, Role, Package (in LPA), CGPA cutoff, Backlogs, Eligible Branches, and Selection Rounds for automated drives. Never infer missing criteria.
+       If the TPO explicitly requests an automated drive, set isAutomated to true and include each requested selection round with a unique name.
        Present a clear, professional summary of the extracted criteria.
        Ask the TPO: "All criteria are verified and staged. Would you like me to confirm and publish this live to the portal now?"
        Include the machine-readable JSON block at the very end of your response:
@@ -361,7 +438,7 @@ RULES FOR OPERATION & DIALOGUE:
            "minimumCGPA": 7.5,
            "maximumBacklogs": 0,
            "eligibleBranches": ["CSE", "ISE", "ECE"],
-           "isAutomated": true,
+          "isAutomated": true,
            "rounds": [
              { "roundNumber": 1, "roundName": "Online Coding Assessment", "roundType": "coding" },
              { "roundNumber": 2, "roundName": "Technical Interview", "roundType": "technical" },
@@ -370,22 +447,21 @@ RULES FOR OPERATION & DIALOGUE:
          }
        }
        \`\`\`
-3. If the TPO asks about student directories, analytics, or verifications, answer dynamically using the LIVE JSSATEB DATABASE FACTS.`;
+ 3. If the TPO asks about student directories, analytics, or verifications, answer only from the LIVE JSSATEB DATABASE FACTS. If they are unavailable, say you cannot verify the requested data.`;
 
     let geminiResponse;
     try {
-        geminiResponse = await callGeminiAI({
+        geminiResponse = await generateAnswer({
             systemInstruction,
             prompt: cleanPrompt,
-            messages,
-            temperature: 0.35,
+            messages: recentMessages,
             maxTokens: 1500,
         });
     } catch (geminiErr) {
         console.warn("[AdminCopilot] Gemini AI call failed:", geminiErr.message);
-        geminiResponse = {
-            text: `I received your prompt: "${cleanPrompt}". I am your placement operations copilot. For drives, specify the Company, Role, CTC, and CGPA cutoff. For analytics, ask about student counts, CGPA distributions, or pending verifications.`,
-            model: "fallback",
+        return {
+            action: "AI_UNAVAILABLE",
+            answer: "The AI copilot is temporarily unavailable. No drive or other data changes were made. Please try again shortly.",
         };
     }
 
@@ -398,7 +474,7 @@ RULES FOR OPERATION & DIALOGUE:
     if (jsonMatch && jsonMatch[1]) {
         try {
             const parsed = JSON.parse(jsonMatch[1]);
-            if (parsed.driveParams && parsed.driveParams.companyName && parsed.driveParams.package) {
+            if (parsed.driveParams && typeof parsed.driveParams === "object") {
                 driveParams = parsed.driveParams;
             }
         } catch (pErr) {
@@ -411,12 +487,26 @@ RULES FOR OPERATION & DIALOGUE:
 
     // If drive is ready for admin confirmation
     if (driveParams) {
-        const eligibleCount = await countEligibleStudents(driveParams);
+        const requestsAutomatedDrive = /\b(automated|automation|automatically|selection rounds|rounds workflow)\b/i.test(cleanPrompt);
+        if (requestsAutomatedDrive) driveParams.isAutomated = true;
+        const validation = validateDriveParams(driveParams);
+        if (!validation.valid) {
+            return {
+                action: "GEMINI_RESPONSE",
+                answer: `${cleanDisplayAnswer || "I could not verify all drive details."}\n\nI can’t stage this drive yet. Please confirm: ${validation.errors.join("; ")}. No changes were made.`,
+            };
+        }
+        const schedule = createDefaultSchedule();
+        const stagedParams = { ...validation.params, ...schedule };
+        const eligibleCount = await getEligibleCount({
+            ...stagedParams,
+            graduationYear: systemContext.activeSessionYear,
+        });
         return {
             action: "DRIVE_READY",
-            answer: cleanDisplayAnswer,
+            answer: `${cleanDisplayAnswer || "The drive details are ready for review."}\n\nProposed schedule: applications open ${schedule.applicationStartDate.toISOString()}, deadline ${schedule.applicationDeadline.toISOString()}, drive date ${schedule.driveDate.toISOString()}. Review these dates before confirming.`,
             driveParams: {
-                ...driveParams,
+                ...stagedParams,
                 eligibleCount,
             },
         };

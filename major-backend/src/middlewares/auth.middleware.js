@@ -15,6 +15,9 @@ export const verifyJWT= asyncHandler( async (req, res, next)=>{
         if(!user) {
             throw new ApiError(401, "invalid access token ")
         }
+        if (!user.isActive) {
+            throw new ApiError(401, "Account is inactive.");
+        }
         req.user = user;
         next();
     } catch (error) {

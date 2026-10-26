@@ -4,19 +4,20 @@
  */
 
 const CANDIDATE_MODELS = [
-    "gemini-flash-lite-latest",
     process.env.GEMINI_MODEL,
     "gemini-3.5-flash",
-    "gemini-flash-latest",
+    "gemini-3.5-flash-lite",
+    "gemini-3-flash-preview",
     "gemini-3.8-flash",
-].filter(Boolean);
+    "gemini-3.7-flash",
+    "gemini-3.1-flash-lite",
+].filter((model, index, models) => Boolean(model) && models.indexOf(model) === index);
 
 export const callGeminiAI = async ({
     systemInstruction = "",
     prompt = "",
     messages = [],
     responseMimeType = "text/plain",
-    temperature = 0.3,
     maxTokens = 1500,
     fetchImpl = fetch,
 }) => {
@@ -36,9 +37,9 @@ export const callGeminiAI = async ({
             }
             const role =
                 msg.sender === "admin" ||
-                msg.sender === "user" ||
-                msg.senderRole === "student" ||
-                msg.role === "user"
+                    msg.sender === "user" ||
+                    msg.senderRole === "student" ||
+                    msg.role === "user"
                     ? "user"
                     : "model";
             rawItems.push({ role, text });
@@ -69,7 +70,6 @@ export const callGeminiAI = async ({
     const payload = {
         contents,
         generationConfig: {
-            temperature,
             maxOutputTokens: maxTokens,
         },
     };
@@ -88,13 +88,16 @@ export const callGeminiAI = async ({
 
     // Try models in sequence for maximum reliability against Google 503/404 temporary spikes
     for (const model of CANDIDATE_MODELS) {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
         try {
             const res = await fetchImpl(url, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": apiKey,
+                },
                 body: JSON.stringify(payload),
-                signal: AbortSignal.timeout(12000),
+                signal: AbortSignal.timeout(25000),
             });
 
             if (res.ok) {

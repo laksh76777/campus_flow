@@ -8,6 +8,7 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 import { uploadOnCloudinary, deleteFromCloudinary } from "../utils/cloudinary.js";
+import { getAuthCookieOptions } from "../utils/authCookieOptions.js";
 
 const generateAccessAndRefreshToken = async (userId) => {
     try {
@@ -252,11 +253,7 @@ const registerUser = asyncHandler(async (req, res) => {
         "sessionYear name academicYear isActive"
     );
 
-    const options = {
-        httpOnly: true,
-        secure: true,
-        sameSite: "none"
-    };
+    const options = getAuthCookieOptions();
 
     return res
         .status(201)
@@ -269,8 +266,7 @@ const registerUser = asyncHandler(async (req, res) => {
                     ...(createdUser?.toObject ? createdUser.toObject() : createdUser),
                     user: createdUser,
                     studentProfile: populatedProfile,
-                    accessToken,
-                    refreshToken
+                    accessToken
                 },
                 "Student account registered and placement session assigned successfully"
             )
@@ -327,11 +323,7 @@ const loginUser = asyncHandler(async (req, res) => {
     const loggedInUser = await User.findById(user._id)
         .select("-password -refreshToken");
 
-    const options = {
-        httpOnly: true,
-        secure: true,
-        sameSite: "none"
-    };
+    const options = getAuthCookieOptions();
 
     return res
         .status(200)
@@ -342,8 +334,7 @@ const loginUser = asyncHandler(async (req, res) => {
                 200,
                 {
                     user: loggedInUser,
-                    accessToken,
-                    refreshToken
+                    accessToken
                 },
                 "User logged in successfully"
             )
@@ -362,11 +353,7 @@ const logoutUser = asyncHandler(async(req,res) =>{
             new:true
         }
     )
-    const options = {
-        httpOnly: true,
-        secure: true,
-        sameSite: "none"
-    };
+    const options = getAuthCookieOptions();
     return res
         .status(200)
         .clearCookie("accessToken", options)
@@ -388,14 +375,14 @@ const refreshAccessToken = asyncHandler(async (req,res)=>{
         if(!user) {
             throw new ApiError(401, "invalid refresh token")
         }
+        if (!user.isActive) {
+            throw new ApiError(401, "Account is inactive.");
+        }
         
         if(incomingRefreshToken!==user.refreshToken) {
             throw new ApiError(401," refreshToken token has expired or used" )
         }
-        const options = {
-            httpOnly:true,
-            secure:true
-        }
+        const options = getAuthCookieOptions();
         const {accessToken, refreshToken} = await generateAccessAndRefreshToken(user._id)
         return res.status(200)
         .cookie("accessToken",accessToken, options)
@@ -403,7 +390,7 @@ const refreshAccessToken = asyncHandler(async (req,res)=>{
         .json(
             new ApiResponse(
                 200,
-                {accessToken, refreshToken},
+                {accessToken},
                 "Access token refreshed"
             )
         )

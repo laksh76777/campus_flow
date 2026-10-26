@@ -1,6 +1,6 @@
 import { PlacementDrive } from "../models/placementDrive.model.js";
 
-export const SUPPORT_MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+export const SUPPORT_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash";
 
 export const SUPPORT_SYSTEM_INSTRUCTION = `You are CampusFlow Student Support, the official, intelligent placement mentor and collegiate assistant powered by Google Gemini for JSSATEB.
 You speak naturally, warmly, smartly, and conversationally. You are NOT a rigid script or canned robot.
@@ -289,7 +289,6 @@ Respond as CampusFlow Student Support with a valid JSON object:
                 },
             },
             generation_config: {
-                temperature: 0.2,
                 max_output_tokens: 700,
                 thinking_level: "low",
                 thinking_summaries: "none",

@@ -172,9 +172,7 @@ app.use((err, req, res, next) => {
             method: req.method,
             path: req.path,
             statusCode,
-            errorName: err.name,
-            message: err.message,
-            stack: err.stack
+            errorName: err.name
         });
     }
 
@@ -183,8 +181,10 @@ app.use((err, req, res, next) => {
         success: false,
         message: statusCode === 413
             ? "Uploaded file is too large. Please upload a smaller file."
-            : err.message || (isServerError ? "Internal Server Error" : "An error occurred"),
-        errors: !Array.isArray(err.errors) ? [] : err.errors
+            : isServerError
+            ? "Internal Server Error"
+            : err.message || "An error occurred",
+        errors: isServerError || !Array.isArray(err.errors) ? [] : err.errors
     });
 });
 

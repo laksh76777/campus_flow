@@ -30,13 +30,19 @@ export default function ProtectedRoute({ children, requiredRole }) {
   const currentRole = userRole || localStorage.getItem("userRole");
 
   // Role mismatch protection
-  if (requiredRole && currentRole && currentRole !== requiredRole) {
+  if (requiredRole && currentRole !== requiredRole) {
     if (currentRole === "admin") {
       return <Navigate to="/admin-dashboard" replace />;
     }
     if (currentRole === "student") {
       return <Navigate to="/student-dashboard" replace />;
     }
+    return (
+      <Navigate
+        to={`/login?redirect=${encodeURIComponent(location.pathname)}&role=${requiredRole}`}
+        replace
+      />
+    );
   }
 
   return children;
