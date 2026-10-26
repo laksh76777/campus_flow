@@ -369,7 +369,7 @@ export const DEFAULT_STUDENT_REQUIREMENTS = [
     { fieldKey: "tenthPassingYear", label: "Class 10 Passing Year", category: "academic", requiredToApply: false, visibleToTpo: true, shareWithCompany: true },
     { fieldKey: "twelfthOrDiploma", label: "Class 12 / Diploma Percentage", category: "academic", requiredToApply: true, visibleToTpo: true, shareWithCompany: true },
     { fieldKey: "educationGaps", label: "Education Gap Declaration", category: "academic", requiredToApply: false, visibleToTpo: true, shareWithCompany: false },
-    { fieldKey: "resume", label: "Master Resume Document", category: "documents", requiredToApply: true, visibleToTpo: true, shareWithCompany: true, documentRequired: true },
+    { fieldKey: "resume", label: "Resume (profile or uploaded with the application)", category: "documents", requiredToApply: true, visibleToTpo: true, shareWithCompany: true, documentRequired: true },
     { fieldKey: "tenthMarksheet", label: "Class 10 Marksheet", category: "documents", requiredToApply: false, visibleToTpo: true, shareWithCompany: false, documentRequired: true },
     { fieldKey: "twelfthMarksheet", label: "Class 12 / Diploma Marksheet", category: "documents", requiredToApply: false, visibleToTpo: true, shareWithCompany: false, documentRequired: true },
     { fieldKey: "currentAddress", label: "Current Address", category: "family_address", requiredToApply: false, visibleToTpo: true, shareWithCompany: false },

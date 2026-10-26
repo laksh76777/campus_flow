@@ -55,7 +55,9 @@ export class EligibilityService {
         const studentHistBacklogs = student.historicalBacklogs != null ? Number(student.historicalBacklogs) : (student.backlogDetails ? student.backlogDetails.length : 0);
         const studentTenth = student.tenthDetails?.percentage != null ? Number(student.tenthDetails.percentage) : (student.tenthPercentage != null ? Number(student.tenthPercentage) : null);
         const studentTwelfth = student.twelfthOrDiplomaDetails?.percentage != null ? Number(student.twelfthOrDiplomaDetails.percentage) : (student.twelfthPercentage != null ? Number(student.twelfthPercentage) : null);
-        const studentResumeUrl = student.resume?.url || student.resumeUrl;
+        // Note: the profile resume is NOT an eligibility criterion. Students choose or
+        // upload the resume for each application at apply time (application readiness),
+        // so a missing profile resume must never make an eligible student ineligible.
 
         // 2. Strict Missing Data Detection (Cannot evaluate if essential criteria are unrecorded)
         if (studentCGPA === null || isNaN(studentCGPA)) missingFields.push("CGPA");
@@ -77,11 +79,6 @@ export class EligibilityService {
             }
         }
 
-        // Resume requirement
-        if (!studentResumeUrl) {
-            missingFields.push("Master Resume Document");
-        }
-
         if (missingFields.length > 0) {
             return {
                 status: EligibilityStatus.MISSING_DATA,
@@ -91,8 +88,8 @@ export class EligibilityService {
                 missingFields,
                 criteriaBreakdown: [
                     {
-                        criterion: "Profile Completeness & Documents",
-                        required: "All required academic metrics and verified resume",
+                        criterion: "Profile Completeness",
+                        required: "All required academic metrics",
                         actual: `Missing: ${missingFields.join(", ")}`,
                         passed: false
                     }
@@ -323,7 +320,7 @@ export class EligibilityService {
             status: isEligible ? EligibilityStatus.ELIGIBLE : EligibilityStatus.INELIGIBLE,
             isEligible,
             summary: isEligible
-                ? "Eligible: Meets all academic, cohort, and document requirements"
+                ? "Eligible: Meets all academic and cohort requirements"
                 : "Ineligible for this placement drive",
             reasons: failureReasons,
             missingFields: [],

@@ -1143,7 +1143,7 @@ export default function AutomatedPlacementDrives({
                               const branch = snapshot.branch || student?.branch || student?.department || "N/A";
                               const cgpa = snapshot.cgpa !== undefined ? snapshot.cgpa : student?.cgpa;
                               const resumeUrl = getResumeViewUrl(
-                                app.resumeUrl || snapshot.resumeUrl || student?.resumeUrl
+                                snapshot.resume?.url || app.resumeUrl || snapshot.resumeUrl || student?.resume?.url || student?.resumeUrl
                               );
 
                               const isPlaced = ["selected", "offer_received", "offer_accepted"].includes(app.status);

@@ -34,6 +34,7 @@ export default function ApplyModal({
   const [submitting, setSubmitting] = useState(false);
   const [eligibilityData, setEligibilityData] = useState(null);
   const [evaluating, setEvaluating] = useState(true);
+  const [eligibilityRetry, setEligibilityRetry] = useState(0);
   const hasProfileResume = !!studentProfile?.resume?.url;
   const [resumeMode, setResumeMode] = useState(hasProfileResume ? "profile" : "custom");
   const [customResumeFile, setCustomResumeFile] = useState(null);
@@ -59,6 +60,7 @@ export default function ApplyModal({
     let isMounted = true;
     if (isOpen && drive?._id) {
       setEvaluating(true);
+      setEligibilityData(null);
       checkDriveEligibility(drive._id)
         .then((res) => {
           if (isMounted && res?.data) {
@@ -75,22 +77,18 @@ export default function ApplyModal({
     return () => {
       isMounted = false;
     };
-  }, [isOpen, drive?._id]);
+  }, [isOpen, drive?._id, eligibilityRetry]);
 
   useOverlay(isOpen, onClose);
 
   if (!isOpen || !drive) return null;
 
   const companyName = drive.company?.companyName || drive.companyName || "Partner Company";
-  const studentCgpa = studentProfile?.cgpa ?? 8.5;
-  const isCgpaEligible = studentCgpa >= (drive.minimumCGPA ?? 0);
-  const studentBacklogs = studentProfile?.backlogs ?? 0;
-  const isBacklogEligible = studentBacklogs <= (drive.maximumBacklogs ?? 0);
-  const hasResume = !!studentProfile?.resume?.url;
 
-  // Determine overall eligibility from engine or fallback
-  const isEligible = eligibilityData ? eligibilityData.isEligible : (isCgpaEligible && isBacklogEligible);
-  const isMissingData = eligibilityData?.status === "MISSING_DATA";
+  // Eligibility comes only from the server's eligibility engine (the backend re-checks
+  // it on submit). If the check could not be loaded we do not guess.
+  const eligibilityUnavailable = !evaluating && !eligibilityData;
+  const isEligible = Boolean(eligibilityData?.isEligible);
 
   const now = new Date();
   const startDate = drive.applicationStartDate ? new Date(drive.applicationStartDate) : null;
@@ -347,41 +345,19 @@ export default function ApplyModal({
                 </div>
               ))}
             </div>
-          ) : (
-            <div className="space-y-2 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-600">Minimum CGPA Required:</span>
-                <span
-                  className={`flex items-center gap-1 font-semibold ${
-                    isCgpaEligible ? "text-emerald-700" : "text-rose-600"
-                  }`}
-                >
-                  {isCgpaEligible ? (
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                  ) : (
-                    <XCircle className="h-4 w-4 text-rose-500" />
-                  )}
-                  {drive.minimumCGPA} (Your CGPA: {studentCgpa})
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span className="text-slate-600">Backlogs Criteria:</span>
-                <span
-                  className={`flex items-center gap-1 font-semibold ${
-                    isBacklogEligible ? "text-emerald-700" : "text-rose-600"
-                  }`}
-                >
-                  {isBacklogEligible ? (
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                  ) : (
-                    <XCircle className="h-4 w-4 text-rose-500" />
-                  )}
-                  Max {drive.maximumBacklogs} (You have: {studentBacklogs})
-                </span>
-              </div>
+          ) : eligibilityUnavailable ? (
+            <div className="flex flex-col items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900" role="alert">
+              <span className="font-semibold">Your eligibility could not be verified right now.</span>
+              <span className="text-amber-800">Please check your connection and try again. Applications are only accepted after the portal confirms eligibility.</span>
+              <button
+                type="button"
+                onClick={() => setEligibilityRetry((n) => n + 1)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-2.5 py-1 font-bold text-amber-900 transition hover:bg-amber-100"
+              >
+                <RotateCcw className="h-3 w-3" /> Retry check
+              </button>
             </div>
-          )}
+          ) : null}
 
           {/* Engine Reason Callout if Ineligible */}
           {eligibilityData && !eligibilityData.isEligible && (
@@ -422,8 +398,9 @@ export default function ApplyModal({
           )}
         </div>
 
-        {/* Resume Selection Card */}
-        <div className="mt-4 rounded-2xl bg-white p-4 border border-slate-200/90 shadow-2xs space-y-3">
+        {/* Resume Selection Card — shown once eligibility has passed (application readiness step) */}
+        {isEligible && (
+        <div className="mt-4 rounded-2xl bg-white p-4 border border-slate-200/90 shadow-2xs space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-200">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <FileText className="h-4 w-4 text-blue-600" />
@@ -519,11 +496,12 @@ export default function ApplyModal({
                 <p className="text-rose-600 text-xs mt-1.5 font-medium">{customResumeError}</p>
               )}
               <p className="text-[11px] text-slate-500 mt-1.5">
-                ℹ️ This updated resume will be saved with your application and directly visible to TPO & recruiters.
+                ℹ️ This file is attached to this application only and is visible to the TPO for this drive. Your profile resume is not changed.
               </p>
             </div>
           )}
         </div>
+        )}
 
         {/* Custom Drive Questions Section */}
         {customQuestions.length > 0 && (

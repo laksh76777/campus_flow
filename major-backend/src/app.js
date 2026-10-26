@@ -82,11 +82,11 @@ import { securityHeaders, generalApiLimiter } from "./middlewares/security.middl
 app.set("trust proxy", 1);
 app.use(cors(corsOptions));
 app.use(securityHeaders);
-app.use(express.json({ limit: "16kb" }));
+app.use(express.json({ limit: "256kb" }));
 app.use(
     express.urlencoded({
         extended: true,
-        limit: "16kb"
+        limit: "256kb"
     })
 );
 app.use(express.static("public"));
@@ -160,6 +160,18 @@ app.use((err, req, res, next) => {
         return next(err);
     }
 
+    // Translate well-known client errors instead of reporting them as server failures
+    if (err.name === "CastError") {
+        err = new ApiError(400, `Invalid value for ${err.path || "a parameter"}`);
+    } else if (err.name === "ValidationError" && err.errors) {
+        const messages = Object.values(err.errors).map((e) => e.message).filter(Boolean);
+        err = new ApiError(400, messages.join("; ") || "Validation failed", messages);
+    } else if (err.code === 11000) {
+        err = new ApiError(409, "A record with these details already exists");
+    } else if (err.type === "entity.too.large") {
+        err = new ApiError(413, "The request is too large. Please shorten the submitted text.");
+    }
+
     const statusCode =
         err.name === "MulterError" && err.code === "LIMIT_FILE_SIZE"
             ? 413
@@ -167,6 +179,9 @@ app.use((err, req, res, next) => {
             ? err.statusCode
             : 500;
     const isServerError = statusCode >= 500;
+    // Intentional ApiErrors carry a user-facing message even for 5xx (e.g. an upstream
+    // upload failure); only unexpected errors are masked.
+    const exposeMessage = !isServerError || err instanceof ApiError;
     if (isServerError) {
         console.error("Unhandled API error", {
             method: req.method,
@@ -179,9 +194,9 @@ app.use((err, req, res, next) => {
     return res.status(statusCode).json({
         statusCode,
         success: false,
-        message: statusCode === 413
+        message: statusCode === 413 && err.name === "MulterError"
             ? "Uploaded file is too large. Please upload a smaller file."
-            : isServerError
+            : !exposeMessage
             ? "Internal Server Error"
             : err.message || "An error occurred",
         errors: isServerError || !Array.isArray(err.errors) ? [] : err.errors

@@ -312,7 +312,7 @@ const getAllPlacementDrives = asyncHandler(async (req, res) => {
             "company",
             "companyName companyDescription companyWebsite companyLogo industry location"
         )
-        .populate("placementSession", "sessionName academicYear graduatingYear isActive")
+        .populate("placementSession", "name sessionYear academicYear isActive")
         .sort({
             applicationDeadline: 1
         });
@@ -378,9 +378,10 @@ const updatePlacementDrive = asyncHandler(async (req, res) => {
             "Placement drive ID is required"
         );
     }
+    // Closed drives can be edited (and reopened); deleted drives cannot.
     const placementDrive = await PlacementDrive.findOne({
         _id: driveId,
-        isActive: true
+        isDeleted: { $ne: true }
     });
     if (!placementDrive) {
         throw new ApiError(
@@ -388,10 +389,27 @@ const updatePlacementDrive = asyncHandler(async (req, res) => {
             "Placement drive not found"
         );
     }
+    if (placementDrive.isPlacementCompleted) {
+        throw new ApiError(
+            409,
+            "This drive has completed its selection process and can no longer be edited."
+        );
+    }
     const {
         company,jobTitle,jobDescription, jobType,package: salaryPackage,location, eligibleBranches, eligibleProgramCodes, minimumCGPA, maximumBacklogs, graduationYear, applicationStartDate, applicationDeadline,driveDate, venue,applicationLink,
         placementSession, minimumTenthPercentage, minimumTwelfthPercentage, maximumHistoricalBacklogs
     } = req.body;
+    const parseJsonField = (value) => {
+        if (typeof value !== "string") return value;
+        try { return JSON.parse(value); } catch { return value; }
+    };
+    const assertNumber = (value, label) => {
+        const num = Number(value);
+        if (value === "" || value === null || !Number.isFinite(num)) {
+            throw new ApiError(400, `${label} must be a valid number`);
+        }
+        return num;
+    };
     if (company !== undefined) {
         const existingCompany = await Company.findOne({
             _id: company,
@@ -406,22 +424,30 @@ const updatePlacementDrive = asyncHandler(async (req, res) => {
         placementDrive.company = company;
     }
     if (jobTitle !== undefined) {
-        placementDrive.jobTitle = jobTitle.trim();
+        if (!String(jobTitle).trim()) {
+            throw new ApiError(400, "Job title cannot be empty");
+        }
+        placementDrive.jobTitle = String(jobTitle).trim();
     }
     if (jobDescription !== undefined) {
         placementDrive.jobDescription = jobDescription;
     }
     if (jobType !== undefined) {
-        placementDrive.jobType = jobType.toLowerCase().trim();
+        const normalizedJobType = String(jobType).toLowerCase().trim();
+        if (!["full-time", "internship", "internship-to-full-time"].includes(normalizedJobType)) {
+            throw new ApiError(400, "Invalid job type");
+        }
+        placementDrive.jobType = normalizedJobType;
     }
     if (salaryPackage !== undefined) {
-        if (salaryPackage < 0) {
+        const pkg = assertNumber(salaryPackage, "Package");
+        if (pkg < 0) {
             throw new ApiError(
                 400,
                 "Package cannot be negative"
             );
         }
-        placementDrive.package = salaryPackage;
+        placementDrive.package = pkg;
     }
     if (location !== undefined) {
         placementDrive.location = location;
@@ -432,33 +458,48 @@ const updatePlacementDrive = asyncHandler(async (req, res) => {
         placementDrive.eligibleBranches = programTargeting.eligibleBranches;
     }
     if (minimumCGPA !== undefined) {
+        const cgpa = assertNumber(minimumCGPA, "Minimum CGPA");
         if (
-            minimumCGPA < 0 ||
-            minimumCGPA > 10
+            cgpa < 0 ||
+            cgpa > 10
         ) {
             throw new ApiError(
                 400,
                 "Minimum CGPA must be between 0 and 10"
             );
         }
-        placementDrive.minimumCGPA = minimumCGPA;
+        placementDrive.minimumCGPA = cgpa;
     }
     if (maximumBacklogs !== undefined) {
-
-        if (maximumBacklogs < 0) {
+        const backlogs = assertNumber(maximumBacklogs, "Maximum backlogs");
+        if (backlogs < 0) {
             throw new ApiError(
                 400,
                 "Maximum backlogs cannot be negative"
             );
         }
-        placementDrive.maximumBacklogs = maximumBacklogs;
+        placementDrive.maximumBacklogs = backlogs;
     }
-    if (graduationYear !== undefined || placementSession !== undefined) {
-        const nextGraduationYear = Number(graduationYear ?? placementDrive.graduationYear);
-        const nextSessionId = placementSession ?? placementDrive.placementSession;
+    const nextGraduationYear = Number(graduationYear ?? placementDrive.graduationYear);
+    const nextSessionId = String(placementSession ?? placementDrive.placementSession ?? "");
+    const cohortChanged =
+        (graduationYear !== undefined && nextGraduationYear !== Number(placementDrive.graduationYear)) ||
+        (placementSession !== undefined && nextSessionId !== String(placementDrive.placementSession || ""));
+    if (cohortChanged) {
+        // Moving a drive to another cohort would strand applications from the current one
+        const activeApplications = await Application.countDocuments({
+            placementDrive: placementDrive._id,
+            status: { $ne: "withdrawn" }
+        });
+        if (activeApplications > 0) {
+            throw new ApiError(
+                409,
+                `This drive already has ${activeApplications} application(s), so its graduation year and placement session can no longer be changed.`
+            );
+        }
         const session = nextSessionId ? await PlacementSession.findById(nextSessionId) : null;
-        if (!session || session.sessionYear !== nextGraduationYear) {
-            throw new ApiError(400, "Placement session must match the drive's graduation year");
+        if (!session || session.sessionYear !== nextGraduationYear || session.isClosed || session.isArchived) {
+            throw new ApiError(400, "Select an open placement session matching the drive's graduation year");
         }
         placementDrive.graduationYear = nextGraduationYear;
         placementDrive.placementSession = session._id;
@@ -550,20 +591,28 @@ const updatePlacementDrive = asyncHandler(async (req, res) => {
             "Drive date must be after application deadline"
         );
     }
-    if (req.body.studentRequirements !== undefined && Array.isArray(req.body.studentRequirements)) {
-        placementDrive.studentRequirements = req.body.studentRequirements;
+    const studentRequirements = parseJsonField(req.body.studentRequirements);
+    if (studentRequirements !== undefined && Array.isArray(studentRequirements)) {
+        placementDrive.studentRequirements = studentRequirements;
         placementDrive.requirementsVersion = (placementDrive.requirementsVersion || 1) + 1;
     }
-    if (req.body.reminderSettings !== undefined) {
+    const reminderSettings = parseJsonField(req.body.reminderSettings);
+    if (reminderSettings && typeof reminderSettings === "object") {
+        const offsets = Array.isArray(reminderSettings.reminderOffsetsHours)
+            ? reminderSettings.reminderOffsetsHours.map(Number).filter((n) => Number.isFinite(n) && n > 0)
+            : [];
+        const channels = Array.isArray(reminderSettings.channels)
+            ? reminderSettings.channels.filter((c) => ["in_app", "email"].includes(c))
+            : [];
         placementDrive.reminderSettings = {
-            remindersEnabled: req.body.reminderSettings.remindersEnabled !== undefined
-                ? Boolean(req.body.reminderSettings.remindersEnabled)
+            remindersEnabled: reminderSettings.remindersEnabled !== undefined
+                ? String(reminderSettings.remindersEnabled) === "true" || reminderSettings.remindersEnabled === true
                 : placementDrive.reminderSettings?.remindersEnabled ?? true,
-            reminderOffsetsHours: Array.isArray(req.body.reminderSettings.reminderOffsetsHours) && req.body.reminderSettings.reminderOffsetsHours.length > 0
-                ? req.body.reminderSettings.reminderOffsetsHours.map(Number).filter((n) => !isNaN(n) && n > 0)
+            reminderOffsetsHours: offsets.length > 0
+                ? [...new Set(offsets)]
                 : placementDrive.reminderSettings?.reminderOffsetsHours || [6],
-            channels: Array.isArray(req.body.reminderSettings.channels) && req.body.reminderSettings.channels.length > 0
-                ? req.body.reminderSettings.channels
+            channels: channels.length > 0
+                ? channels
                 : placementDrive.reminderSettings?.channels || ["in_app", "email"]
         };
     }
@@ -586,13 +635,18 @@ const updatePlacementDrive = asyncHandler(async (req, res) => {
 
     await placementDrive.save();
 
-    // Sync reminders on deadline/settings update
+    // Invalidate/reschedule reminders for the saved deadline, offsets and status
     await syncDriveReminders(placementDrive._id);
+
+    // Return the saved drive with the same populated shape the drive list uses
+    const savedDrive = await PlacementDrive.findById(placementDrive._id)
+        .populate("company", "companyName companyDescription companyWebsite companyLogo industry location")
+        .populate("placementSession", "name sessionYear academicYear isActive");
 
     return res.status(200).json(
         new ApiResponse(
             200,
-            placementDrive,
+            savedDrive,
             "Placement drive updated successfully"
         )
     );
@@ -735,6 +789,9 @@ const deletePlacementDrive = asyncHandler(async (req, res) => {
     placementDrive.deletedAt = new Date();
     await placementDrive.save();
 
+    // A deleted drive must never trigger the reminders scheduled for it
+    await syncDriveReminders(placementDrive._id);
+
     return res.status(200).json(
         new ApiResponse(
             200,
@@ -760,16 +817,15 @@ const getEligibleStudents = asyncHandler(async (req, res) => {
             "Placement drive not found"
         );
     }
-    const eligibleStudents = await StudentProfile.find({
-        cgpa: {
-            $gte: placementDrive.minimumCGPA
-        },
-        backlogs: {
-            $lte: placementDrive.maximumBacklogs
-        },
+    // Use the same eligibility engine as applications (verified CGPA, check toggles,
+    // 10th/12th cutoffs, historical backlogs) so this list never disagrees with it.
+    const cohortStudents = await StudentProfile.find({
         graduationYear: placementDrive.graduationYear
     });
-    const matchedStudents = eligibleStudents.filter((student) => studentMatchesDriveProgram(student, placementDrive));
+    const matchedStudents = cohortStudents.filter((student) =>
+        studentMatchesDriveProgram(student, placementDrive) &&
+        EligibilityService.evaluate(student, placementDrive).isEligible
+    );
     const populatedStudents = await StudentProfile.populate(matchedStudents, {
         path: "user",
         select: "fullName email phone avatar"

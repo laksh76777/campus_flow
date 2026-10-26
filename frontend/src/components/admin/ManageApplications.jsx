@@ -549,13 +549,16 @@ export default function ManageApplications({
   const renderApplicantCard = (app) => {
     const student = app.student || {};
     const user = student.user || {};
-    const studentName = user.fullName || student.fullName || "Candidate";
-    const studentEmail = user.email || student.email || "student@campus.edu";
-    const enrollmentNo = student.enrollmentNumber || "Not assigned";
-    const branch = student.branch || student.department || "Program not provided";
-    const cgpa = student.cgpa ?? "8.2";
-    const backlogs = student.backlogs ?? student.activeBacklogs ?? 0;
-    const rawResumeUrl = student.resume?.url || student.resumeUrl;
+    // Prefer the snapshot sealed at submission time; never invent missing values
+    const snap = app.submittedSnapshot || {};
+    const studentName = snap.fullName || user.fullName || student.fullName || "Candidate";
+    const studentEmail = snap.email || user.email || student.email || "Email not recorded";
+    const enrollmentNo = snap.usn || student.enrollmentNumber || "Not assigned";
+    const branch = snap.branch || student.branch || student.department || "Program not provided";
+    const cgpa = snap.cgpa ?? student.verifiedCGPA ?? student.cgpa ?? "—";
+    const backlogs = snap.activeBacklogs ?? student.activeBacklogs ?? student.backlogs ?? "—";
+    // The resume submitted with THIS application, not the student's current profile resume
+    const rawResumeUrl = snap.resume?.url || student.resume?.url || student.resumeUrl;
     const resumeUrl = getResumeViewUrl(rawResumeUrl);
 
     const drive = app.placementDrive || {};

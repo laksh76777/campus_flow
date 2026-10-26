@@ -3,9 +3,10 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { SupportConversation } from "../models/supportConversation.model.js";
-import { StudentProfile } from "../models/studentProfile.model.js";
 import { getLiveDriveFacts, generateSupportAnswer, answerFromLocalKnowledge } from "../services/supportAssistant.service.js";
 import { processAdminCopilotPrompt } from "../services/adminCopilot.service.js";
+import { buildStudentAssistantContext } from "../services/aiContext.service.js";
+import { describeAIFailure } from "../services/groqClient.service.js";
 
 const MAX_MESSAGE_LENGTH = 4000;
 const MAX_MESSAGES_PER_CONVERSATION = 200;
@@ -51,38 +52,45 @@ const addAssistantReply = async (conversation, studentUser = null) => {
         .filter((m) => m.senderRole === "student")
         .slice(-1)[0]?.content || "";
 
-    let studentProfile = null;
+    // Only the conversation owner's own records are retrieved (never another student's)
     const studentId = studentUser?._id || conversation.student?._id || conversation.student;
+    let context = { text: "", profile: null };
+    let contextFailed = false;
     if (studentId) {
         try {
-            studentProfile = await StudentProfile.findOne({ user: studentId })
-                .select("cgpa activeBacklogs program graduationYear fullName academicVerificationStatus")
-                .maxTimeMS(2000)
-                .lean();
-        } catch {}
+            context = await buildStudentAssistantContext(studentId, lastStudentMsg);
+        } catch (contextErr) {
+            contextFailed = true;
+            console.warn("[SupportAssistant] Could not load student context:", contextErr.message);
+        }
     }
 
-    let geminiFailed = false;
-
+    let aiFailed = false;
     try {
-        const liveDrives = await getLiveDriveFacts();
+        const contextText = contextFailed
+            ? "STUDENT DATA: could not be loaded right now. Do not state any personal academic, eligibility or application facts; tell the student their records could not be retrieved."
+            : context.text;
         response = await generateSupportAnswer({
             messages: conversation.messages,
-            liveDrives,
-            studentProfile,
+            contextText,
         });
     } catch (error) {
-        console.warn("CampusFlow Gemini assistant error, falling back:", error.status || error.name || error.message);
-        geminiFailed = true;
+        console.warn("[SupportAssistant] Groq AI unavailable, using labelled offline guidance:", error.code || error.name || error.message);
+        aiFailed = true;
         const liveDrives = await getLiveDriveFacts().catch(() => []);
-        response = answerFromLocalKnowledge(lastStudentMsg, liveDrives, studentProfile);
+        const fallback = answerFromLocalKnowledge(lastStudentMsg, liveDrives, context.profile);
+        // Be explicit that this is not an AI answer
+        response = {
+            ...fallback,
+            answer: `> ${describeAIFailure(error)} Here is standard portal guidance instead.\n\n${fallback.answer}`,
+        };
     }
 
     // Connect to human TPO only if:
     // 1. Student explicitly requests human escalation, OR
-    // 2. Gemini completely failed and local engine flagged handoff
+    // 2. The AI failed and the offline guidance flagged a handoff
     const explicitlyRequestsHuman = /\b(tpo|officer|talk to (a )?human|speak to (a )?(human|person|officer)|human assistance|contact tpo|connect (me )?to tpo)\b/i.test(lastStudentMsg);
-    const needsAdmin = explicitlyRequestsHuman || (geminiFailed && response.handoffRecommended);
+    const needsAdmin = explicitlyRequestsHuman || (aiFailed && response.handoffRecommended === true);
 
     conversation.messages.push({
         senderRole: "assistant",

@@ -5,15 +5,22 @@ services:
     rootDir: major-backend
     plan: free
     region: oregon
-    buildCommand: npm install
+    # Production install only: skips dev tooling (tests use an in-memory MongoDB
+    # that must never be downloaded on the server).
+    buildCommand: npm ci --omit=dev
     startCommand: npm start
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NODE_VERSION
+        value: "22"
       - key: MONGODB_URI
         sync: false
+      # Exact HTTPS origin(s) of the deployed frontend, comma-separated
       - key: CORS_ORIGIN
+        sync: false
+      - key: FRONTEND_URL
         sync: false
       - key: ACCESS_TOKEN_SECRET
         generateValue: true
@@ -25,7 +32,32 @@ services:
         value: 10d
       - key: ADMIN_SECRET_KEY
         sync: false
-      - key: GEMINI_API_KEY
+      # Groq AI (student assistant + TPO copilot)
+      - key: GROQ_API_KEY
         sync: false
-      - key: GEMINI_MODEL
-        value: gemini-3.8-flash
+      - key: GROQ_MODEL
+        sync: false
+      # Times in emails and reminders are shown in this timezone
+      - key: APP_TIMEZONE
+        value: Asia/Kolkata
+      # File storage for resumes and job descriptions
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      # Email delivery for reminders and notifications. Render's free plan blocks
+      # outbound SMTP, so use Resend (HTTPS) there; SMTP works on paid plans.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_USER
+        sync: false
+      - key: EMAIL_PASS
+        sync: false
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: EMAIL_FROM
+        sync: false

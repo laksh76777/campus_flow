@@ -34,6 +34,7 @@ export const getMyApplications = async () => {
 export const applyForDrive = async (driveId, resumeFile = null, customAnswers = []) => {
   if (resumeFile) {
     const formData = new FormData();
+    formData.append("resumeMode", "custom");
     formData.append("resume", resumeFile);
     if (customAnswers && customAnswers.length > 0) {
       formData.append("customAnswers", JSON.stringify(customAnswers));
@@ -45,7 +46,8 @@ export const applyForDrive = async (driveId, resumeFile = null, customAnswers = 
     });
     return response.data;
   }
-  const payload = customAnswers && customAnswers.length > 0 ? { customAnswers } : {};
+  // No file: the student chose to submit their profile resume with this application
+  const payload = { resumeMode: "profile", ...(customAnswers && customAnswers.length > 0 ? { customAnswers } : {}) };
   const response = await api.post(`/application/${driveId}/apply`, payload);
   return response.data;
 };

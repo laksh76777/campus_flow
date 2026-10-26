@@ -6,7 +6,10 @@ import { PlacementSession } from "../models/placementSession.model.js";
 import { PROGRAM_CATALOG, resolveProgram } from "../constants/programCatalog.js";
 import { EligibilityService } from "./eligibility.service.js";
 import { updateDriveRoundsConfig } from "./automatedDrive.service.js";
-import { callGroqAI } from "./groqClient.service.js";
+import { callGroqAI, describeAIFailure } from "./groqClient.service.js";
+import { buildTpoQueryContext, extractStudentIdentifiers } from "./aiContext.service.js";
+import { formatDateTime } from "../utils/dateFormat.js";
+import { syncDriveReminders } from "./reminderScheduler.service.js";
 
 /**
  * Resolves program codes and branch names from raw text
@@ -205,6 +208,9 @@ export const executeDriveCreation = async ({ driveParams, adminUser }) => {
         }
     }
 
+    // Copilot-published drives get the same deadline reminders as form-created drives
+    await syncDriveReminders(drive._id);
+
     return {
         drive,
         company: companyDoc,
@@ -241,6 +247,11 @@ const queryAdminSystemContext = async () => {
         .maxTimeMS(3000)
         .lean();
     const totalApplications = await Application.countDocuments().maxTimeMS(3000);
+    const placedStudents = await StudentProfile.countDocuments({ isPlaced: true }).maxTimeMS(3000);
+    const applicationStatusCounts = await Application.aggregate([
+        { $match: { isArchived: { $ne: true } } },
+        { $group: { _id: "$status", n: { $sum: 1 } } },
+    ]).option({ maxTimeMS: 3000 });
     const currentSession = await PlacementSession.findOne({ isActive: true, isClosed: { $ne: true }, isArchived: { $ne: true } })
         .maxTimeMS(3000)
         .lean();
@@ -251,6 +262,8 @@ const queryAdminSystemContext = async () => {
         pendingStudents,
         highCgpaStudents,
         studentsWithBacklogs,
+        placedStudents,
+        applicationsByStatus: Object.fromEntries(applicationStatusCounts.map((c) => [c._id, c.n])),
         totalApplications,
         activeSessionYear: currentSession?.sessionYear ?? null,
         activeDrives: activeDrives.map((d) => ({
@@ -271,6 +284,8 @@ const unavailableAdminSystemContext = () => ({
     pendingStudents: null,
     highCgpaStudents: null,
     studentsWithBacklogs: null,
+    placedStudents: null,
+    applicationsByStatus: null,
     totalApplications: null,
     activeSessionYear: null,
     activeDrives: [],
@@ -315,7 +330,14 @@ export const countEligibleStudents = async ({ minimumCGPA, maximumBacklogs, elig
     }
 };
 
-const isLiveDataQuestion = (prompt) => /\b(how many|count|statistics|analytics|list (?:the )?(?:students|drives|applications)|show (?:me )?(?:the )?(?:students|drives|applications|verifications)|pending verification|verified students|active drives|eligible students|candidate pool|student directory|cgpa above|cgpa distribution)\b/i.test(prompt);
+const isLiveDataQuestion = (prompt) =>
+    /\b(how many|count|statistics|analytics|list (?:the )?(?:students|drives|applications)|show (?:me )?(?:the )?(?:students|drives|applications|verifications)|pending verification|verified students|active drives|eligible students|candidate pool|student directory|cgpa above|cgpa distribution)\b/i.test(prompt) ||
+    hasStudentIdentifier(prompt);
+
+const hasStudentIdentifier = (prompt) => {
+    const ids = extractStudentIdentifiers(prompt);
+    return ids.usns.length > 0 || ids.emails.length > 0 || ids.names.length > 0;
+};
 
 export const isExplicitCopilotConfirmation = (prompt) => /^(?:yes|confirm|publish|proceed|go ahead|do it|create it)(?:[,.!\s]|$)/i.test(prompt.trim());
 
@@ -338,6 +360,7 @@ export const processAdminCopilotPrompt = async ({
     adminUser,
     messages = [],
     loadContext = getAdminSystemContext,
+    loadQueryContext = buildTpoQueryContext,
     generateAnswer = callGroqAI,
     createDrive = executeDriveCreation,
     getEligibleCount = countEligibleStudents,
@@ -373,8 +396,8 @@ export const processAdminCopilotPrompt = async ({
                 `• **Package:** ₹${params.salaryPackage} LPA\n` +
                 `• **Eligibility:** CGPA ≥ ${params.minimumCGPA}; maximum ${params.maximumBacklogs} active backlogs\n` +
                 `• **Programs:** ${params.eligibleBranches.join(", ")}\n` +
-                `• **Application deadline:** ${new Date(params.applicationDeadline).toLocaleDateString()}\n` +
-                `• **Drive date:** ${new Date(params.driveDate).toLocaleDateString()}\n` +
+                `• **Application deadline:** ${formatDateTime(params.applicationDeadline)}\n` +
+                `• **Drive date:** ${formatDateTime(params.driveDate)}\n` +
                 (eligibleCount !== null ? `• **Students meeting the configured eligibility checks:** ${eligibleCount}\n` : "") +
                 `• **Status:** Active on the student portal.`,
             driveId: drive._id,
@@ -397,8 +420,26 @@ export const processAdminCopilotPrompt = async ({
         };
     }
 
+    // Records for the specific students/drives this question is about (TPO-authorized, bounded fields)
+    let queryContext = { text: "" };
+    if (systemContext.available) {
+        const priorAdminPrompts = recentMessages.filter((m) => m.sender === "admin").map((m) => m.content);
+        try {
+            queryContext = await loadQueryContext(cleanPrompt, priorAdminPrompts);
+        } catch (ctxErr) {
+            console.warn("[AdminCopilot] Record lookup failed:", ctxErr.message);
+            if (hasStudentIdentifier(cleanPrompt)) {
+                return {
+                    action: "DATA_UNAVAILABLE",
+                    answer: "I couldn’t look up that student’s records right now, so I can’t answer without guessing. No data changes were made. Please try again.",
+                };
+            }
+        }
+    }
+
     const databaseFacts = systemContext.available
-        ? `LIVE CAMPUSFLOW DATABASE FACTS (current at request time):\n- Registered Students: ${systemContext.totalStudents}\n- TPO-Verified Profiles: ${systemContext.verifiedStudents}\n- Pending Verification Dossiers: ${systemContext.pendingStudents}\n- High Academic Achievers (CGPA >= 8.0): ${systemContext.highCgpaStudents}\n- Candidates with Active Backlogs: ${systemContext.studentsWithBacklogs}\n- Total Placement Applications: ${systemContext.totalApplications}\n- Active Cohort Session: ${systemContext.activeSessionYear ?? "not configured"}\n- Currently Active Live Drives (${systemContext.activeDrives.length}): ${JSON.stringify(systemContext.activeDrives)}\n- Approved Academic Programs: ${systemContext.approvedPrograms.join("; ")}`
+        ? `LIVE CAMPUSFLOW DATABASE FACTS (current at ${formatDateTime(new Date())}):\n- Registered Students: ${systemContext.totalStudents}\n- TPO-Verified Profiles: ${systemContext.verifiedStudents}\n- Pending Verification Dossiers: ${systemContext.pendingStudents}\n- High Academic Achievers (CGPA >= 8.0): ${systemContext.highCgpaStudents}\n- Candidates with Active Backlogs: ${systemContext.studentsWithBacklogs}\n- Students marked placed: ${systemContext.placedStudents ?? "unknown"}\n- Total Placement Applications: ${systemContext.totalApplications}\n- Applications by status (non-archived): ${JSON.stringify(systemContext.applicationsByStatus || {})}\n- Active Cohort Session: ${systemContext.activeSessionYear ?? "not configured"}\n- Currently Active Live Drives (${systemContext.activeDrives.length}): ${JSON.stringify(systemContext.activeDrives.map((d) => ({ ...d, deadline: formatDateTime(d.deadline) })))}\n- Approved Academic Programs: ${systemContext.approvedPrograms.join("; ")}` +
+          (queryContext.text ? `\n\n${queryContext.text}` : "")
         : "LIVE CAMPUSFLOW DATABASE FACTS: unavailable. Do not estimate, invent, or infer counts, student records, drive details, or session information.";
 
     const systemInstruction = `You are the JSSATEB Senior Placement Officer Copilot & AI Operations Executive powered by Groq AI.
@@ -447,7 +488,10 @@ RULES FOR OPERATION & DIALOGUE:
          }
        }
        \`\`\`
- 3. If the TPO asks about student directories, analytics, or verifications, answer only from the LIVE JSSATEB DATABASE FACTS. If they are unavailable, say you cannot verify the requested data.`;
+ 3. If the TPO asks about student directories, analytics, or verifications, answer only from the LIVE CAMPUSFLOW DATABASE FACTS. If they are unavailable, say you cannot verify the requested data.
+ 4. STUDENT & DRIVE QUESTIONS: When STUDENT RECORDS or DRIVE RECORDS are provided above, answer with the actual details from those records (profile, academics, eligibility verdicts and reasons, applications, interview information) in a clear, structured summary. Do not tell the TPO to go and open a page instead. Values marked "not recorded" are missing in the database — say so. If NO STUDENT RECORD FOUND is listed, say the student could not be found and suggest checking the USN. Never mix details between different students.
+ 5. Eligibility verdicts come from the portal's eligibility engine as given; do not recompute or overrule them.
+ 6. You can only stage new drives (via the drive_intent block). You cannot edit records, change application statuses, send emails or notifications. If asked, explain where the TPO can do it in the portal and state clearly that nothing was changed.`;
 
     let aiResponse;
     try {
@@ -458,10 +502,11 @@ RULES FOR OPERATION & DIALOGUE:
             maxTokens: 1500,
         });
     } catch (aiErr) {
-        console.warn("[AdminCopilot] Groq AI call failed:", aiErr.message);
+        console.warn("[AdminCopilot] Groq AI call failed:", aiErr.code || aiErr.message);
         return {
             action: "AI_UNAVAILABLE",
-            answer: "The AI copilot is temporarily unavailable. No drive or other data changes were made. Please try again shortly.",
+            answer: `${describeAIFailure(aiErr)} No drive or other data changes were made.`,
+            errorCode: aiErr.code || "PROVIDER_ERROR",
         };
     }
 
@@ -504,7 +549,7 @@ RULES FOR OPERATION & DIALOGUE:
         });
         return {
             action: "DRIVE_READY",
-            answer: `${cleanDisplayAnswer || "The drive details are ready for review."}\n\nProposed schedule: applications open ${schedule.applicationStartDate.toISOString()}, deadline ${schedule.applicationDeadline.toISOString()}, drive date ${schedule.driveDate.toISOString()}. Review these dates before confirming.`,
+            answer: `${cleanDisplayAnswer || "The drive details are ready for review."}\n\nProposed schedule: applications open ${formatDateTime(schedule.applicationStartDate)}, deadline ${formatDateTime(schedule.applicationDeadline)}, drive date ${formatDateTime(schedule.driveDate)}. Review these dates before confirming.`,
             driveParams: {
                 ...stagedParams,
                 eligibleCount,

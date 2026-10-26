@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { reloadEnv } from "../../env.js";
+import { APP_TIMEZONE } from "./dateFormat.js";
 
 let transporter = null;
 let isTestingMock = false;
@@ -534,7 +535,9 @@ export const sendApplicationStatusEmail = async ({
                 day: "numeric",
                 hour: "2-digit",
                 minute: "2-digit",
-                hour12: true
+                hour12: true,
+                timeZone: APP_TIMEZONE,
+                timeZoneName: "short"
             })
             : null;
 
@@ -629,7 +632,9 @@ export const sendDeadlineReminderEmail = async ({
             day: "numeric",
             hour: "2-digit",
             minute: "2-digit",
-            hour12: true
+            hour12: true,
+            timeZone: APP_TIMEZONE,
+            timeZoneName: "short"
         });
 
         const subject = `[Urgent Reminder] ${companyName} (${jobTitle}) - Application Closes in ${offsetHours} Hours`;
@@ -736,7 +741,8 @@ export const sendBroadcastAnnouncementEmail = async ({
             day: "numeric",
             hour: "2-digit",
             minute: "2-digit",
-            hour12: true
+            hour12: true,
+            timeZone: APP_TIMEZONE
         });
 
         const isUrgent = priority === "urgent";

@@ -9,7 +9,9 @@ import { Notification } from "../models/notification.model.js";
 import { sendApplicationStatusEmail } from "../utils/mailService.js";
 import { EligibilityService } from "../services/eligibility.service.js";
 import { resolveStudentProgram } from "../constants/programCatalog.js";
-import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import fs from "fs";
+import { uploadOnCloudinary, deleteFromCloudinary } from "../utils/cloudinary.js";
+import { formatDateTime } from "../utils/dateFormat.js";
 import {
     buildCompanyApplicantExportFields,
     getCompanyApplicantExportValue
@@ -30,7 +32,10 @@ const LEGAL_TRANSITIONS = {
 };
 
 // Evaluate drive-specific student information requirements
-export const evaluateStudentRequirements = (studentProfile, user, requirements) => {
+// `context.applicationResumeProvided` marks that the student attached a resume to
+// this specific application, which satisfies the drive's resume requirement even
+// when no profile resume exists.
+export const evaluateStudentRequirements = (studentProfile, user, requirements, context = {}) => {
     const list = Array.isArray(requirements) && requirements.length > 0
         ? requirements
         : DEFAULT_STUDENT_REQUIREMENTS;
@@ -118,8 +123,11 @@ export const evaluateStudentRequirements = (studentProfile, user, requirements) 
                 value = { hasGap: Boolean(studentProfile.hasEducationGap), gaps: studentProfile.educationGaps || [] };
                 break;
             case "resume":
-                value = studentProfile.resume?.url || studentProfile.resumeUrl;
-                if (!value) isSatisfied = false;
+                value = context.applicationResumeProvided ? "application-resume" : (studentProfile.resume?.url || studentProfile.resumeUrl);
+                if (!value) {
+                    isSatisfied = false;
+                    reason = "Attach a resume to this application (or add one to your profile)";
+                }
                 break;
             case "tenthMarksheet":
                 value = studentProfile.tenthDetails?.marksheetUrl;
@@ -169,7 +177,7 @@ export const evaluateStudentRequirements = (studentProfile, user, requirements) 
 };
 
 // Construct immutable submittedSnapshot from student profile at time of application
-export const buildSubmissionSnapshot = (studentProfile, user, placementDrive, customAnswers = []) => {
+export const buildSubmissionSnapshot = (studentProfile, user, placementDrive, customAnswers = [], applicationResume = null) => {
     return {
         studentProfileId: studentProfile._id,
         fullName: user?.fullName || studentProfile.fullName || "",
@@ -200,7 +208,8 @@ export const buildSubmissionSnapshot = (studentProfile, user, placementDrive, cu
         educationGaps: studentProfile.educationGaps || [],
         hasEducationGap: Boolean(studentProfile.hasEducationGap),
         customAnswers: customAnswers || [],
-        resume: studentProfile.resume || {},
+        // The resume submitted with THIS application (a stable copy, independent of later profile changes)
+        resume: applicationResume || studentProfile.resume || {},
         family: studentProfile.family || {},
         permanentAddress: studentProfile.permanentAddress || {},
         currentAddress: studentProfile.currentAddress || {},
@@ -209,123 +218,183 @@ export const buildSubmissionSnapshot = (studentProfile, user, placementDrive, cu
     };
 };
 
+/// Upload an application-specific resume. Throws (no silent fallback) so the
+// application is never created without the resume the student chose.
+const uploadApplicationResume = async (file) => {
+    let uploaded;
+    try {
+        uploaded = await uploadOnCloudinary(file.path, { folder: "campusflow/application_resumes" });
+    } catch (uploadErr) {
+        console.error("Application resume upload failed:", uploadErr?.message || uploadErr);
+        throw new ApiError(502, "Your resume could not be uploaded, so the application was not submitted. Please try again.");
+    }
+    if (!uploaded || !(uploaded.secure_url || uploaded.url)) {
+        throw new ApiError(502, "Your resume could not be uploaded, so the application was not submitted. Please try again.");
+    }
+    return {
+        url: uploaded.secure_url || uploaded.url,
+        publicId: uploaded.public_id || "",
+        resourceType: uploaded.resource_type || "",
+        originalName: file.originalname || "Resume",
+        source: "uploaded",
+        uploadedAt: new Date()
+    };
+};
+
+const buildEligibilitySnapshot = (studentProfile, evalResult) => ({
+    status: evalResult.status,
+    cgpa: studentProfile.verifiedCGPA != null ? studentProfile.verifiedCGPA : studentProfile.cgpa,
+    activeBacklogs: studentProfile.activeBacklogs != null ? studentProfile.activeBacklogs : studentProfile.backlogs,
+    historicalBacklogs: studentProfile.historicalBacklogs || 0,
+    branch: studentProfile.branch || studentProfile.department,
+    programCode: resolveStudentProgram(studentProfile)?.code || "",
+    tenthPercentage: studentProfile.tenthPercentage,
+    twelfthPercentage: studentProfile.twelfthPercentage,
+    criteriaBreakdown: evalResult.criteriaBreakdown,
+    ruleVersion: 2,
+    evaluatedAt: new Date()
+});
+
 // @desc    Apply for placement drive
 // @route   POST /api/v1/application/:driveId/apply
 // @access  Student
+// Flow: eligibility (unchanged business rules) -> application readiness
+// (requirements, custom questions, duplicates) -> resume for THIS application
+// (uploaded file or a copy of the profile resume reference) -> persist.
 const applyForPlacement = asyncHandler(async (req, res) => {
-    const { driveId } = req.params;
-    if (!driveId) {
-        throw new ApiError(400, "Placement drive ID is required");
-    }
-    if (req.user?.role !== "student") {
-        throw new ApiError(403, "Only students can apply for placement drives");
-    }
+    const uploadedTempPath = req.file?.path;
+    let uploadedResume = null;
+    let persisted = false;
 
-    const studentProfile = await StudentProfile.findOne({
-        user: req.user?._id
-    });
-    if (!studentProfile) {
-        throw new ApiError(404, "Student academic profile not found. Please complete profile first.");
-    }
+    try {
+        const { driveId } = req.params;
+        if (!driveId) {
+            throw new ApiError(400, "Placement drive ID is required");
+        }
+        if (req.user?.role !== "student") {
+            throw new ApiError(403, "Only students can apply for placement drives");
+        }
 
-    const placementDrive = await PlacementDrive.findOne({
-        _id: driveId,
-        isActive: true
-    });
-    if (!placementDrive) {
-        throw new ApiError(404, "Active placement drive not found or application deadline closed");
-    }
+        const studentProfile = await StudentProfile.findOne({
+            user: req.user?._id
+        });
+        if (!studentProfile) {
+            throw new ApiError(404, "Student academic profile not found. Please complete profile first.");
+        }
 
-    // 1. Strict Centralized Eligibility Revalidation Immediately Before Submission
-    const evalResult = EligibilityService.evaluate(studentProfile, placementDrive);
-    if (!evalResult.isEligible) {
-        const detailMessage = evalResult.reasons?.length
-            ? `Not eligible: ${evalResult.reasons.join("; ")}. Please update your academic profile settings to meet the eligibility criteria.`
-            : (evalResult.summary || "Ineligible for this placement drive");
-        throw new ApiError(
-            403,
-            detailMessage,
-            evalResult.reasons
-        );
-    }
+        const placementDrive = await PlacementDrive.findOne({
+            _id: driveId,
+            isActive: true,
+            isDeleted: { $ne: true }
+        });
+        if (!placementDrive) {
+            throw new ApiError(404, "Active placement drive not found or application deadline closed");
+        }
 
-    // 2. Drive-Specific Student Requirements Validation
-    const reqResult = evaluateStudentRequirements(studentProfile, req.user, placementDrive.studentRequirements);
-    if (!reqResult.allSatisfied) {
-        throw new ApiError(
-            403,
-            `Cannot apply: This placement drive requires mandatory student details that are currently missing from your profile: ${reqResult.missingFields.join(", ")}`
-        );
-    }
+        // 1. Strict Centralized Eligibility Revalidation Immediately Before Submission
+        const evalResult = EligibilityService.evaluate(studentProfile, placementDrive);
+        if (!evalResult.isEligible) {
+            const detailMessage = evalResult.reasons?.length
+                ? `Not eligible: ${evalResult.reasons.join("; ")}. Please update your academic profile settings to meet the eligibility criteria.`
+                : (evalResult.summary || "Ineligible for this placement drive");
+            throw new ApiError(
+                403,
+                detailMessage,
+                evalResult.reasons
+            );
+        }
 
-    // Check if custom / updated resume file was uploaded with this drive application
-    if (req.file && req.file.path) {
-        try {
-            const uploadedResume = await uploadOnCloudinary(req.file.path, {
-                folder: "resumes",
-                resource_type: "raw"
-            });
-            if (uploadedResume && uploadedResume.url) {
-                const newResumeObj = {
-                    url: uploadedResume.url,
-                    publicId: uploadedResume.public_id || "",
-                    originalName: req.file.originalname,
-                    uploadedAt: new Date()
-                };
-                studentProfile.resume = newResumeObj;
-                await studentProfile.save();
+        if (placementDrive.applicationStartDate && new Date() < new Date(placementDrive.applicationStartDate)) {
+            throw new ApiError(
+                403,
+                `Applications for this drive open on ${formatDateTime(placementDrive.applicationStartDate)}.`
+            );
+        }
+
+        // 2. Which resume goes with this application
+        const resumeMode = String(req.body.resumeMode || "").toLowerCase();
+        const profileResume = studentProfile.resume?.url ? studentProfile.resume : (studentProfile.resumeUrl ? { url: studentProfile.resumeUrl } : null);
+        const wantsUpload = Boolean(req.file) || resumeMode === "custom" || resumeMode === "upload";
+        if (wantsUpload && !req.file) {
+            throw new ApiError(400, "Please choose a resume file to attach to this application.");
+        }
+        if (!wantsUpload && !profileResume) {
+            throw new ApiError(400, "Attach a resume to this application. Your profile does not have a resume yet, so please upload one for this drive.");
+        }
+
+        // 3. Drive-Specific Student Requirements Validation
+        const reqResult = evaluateStudentRequirements(studentProfile, req.user, placementDrive.studentRequirements, {
+            applicationResumeProvided: true
+        });
+        if (!reqResult.allSatisfied) {
+            throw new ApiError(
+                403,
+                `Cannot apply: This placement drive requires mandatory student details that are currently missing from your profile: ${reqResult.missingFields.join(", ")}`
+            );
+        }
+
+        // Validate and process drive-specific custom questions
+        let submittedCustomAnswers = req.body.customAnswers;
+        if (typeof submittedCustomAnswers === "string") {
+            try {
+                submittedCustomAnswers = JSON.parse(submittedCustomAnswers);
+            } catch {
+                submittedCustomAnswers = [];
             }
-        } catch (uploadErr) {
-            console.error("Custom resume upload for drive application failed:", uploadErr);
         }
-    }
+        if (!Array.isArray(submittedCustomAnswers)) submittedCustomAnswers = [];
 
-    // Validate and process drive-specific custom questions
-    let submittedCustomAnswers = req.body.customAnswers;
-    if (typeof submittedCustomAnswers === "string") {
-        try {
-            submittedCustomAnswers = JSON.parse(submittedCustomAnswers);
-        } catch {
-            submittedCustomAnswers = [];
+        const configuredQuestions = Array.isArray(placementDrive.customQuestions) ? placementDrive.customQuestions : [];
+        const missingCustomQuestions = [];
+        const validatedCustomAnswers = configuredQuestions.map((q) => {
+            const userAns = submittedCustomAnswers.find((a) => String(a.questionId) === String(q.id));
+            const rawAnswer = userAns?.answer !== undefined ? userAns.answer : "";
+            const isAnswerEmpty = rawAnswer === null || rawAnswer === undefined || (typeof rawAnswer === "string" && !rawAnswer.trim());
+            if (q.required && isAnswerEmpty) {
+                missingCustomQuestions.push(q.question);
+            }
+            return {
+                questionId: q.id,
+                question: q.question,
+                type: q.type || "text",
+                answer: rawAnswer,
+                required: Boolean(q.required)
+            };
+        });
+
+        if (missingCustomQuestions.length > 0) {
+            throw new ApiError(
+                400,
+                `Please answer all mandatory custom questions: ${missingCustomQuestions.join("; ")}`
+            );
         }
-    }
-    if (!Array.isArray(submittedCustomAnswers)) submittedCustomAnswers = [];
 
-    const configuredQuestions = Array.isArray(placementDrive.customQuestions) ? placementDrive.customQuestions : [];
-    const missingCustomQuestions = [];
-    const validatedCustomAnswers = configuredQuestions.map((q) => {
-        const userAns = submittedCustomAnswers.find((a) => String(a.questionId) === String(q.id));
-        const rawAnswer = userAns?.answer !== undefined ? userAns.answer : "";
-        const isAnswerEmpty = rawAnswer === null || rawAnswer === undefined || (typeof rawAnswer === "string" && !rawAnswer.trim());
-        if (q.required && isAnswerEmpty) {
-            missingCustomQuestions.push(q.question);
+        // 4. Duplicate check BEFORE any file is uploaded (avoids orphaned uploads)
+        const existingApplication = await Application.findOne({
+            student: studentProfile._id,
+            placementDrive: placementDrive._id
+        });
+        if (existingApplication && existingApplication.status !== "withdrawn") {
+            throw new ApiError(
+                409,
+                "You have already applied for this placement drive. Duplicate applications are blocked."
+            );
         }
-        return {
-            questionId: q.id,
-            question: q.question,
-            type: q.type || "text",
-            answer: rawAnswer,
-            required: Boolean(q.required)
-        };
-    });
 
-    if (missingCustomQuestions.length > 0) {
-        throw new ApiError(
-            400,
-            `Please answer all mandatory custom questions: ${missingCustomQuestions.join("; ")}`
-        );
-    }
+        // 5. Resolve the resume for this application. The profile resume is never modified here.
+        const applicationResume = wantsUpload
+            ? (uploadedResume = await uploadApplicationResume(req.file))
+            : {
+                url: profileResume.url,
+                publicId: profileResume.publicId || "",
+                originalName: profileResume.originalName || "Profile resume",
+                source: "profile",
+                uploadedAt: new Date()
+            };
 
-    const submittedSnapshot = buildSubmissionSnapshot(studentProfile, req.user, placementDrive, validatedCustomAnswers);
+        const submittedSnapshot = buildSubmissionSnapshot(studentProfile, req.user, placementDrive, validatedCustomAnswers, applicationResume);
 
-    // 3. Database Uniqueness Check
-    const existingApplication = await Application.findOne({
-        student: studentProfile._id,
-        placementDrive: placementDrive._id
-    });
-
-    if (existingApplication) {
-        if (existingApplication.status === "withdrawn") {
+        if (existingApplication) {
             const previousStatus = existingApplication.status;
             existingApplication.status = "applied";
             existingApplication.appliedAt = new Date();
@@ -340,23 +409,10 @@ const applyForPlacement = asyncHandler(async (req, res) => {
                 updatedBy: req.user._id,
                 updatedAt: new Date()
             });
-
-            // Update eligibility snapshot
-            existingApplication.eligibilitySnapshot = {
-                status: evalResult.status,
-                cgpa: studentProfile.verifiedCGPA != null ? studentProfile.verifiedCGPA : studentProfile.cgpa,
-                activeBacklogs: studentProfile.activeBacklogs != null ? studentProfile.activeBacklogs : studentProfile.backlogs,
-                historicalBacklogs: studentProfile.historicalBacklogs || 0,
-                branch: studentProfile.branch || studentProfile.department,
-                programCode: resolveStudentProgram(studentProfile)?.code || "",
-                tenthPercentage: studentProfile.tenthPercentage,
-                twelfthPercentage: studentProfile.twelfthPercentage,
-                criteriaBreakdown: evalResult.criteriaBreakdown,
-                ruleVersion: 2,
-                evaluatedAt: new Date()
-            };
+            existingApplication.eligibilitySnapshot = buildEligibilitySnapshot(studentProfile, evalResult);
 
             await existingApplication.save();
+            persisted = true;
 
             return res.status(200).json(
                 new ApiResponse(
@@ -367,49 +423,51 @@ const applyForPlacement = asyncHandler(async (req, res) => {
             );
         }
 
-        throw new ApiError(
-            409,
-            "You have already applied for this placement drive. Duplicate applications are blocked."
-        );
-    }
-
-    // 4. Create Application with Preserved Rule Version Snapshot and Submitted Student Data Snapshot
-    const application = await Application.create({
-        student: studentProfile._id,
-        placementDrive: placementDrive._id,
-        customAnswers: validatedCustomAnswers,
-        submittedSnapshot,
-        eligibilitySnapshot: {
-            status: evalResult.status,
-            cgpa: studentProfile.verifiedCGPA != null ? studentProfile.verifiedCGPA : studentProfile.cgpa,
-            activeBacklogs: studentProfile.activeBacklogs != null ? studentProfile.activeBacklogs : studentProfile.backlogs,
-            historicalBacklogs: studentProfile.historicalBacklogs || 0,
-            branch: studentProfile.branch || studentProfile.department,
-            programCode: resolveStudentProgram(studentProfile)?.code || "",
-            tenthPercentage: studentProfile.tenthPercentage,
-            twelfthPercentage: studentProfile.twelfthPercentage,
-            criteriaBreakdown: evalResult.criteriaBreakdown,
-            ruleVersion: 2,
-            evaluatedAt: new Date()
-        },
-        statusHistory: [
-            {
-                fromStatus: "none",
-                toStatus: "applied",
-                remarks: "Application verified by Centralized Eligibility Engine & Student Requirements, snapshot preserved",
-                updatedBy: req.user._id,
-                updatedAt: new Date()
+        // 6. Create Application with Preserved Rule Version Snapshot and Submitted Student Data Snapshot
+        let application;
+        try {
+            application = await Application.create({
+                student: studentProfile._id,
+                placementDrive: placementDrive._id,
+                customAnswers: validatedCustomAnswers,
+                submittedSnapshot,
+                eligibilitySnapshot: buildEligibilitySnapshot(studentProfile, evalResult),
+                statusHistory: [
+                    {
+                        fromStatus: "none",
+                        toStatus: "applied",
+                        remarks: "Application verified by Centralized Eligibility Engine & Student Requirements, snapshot preserved",
+                        updatedBy: req.user._id,
+                        updatedAt: new Date()
+                    }
+                ]
+            });
+        } catch (createErr) {
+            // Unique index caught a concurrent double-submit
+            if (createErr?.code === 11000) {
+                throw new ApiError(409, "You have already applied for this placement drive. Duplicate applications are blocked.");
             }
-        ]
-    });
+            throw createErr;
+        }
+        persisted = true;
 
-    return res.status(201).json(
-        new ApiResponse(
-            201,
-            application,
-            "Application submitted successfully"
-        )
-    );
+        return res.status(201).json(
+            new ApiResponse(
+                201,
+                application,
+                "Application submitted successfully"
+            )
+        );
+    } finally {
+        // Never leave orphaned files: remove the temp upload, and delete the stored
+        // resume if the application itself was not saved.
+        if (uploadedTempPath) {
+            await fs.promises.unlink(uploadedTempPath).catch(() => {});
+        }
+        if (uploadedResume?.publicId && !persisted) {
+            await deleteFromCloudinary(uploadedResume.publicId, uploadedResume.resourceType || "image").catch(() => {});
+        }
+    }
 });
 
 // @desc    Get student's own applications
@@ -966,7 +1024,10 @@ const checkPreApplicationRequirements = asyncHandler(async (req, res) => {
     }
 
     const evalResult = EligibilityService.evaluate(studentProfile, placementDrive);
-    const reqResult = evaluateStudentRequirements(studentProfile, req.user, placementDrive.studentRequirements);
+    // A resume can be attached while applying, so it never blocks readiness here
+    const reqResult = evaluateStudentRequirements(studentProfile, req.user, placementDrive.studentRequirements, {
+        applicationResumeProvided: true
+    });
 
     const existingApplication = await Application.findOne({
         student: studentProfile._id,

@@ -24,15 +24,29 @@ export default function Login() {
   const navigate = useNavigate();
   const { login, isAuthenticated, userRole, loading: authLoading } = useAuth();
 
-  // If already authenticated, redirect to their proper dashboard
+  // Where to go after sign-in: the requested page when it belongs to this role,
+  // otherwise the role's dashboard. Never route an admin to a student page or vice versa.
+  const resolveDestination = (actualRole) => {
+    const redirectPath = searchParams.get("redirect");
+    const fallback = actualRole === "admin" ? "/admin-dashboard" : "/student-dashboard";
+    if (!redirectPath || redirectPath === "/" || redirectPath === "/login" || !redirectPath.startsWith("/")) return fallback;
+    const isStudentRoute =
+      redirectPath.startsWith("/student") ||
+      redirectPath.startsWith("/placement-drives") ||
+      redirectPath.startsWith("/my-applications") ||
+      redirectPath.startsWith("/notifications");
+    const isAdminRoute = redirectPath.startsWith("/admin");
+    if (actualRole === "admin" && isAdminRoute) return redirectPath;
+    if (actualRole === "student" && isStudentRoute) return redirectPath;
+    return fallback;
+  };
+
+  // If already authenticated, continue to the requested page or the proper dashboard
   useEffect(() => {
-    if (isAuthenticated && !authLoading && userRole) {
-      if (userRole === "admin") {
-        navigate("/admin-dashboard", { replace: true });
-      } else if (userRole === "student") {
-        navigate("/student-dashboard", { replace: true });
-      }
+    if (isAuthenticated && !authLoading && (userRole === "admin" || userRole === "student")) {
+      navigate(resolveDestination(userRole), { replace: true });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, userRole, authLoading, navigate]);
 
   useEffect(() => {
@@ -107,25 +121,7 @@ export default function Login() {
         `Welcome back, ${loggedUser.fullName || (actualRole === "admin" ? "Admin" : "Student")}!`
       );
 
-      // Smart safe navigation: never route an admin to a student-only URL or vice versa!
-      const redirectPath = searchParams.get("redirect");
-      let targetDestination = actualRole === "admin" ? "/admin-dashboard" : "/student-dashboard";
-
-      if (redirectPath && redirectPath !== "/" && redirectPath !== "/login") {
-        const isStudentRoute =
-          redirectPath.startsWith("/student") ||
-          redirectPath.startsWith("/placement-drives") ||
-          redirectPath.startsWith("/my-applications");
-        const isAdminRoute = redirectPath.startsWith("/admin");
-
-        if (actualRole === "admin" && !isStudentRoute) {
-          targetDestination = redirectPath;
-        } else if (actualRole === "student" && !isAdminRoute) {
-          targetDestination = redirectPath;
-        }
-      }
-
-      navigate(targetDestination, { replace: true });
+      navigate(resolveDestination(actualRole), { replace: true });
     } catch (err) {
       const msg =
         err.response?.data?.message ||
