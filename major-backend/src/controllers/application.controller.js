@@ -17,15 +17,15 @@ import {
 
 // Legal status transitions state machine
 const LEGAL_TRANSITIONS = {
-    applied: ["shortlisted", "interview", "selected", "rejected", "on_hold", "withdrawn"],
-    shortlisted: ["applied", "interview", "selected", "rejected", "on_hold", "withdrawn"],
-    interview: ["interview", "shortlisted", "selected", "rejected", "on_hold"],
-    on_hold: ["applied", "shortlisted", "interview", "selected", "rejected", "withdrawn"],
-    selected: ["offer_received", "offer_accepted", "offer_declined", "rejected", "interview", "shortlisted"],
-    offer_received: ["offer_accepted", "offer_declined", "rejected", "selected"],
-    offer_accepted: ["offer_declined", "rejected", "selected"],
-    offer_declined: ["offer_accepted", "selected", "rejected"],
-    rejected: ["shortlisted", "interview", "applied", "on_hold"],
+    applied: ["applied", "shortlisted", "interview", "selected", "offer_received", "offer_accepted", "rejected", "on_hold", "withdrawn"],
+    shortlisted: ["applied", "shortlisted", "interview", "selected", "offer_received", "offer_accepted", "rejected", "on_hold", "withdrawn"],
+    interview: ["interview", "shortlisted", "selected", "offer_received", "offer_accepted", "offer_declined", "rejected", "on_hold"],
+    on_hold: ["applied", "shortlisted", "interview", "selected", "offer_received", "offer_accepted", "rejected", "withdrawn"],
+    selected: ["selected", "offer_received", "offer_accepted", "offer_declined", "rejected", "interview", "shortlisted", "on_hold"],
+    offer_received: ["offer_received", "offer_accepted", "offer_declined", "rejected", "selected", "on_hold"],
+    offer_accepted: ["offer_accepted", "offer_declined", "rejected", "selected", "on_hold"],
+    offer_declined: ["offer_declined", "offer_accepted", "selected", "rejected", "on_hold"],
+    rejected: ["rejected", "shortlisted", "interview", "applied", "on_hold", "selected", "offer_accepted"],
     withdrawn: ["applied"]
 };
 
@@ -608,17 +608,25 @@ const updateApplicationStatus = asyncHandler(async (req, res) => {
 
         application.offeredPackage = pkg;
 
-        if (status === "offer_received") {
-            application.offerDetails = {
-                offeredPackage: pkg,
-                designation: designation || application.placementDrive?.jobTitle || "Graduate Trainee",
-                joiningDate: joiningDate ? new Date(joiningDate) : null,
-                offerLetterUrl: offerLetterUrl || "",
-                decisionDeadline: decisionDeadline ? new Date(decisionDeadline) : null,
-                studentDecision: "pending",
-                decisionAt: null
-            };
-        }
+        const currentDecision = application.offerDetails?.studentDecision;
+        const targetDecision = status === "offer_accepted" 
+            ? "accepted" 
+            : (currentDecision === "accepted" || currentDecision === "declined" ? currentDecision : "pending");
+
+        application.offerDetails = {
+            ...(application.offerDetails || {}),
+            offeredPackage: pkg,
+            designation: designation || application.placementDrive?.jobTitle || application.offerDetails?.designation || "Graduate Trainee",
+            joiningDate: joiningDate ? new Date(joiningDate) : (application.offerDetails?.joiningDate || application.placementDrive?.driveDate || null),
+            offerLetterUrl: offerLetterUrl || application.offerDetails?.offerLetterUrl || "",
+            decisionDeadline: decisionDeadline ? new Date(decisionDeadline) : (application.offerDetails?.decisionDeadline || null),
+            studentDecision: targetDecision,
+            decisionAt: status === "offer_accepted" ? (application.offerDetails?.decisionAt || new Date()) : (targetDecision === "pending" ? null : application.offerDetails?.decisionAt)
+        };
+    } else if (status === "offer_declined") {
+        if (!application.offerDetails) application.offerDetails = {};
+        application.offerDetails.studentDecision = "declined";
+        application.offerDetails.decisionAt = new Date();
     }
 
     application.statusUpdatedAt = new Date();

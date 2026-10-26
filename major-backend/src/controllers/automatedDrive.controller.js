@@ -122,21 +122,28 @@ export const commitCompanyResults = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Invalid candidate advance list.");
     }
 
-    const result = await commitRoundResults({
-        driveId,
-        roundNumber: Number(roundNumber),
-        mode,
-        autoRejectAbsent: autoRejectAbsent === true || autoRejectAbsent === "true",
-        confirmedAdvances,
-        confirmedRejections: Array.isArray(confirmedRejections) ? confirmedRejections : [],
-        confirmedExceptionResolutions: Array.isArray(confirmedExceptionResolutions) ? confirmedExceptionResolutions : [],
-        batchId,
-        adminUserId: req.user._id,
-    });
+    try {
+        const result = await commitRoundResults({
+            driveId,
+            roundNumber: Number(roundNumber),
+            mode,
+            autoRejectAbsent: autoRejectAbsent === true || autoRejectAbsent === "true",
+            confirmedAdvances,
+            confirmedRejections: Array.isArray(confirmedRejections) ? confirmedRejections : [],
+            confirmedExceptionResolutions: Array.isArray(confirmedExceptionResolutions) ? confirmedExceptionResolutions : [],
+            batchId,
+            adminUserId: req.user._id,
+        });
 
-    return res.status(200).json(
-        new ApiResponse(200, result, result.message)
-    );
+        return res.status(200).json(
+            new ApiResponse(200, result, result.message)
+        );
+    } catch (err) {
+        if (err instanceof ApiError) {
+            throw err;
+        }
+        throw new ApiError(err.statusCode || 400, err.message || "Failed to commit round results");
+    }
 });
 
 /**

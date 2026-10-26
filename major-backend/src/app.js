@@ -172,7 +172,9 @@ app.use((err, req, res, next) => {
             method: req.method,
             path: req.path,
             statusCode,
-            errorName: err.name
+            errorName: err.name,
+            message: err.message,
+            stack: err.stack
         });
     }
 

@@ -244,7 +244,7 @@ export default function AdminDashboard({ initialTab = "overview" }) {
     remarks,
     extraDetails = {}
   ) => {
-    await updateApplicationStatus(appId, newStatus, remarks, extraDetails);
+    const res = await updateApplicationStatus(appId, newStatus, remarks, extraDetails);
     setApplications((prev) =>
       prev.map((app) =>
         app._id === appId
@@ -253,10 +253,12 @@ export default function AdminDashboard({ initialTab = "overview" }) {
               status: newStatus,
               remarks: remarks || app.remarks,
               ...extraDetails,
+              ...(res?.data || {}),
             }
           : app
       )
     );
+    loadDashboardData(true).catch(() => {});
   };
 
   const handleViewApplicants = (driveId) => {

@@ -88,6 +88,8 @@ export default function ManageApplications({
       shortlisted: 0,
       interview: 0,
       selected: 0,
+      on_hold: 0,
+      offer_declined: 0,
       rejected: 0,
     };
     activeDriveApplications.forEach((app) => {
@@ -108,6 +110,10 @@ export default function ManageApplications({
         if (!["selected", "offer_received", "offer_accepted"].includes(app.status)) {
           return false;
         }
+      } else if (statusFilter === "on_hold") {
+        if (app.status !== "on_hold") return false;
+      } else if (statusFilter === "offer_declined") {
+        if (app.status !== "offer_declined") return false;
       } else if (app.status !== statusFilter) {
         return false;
       }
@@ -449,7 +455,7 @@ export default function ManageApplications({
         if (interviewRound) extraDetails.interviewRound = interviewRound;
         if (interviewLocation) extraDetails.interviewLocation = interviewLocation;
       }
-      if (newStatus === "selected" || newStatus === "offer_received") {
+      if (newStatus === "selected" || newStatus === "offer_received" || newStatus === "offer_accepted") {
         if (offeredPackage) extraDetails.offeredPackage = Number(offeredPackage);
       }
 
@@ -533,7 +539,9 @@ export default function ManageApplications({
     { id: "applied", label: "Applied", count: countsByStatus.applied },
     { id: "shortlisted", label: "Shortlisted", count: countsByStatus.shortlisted },
     { id: "interview", label: "Interview", count: countsByStatus.interview },
-    { id: "selected", label: "Selected", count: countsByStatus.selected },
+    { id: "selected", label: "Selected / Placed", count: countsByStatus.selected },
+    { id: "on_hold", label: "On Hold", count: countsByStatus.on_hold },
+    { id: "offer_declined", label: "Offer Declined", count: countsByStatus.offer_declined },
     { id: "rejected", label: "Rejected", count: countsByStatus.rejected },
   ];
 
@@ -1186,14 +1194,16 @@ export default function ManageApplications({
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   Recruitment Pipeline Stage
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {[
                     { id: "applied", label: "Applied", desc: "Initial stage" },
                     { id: "shortlisted", label: "Shortlisted", desc: "Screening cleared" },
                     { id: "interview", label: "Interview", desc: "Rounds scheduled" },
-                    { id: "selected", label: "Selected", desc: "Hiring decision" },
-                    { id: "offer_received", label: "Offer Released", desc: "Official offer extended" },
                     { id: "on_hold", label: "On Hold", desc: "Pending assessment" },
+                    { id: "selected", label: "Selected / Offer Made", desc: "Student can Accept / Decline" },
+                    { id: "offer_received", label: "Offer Released", desc: "Official offer extended" },
+                    { id: "offer_accepted", label: "Offer Accepted (Placed)", desc: "Student placed in company" },
+                    { id: "offer_declined", label: "Offer Declined", desc: "Candidate rejected offer" },
                     { id: "rejected", label: "Rejected", desc: "Not progressed" }
                   ].map((s) => (
                     <button
@@ -1263,7 +1273,7 @@ export default function ManageApplications({
               )}
 
               {/* Conditional: Offer CTC Details */}
-              {(newStatus === "selected" || newStatus === "offer_received") && (
+              {(newStatus === "selected" || newStatus === "offer_received" || newStatus === "offer_accepted") && (
                 <div className="p-3.5 bg-emerald-50/60 rounded-2xl border border-emerald-100 space-y-2 animate-in fade-in-50">
                   <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-900">
                     <CheckCircle2 className="h-4 w-4 text-emerald-600" />

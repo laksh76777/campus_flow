@@ -426,6 +426,8 @@ export default function AutomatedPlacementDrives({
       shortlisted: 0,
       interview: 0,
       selected: 0,
+      on_hold: 0,
+      offer_declined: 0,
       rejected: 0,
     };
     driveApplications.forEach((app) => {
@@ -446,6 +448,10 @@ export default function AutomatedPlacementDrives({
           if (!["selected", "offer_received", "offer_accepted"].includes(app.status)) {
             return false;
           }
+        } else if (candidateStatusFilter === "on_hold") {
+          if (app.status !== "on_hold") return false;
+        } else if (candidateStatusFilter === "offer_declined") {
+          if (app.status !== "offer_declined") return false;
         } else if (app.status !== candidateStatusFilter) {
           return false;
         }
@@ -504,7 +510,7 @@ export default function AutomatedPlacementDrives({
         if (modalInterviewRound) extraDetails.interviewRound = modalInterviewRound;
         if (modalInterviewLocation) extraDetails.interviewLocation = modalInterviewLocation;
       }
-      if (modalNewStatus === "selected" || modalNewStatus === "offer_received") {
+      if (modalNewStatus === "selected" || modalNewStatus === "offer_received" || modalNewStatus === "offer_accepted") {
         if (modalOfferedPackage) extraDetails.offeredPackage = Number(modalOfferedPackage);
       }
 
@@ -513,6 +519,9 @@ export default function AutomatedPlacementDrives({
       setActiveModalApp(null);
       if (activeDriveWorkspace) {
         await loadWorkspaceDetails(activeDriveWorkspace._id);
+      }
+      if (onRefresh) {
+        onRefresh();
       }
     } catch (err) {
       console.error("Status update error:", err);
@@ -1038,7 +1047,9 @@ export default function AutomatedPlacementDrives({
                           { id: "applied", label: "Applied", count: candidateCountsByStatus.applied },
                           { id: "shortlisted", label: "Shortlisted", count: candidateCountsByStatus.shortlisted },
                           { id: "interview", label: "Interview", count: candidateCountsByStatus.interview },
-                          { id: "selected", label: "Selected", count: candidateCountsByStatus.selected },
+                          { id: "selected", label: "Selected / Placed", count: candidateCountsByStatus.selected },
+                          { id: "on_hold", label: "On Hold", count: candidateCountsByStatus.on_hold },
+                          { id: "offer_declined", label: "Offer Declined", count: candidateCountsByStatus.offer_declined },
                           { id: "rejected", label: "Rejected", count: candidateCountsByStatus.rejected },
                         ].map((tab) => (
                           <button
@@ -1703,14 +1714,16 @@ export default function AutomatedPlacementDrives({
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   Recruitment Pipeline Stage
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {[
                     { id: "applied", label: "Applied", desc: "Initial stage" },
                     { id: "shortlisted", label: "Shortlisted", desc: "Screening cleared" },
                     { id: "interview", label: "Interview", desc: "Rounds scheduled" },
-                    { id: "selected", label: "Selected", desc: "Hiring decision" },
+                    { id: "on_hold", label: "On Hold", desc: "Assessment pending / held" },
+                    { id: "selected", label: "Selected / Offer Made", desc: "Student can Accept / Decline" },
                     { id: "offer_received", label: "Offer Released", desc: "Official offer extended" },
-                    { id: "on_hold", label: "On Hold", desc: "Pending assessment" },
+                    { id: "offer_accepted", label: "Offer Accepted (Placed)", desc: "Student placed in company" },
+                    { id: "offer_declined", label: "Offer Declined", desc: "Candidate rejected offer" },
                     { id: "rejected", label: "Rejected", desc: "Not progressed" },
                   ].map((s) => (
                     <button
@@ -1780,7 +1793,7 @@ export default function AutomatedPlacementDrives({
               )}
 
               {/* Conditional: Offer CTC Details */}
-              {(modalNewStatus === "selected" || modalNewStatus === "offer_received") && (
+              {(modalNewStatus === "selected" || modalNewStatus === "offer_received" || modalNewStatus === "offer_accepted") && (
                 <div className="p-3.5 bg-emerald-50/60 rounded-2xl border border-emerald-100 space-y-2 animate-in fade-in-50">
                   <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-900">
                     <CheckCircle2 className="h-4 w-4 text-emerald-600" />

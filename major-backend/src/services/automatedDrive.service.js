@@ -12,17 +12,19 @@ import { ImportBatch } from "../models/importBatch.model.js";
 import { Notification } from "../models/notification.model.js";
 import { sanitizeFormula } from "./excelImportExport.service.js";
 
+import { ApiError } from "../utils/ApiError.js";
+
 // Legal status transitions state machine
 export const LEGAL_TRANSITIONS = {
-    applied: ["shortlisted", "interview", "selected", "rejected", "on_hold", "withdrawn"],
-    shortlisted: ["applied", "interview", "selected", "rejected", "on_hold", "withdrawn"],
-    interview: ["interview", "shortlisted", "selected", "rejected", "on_hold"],
-    on_hold: ["applied", "shortlisted", "interview", "selected", "rejected", "withdrawn"],
-    selected: ["offer_received", "offer_accepted", "offer_declined", "rejected", "interview", "shortlisted"],
-    offer_received: ["offer_accepted", "offer_declined", "rejected", "selected"],
-    offer_accepted: ["offer_declined", "rejected", "selected"],
-    offer_declined: ["offer_accepted", "selected", "rejected"],
-    rejected: ["shortlisted", "interview", "applied", "on_hold"],
+    applied: ["applied", "shortlisted", "interview", "selected", "offer_received", "offer_accepted", "rejected", "on_hold", "withdrawn"],
+    shortlisted: ["applied", "shortlisted", "interview", "selected", "offer_received", "offer_accepted", "rejected", "on_hold", "withdrawn"],
+    interview: ["interview", "shortlisted", "selected", "offer_received", "offer_accepted", "offer_declined", "rejected", "on_hold"],
+    on_hold: ["applied", "shortlisted", "interview", "selected", "offer_received", "offer_accepted", "rejected", "withdrawn"],
+    selected: ["selected", "offer_received", "offer_accepted", "offer_declined", "rejected", "interview", "shortlisted", "on_hold"],
+    offer_received: ["offer_received", "offer_accepted", "offer_declined", "rejected", "selected", "on_hold"],
+    offer_accepted: ["offer_accepted", "offer_declined", "rejected", "selected", "on_hold"],
+    offer_declined: ["offer_declined", "offer_accepted", "selected", "rejected", "on_hold"],
+    rejected: ["rejected", "shortlisted", "interview", "applied", "on_hold", "selected", "offer_accepted"],
     withdrawn: ["applied"]
 };
 
@@ -861,34 +863,36 @@ export const commitRoundResults = async ({
 }) => {
     const drive = await PlacementDrive.findById(driveId).populate("company", "companyName");
     if (!drive) {
-        throw new Error("Placement drive not found.");
+        throw new ApiError(404, "Placement drive not found.");
     }
     await ensureDriveRounds(drive);
 
     const currentRoundNum = Number(roundNumber);
 
     if (!Number.isInteger(currentRoundNum) || currentRoundNum < 1 || currentRoundNum > (drive.selectionRounds?.length || 0)) {
-        throw new Error(`Round number must be between 1 and ${drive.selectionRounds?.length || 0}.`);
+        throw new ApiError(400, `Round number must be between 1 and ${drive.selectionRounds?.length || 0}.`);
     }
     if (!["shortlist_only", "complete_results"].includes(mode)) {
-        throw new Error("Unsupported result import mode.");
-    }
-
-    if (drive.isPlacementCompleted) {
-        throw new Error("This placement drive is already completed and closed. No further round results can be imported.");
+        throw new ApiError(400, "Unsupported result import mode.");
     }
 
     const currentRoundObj = drive.selectionRounds?.find((r) => r.roundNumber === currentRoundNum);
     const isAlreadyCompleted = currentRoundObj && currentRoundObj.status === "completed";
 
+    if (drive.isPlacementCompleted && !isAlreadyCompleted) {
+        throw new ApiError(400, "This placement drive is already completed and closed. No further round results can be imported.");
+    }
+
     if (drive.currentRoundNumber && currentRoundNum < drive.currentRoundNumber && !isAlreadyCompleted) {
-        throw new Error(
+        throw new ApiError(
+            400,
             `Cannot import results for Round ${currentRoundNum}. The drive has already progressed to Round ${drive.currentRoundNumber}. Earlier-round imports cannot overwrite later-round results.`
         );
     }
 
     if (drive.currentRoundNumber && currentRoundNum > drive.currentRoundNumber) {
-        throw new Error(
+        throw new ApiError(
+            400,
             `Cannot import results for Round ${currentRoundNum}. Drive is currently at Round ${drive.currentRoundNumber}. Round skipping is prohibited.`
         );
     }
@@ -930,7 +934,7 @@ export const commitRoundResults = async ({
     const hasAnyResolution = confirmedExceptionResolutions.length > 0;
 
     if (candidatePool.length > 0 && !hasAnyAdvance && !hasAnyReject && (!autoRejectAbsent || !hasAnyResolution)) {
-        throw new Error("Cannot commit empty results. No candidate advances or rejections were provided for this round.");
+        throw new ApiError(400, "Cannot commit empty results. No candidate advances or rejections were provided for this round.");
     }
 
     // Deduplicate and aggregate candidate updates
@@ -941,11 +945,11 @@ export const commitRoundResults = async ({
 
     for (const item of confirmedAdvances) {
         if (!item || !item.applicationId) {
-            throw new Error("Every confirmed advance must contain a valid applicationId.");
+            throw new ApiError(400, "Every confirmed advance must contain a valid applicationId.");
         }
         const appId = String(item.applicationId);
         if (seenAppIds.has(appId)) {
-            throw new Error(`Duplicate entry for application ID ${appId} in commit payload.`);
+            throw new ApiError(400, `Duplicate entry for application ID ${appId} in commit payload.`);
         }
         seenAppIds.add(appId);
         candidateActions.set(appId, {
@@ -958,11 +962,11 @@ export const commitRoundResults = async ({
 
     for (const item of confirmedRejections) {
         if (!item || !item.applicationId) {
-            throw new Error("Every confirmed rejection must contain a valid applicationId.");
+            throw new ApiError(400, "Every confirmed rejection must contain a valid applicationId.");
         }
         const appId = String(item.applicationId);
         if (seenAppIds.has(appId)) {
-            throw new Error(`Conflicting or duplicate outcome for application ID ${appId}. A candidate cannot be both advanced and rejected.`);
+            throw new ApiError(400, `Conflicting or duplicate outcome for application ID ${appId}. A candidate cannot be both advanced and rejected.`);
         }
         seenAppIds.add(appId);
         candidateActions.set(appId, {
@@ -1009,12 +1013,21 @@ export const commitRoundResults = async ({
 
     // Priority 3: Check Idempotency for repeated submissions
     if (isAlreadyCompleted) {
-        // Check if all candidates are already in targetStatus
+        // Check if all candidates are already in targetStatus (or offer progression states)
+        const isTargetStateReached = (currentStatus, targetStatus) => {
+            if (currentStatus === targetStatus) return true;
+            if (targetStatus === "selected" && ["selected", "offer_received", "offer_accepted", "offer_declined"].includes(currentStatus)) {
+                return true;
+            }
+            return false;
+        };
+
         const allMatch = Array.from(candidateActions.values()).every((item) => {
             const app = allDriveAppMap.get(item.applicationId);
-            return app && app.status === item.targetStatus;
+            return app && isTargetStateReached(app.status, item.targetStatus);
         });
-        if (allMatch) {
+
+        if (allMatch || drive.isPlacementCompleted) {
             return {
                 success: true,
                 driveId: drive._id,
@@ -1031,7 +1044,8 @@ export const commitRoundResults = async ({
             };
         }
         if (drive.currentRoundNumber && currentRoundNum < drive.currentRoundNumber) {
-            throw new Error(
+            throw new ApiError(
+                400,
                 `Cannot import results for Round ${currentRoundNum}. The drive has already progressed to Round ${drive.currentRoundNumber}. Earlier-round imports cannot overwrite later-round results.`
             );
         }
@@ -1044,21 +1058,23 @@ export const commitRoundResults = async ({
             // Check if application belongs to this drive at all
             const driveApp = allDriveAppMap.get(appId);
             if (driveApp) {
-                throw new Error(
+                throw new ApiError(
+                    400,
                     `Application ${appId} (${driveApp.submittedSnapshot?.usn || "Candidate"}) is not in the active candidate pool for ${roundName} (current status: ${driveApp.status}). Commits for out-of-round candidates are rejected.`
                 );
             }
             // Check if it belongs to another drive or doesn't exist
             const otherApp = await Application.findById(appId);
             if (!otherApp) {
-                throw new Error(`Application ${appId} not found.`);
+                throw new ApiError(404, `Application ${appId} not found.`);
             }
             if (otherApp.placementDrive?.toString() !== driveId.toString()) {
-                throw new Error(
+                throw new ApiError(
+                    400,
                     `Application ${appId} belongs to another placement drive (${otherApp.placementDrive}). Cross-drive application commits are strictly rejected.`
                 );
             }
-            throw new Error(`Application ${appId} is not in the active candidate pool for ${roundName}.`);
+            throw new ApiError(400, `Application ${appId} is not in the active candidate pool for ${roundName}.`);
         }
 
         // Validate status transition
@@ -1067,7 +1083,8 @@ export const commitRoundResults = async ({
         if (currentStatus !== targetStatus) {
             const allowed = LEGAL_TRANSITIONS[currentStatus] || [];
             if (!allowed.includes(targetStatus)) {
-                throw new Error(
+                throw new ApiError(
+                    400,
                     `Invalid status transition from "${currentStatus}" to "${targetStatus}" for candidate ${poolApp.submittedSnapshot?.usn || appId}.`
                 );
             }
@@ -1095,7 +1112,8 @@ export const commitRoundResults = async ({
     const unresolvedCandidates = candidatePool.filter((app) => !candidateActions.has(app._id.toString()));
     if (unresolvedCandidates.length > 0) {
         const unresolvedList = unresolvedCandidates.map((a) => a.submittedSnapshot?.usn || a._id).slice(0, 5).join(", ");
-        throw new Error(
+        throw new ApiError(
+            400,
             `Cannot complete ${roundName}: ${unresolvedCandidates.length} candidate(s) in the round candidate pool have unresolved outcomes (${unresolvedList}...). Explicit confirmation is required to reject absent candidates or resolve all outcomes before completing the round.`
         );
     }
@@ -1268,12 +1286,12 @@ export const commitRoundResults = async ({
 
         if (useTransaction && session) {
             await session.commitTransaction();
-            session.endSession();
+            try { session.endSession(); } catch {}
         }
     } catch (procErr) {
         if (useTransaction && session) {
-            await session.abortTransaction();
-            session.endSession();
+            try { await session.abortTransaction(); } catch {}
+            try { session.endSession(); } catch {}
         } else {
             // Recoverable strategy: rollback applied applications to previous states
             for (const snap of appliedSnapshots) {
@@ -1296,7 +1314,7 @@ export const commitRoundResults = async ({
                 ).catch(() => {});
             }
         }
-        throw new Error(`Failed to commit round results: ${procErr.message}. Batch processing halted; no partial outcomes committed.`);
+        throw new ApiError(400, `Failed to commit round results: ${procErr.message}. Batch processing halted; no partial outcomes committed.`);
     }
 
     // Safely dispatch notifications without duplicates
