@@ -11,6 +11,36 @@ import {
   ArrowRight,
   Sparkles,
 } from "lucide-react";
+import StatCard from "../ui/StatCard";
+
+function FunnelRow({ icon: Icon, iconClass, label, count, unit, total, barClass, valueClass = "text-slate-900" }) {
+  const pct = total > 0 ? Math.min(100, Math.round((count / total) * 100)) : 0;
+  return (
+    <div>
+      <div className="mb-1.5 flex items-center justify-between gap-3 text-xs font-semibold">
+        <span className="flex min-w-0 items-center gap-2 text-slate-700">
+          <Icon className={`h-3.5 w-3.5 shrink-0 ${iconClass}`} aria-hidden="true" />
+          <span className="truncate">{label}</span>
+        </span>
+        <span className={`shrink-0 tabular-nums ${valueClass}`}>
+          {count}
+          {unit ? ` ${unit}` : ""}
+          <span className="ml-1.5 font-medium text-slate-400">{pct}%</span>
+        </span>
+      </div>
+      <div
+        className="h-2 w-full overflow-hidden rounded-full bg-slate-100"
+        role="progressbar"
+        aria-label={label}
+        aria-valuenow={pct}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
+        <div className={`h-full rounded-full transition-[width] duration-700 ease-out-soft ${barClass}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
 
 export default function AdminOverview({
   stats,
@@ -58,7 +88,7 @@ export default function AdminOverview({
       value: totalStudents,
       sub: `${totalStudents} registered ${totalStudents === 1 ? "candidate" : "candidates"}`,
       icon: Users,
-      color: "bg-blue-600 text-white shadow-blue-500/25",
+      tone: "blue",
       targetTab: "students",
     },
     {
@@ -66,7 +96,7 @@ export default function AdminOverview({
       value: totalCompanies,
       sub: `${activeCompanies} active of ${totalCompanies} registered`,
       icon: Building2,
-      color: "bg-indigo-600 text-white shadow-indigo-500/25",
+      tone: "indigo",
       targetTab: "companies",
     },
     {
@@ -74,7 +104,7 @@ export default function AdminOverview({
       value: totalDrives,
       sub: `${activeDrives} active of ${totalDrives} scheduled`,
       icon: Briefcase,
-      color: "bg-emerald-600 text-white shadow-emerald-500/25",
+      tone: "emerald",
       targetTab: "drives",
     },
     {
@@ -82,40 +112,46 @@ export default function AdminOverview({
       value: appStats.total,
       sub: `${appStats.applied} pending review (${appStats.total} total)`,
       icon: FileCheck2,
-      color: "bg-amber-500 text-white shadow-amber-500/25",
+      tone: "amber",
       targetTab: "applications",
     },
   ];
 
   return (
     <div className="space-y-6">
-      {/* Top Banner with Quick Actions */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-950 via-red-950/70 to-slate-900 p-6 sm:p-8 text-white shadow-xl border border-amber-900/30">
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-amber-500/20 px-3 py-1 text-xs font-bold text-amber-300 border border-amber-500/30">
-              <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+      {/* Hero with quick actions */}
+      <div className="relative overflow-hidden rounded-3xl border border-jss-900/40 bg-slate-950 p-6 text-white shadow-lg sm:p-8">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgb(167_60_24/0.45),transparent_55%),radial-gradient(ellipse_at_bottom_left,rgb(30_48_168/0.35),transparent_50%)]"
+        />
+        <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <div className="inline-flex items-center gap-2 rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-1 text-[11px] font-bold text-amber-200">
+              <Sparkles className="h-3.5 w-3.5 text-amber-300" />
               JSSATEB • TPO Administrative Command
             </div>
-            <h2 className="mt-3 text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Placement Overview & Recruitment Hub
+            <h2 className="mt-3 text-2xl font-extrabold tracking-tight sm:text-3xl">
+              Placement Overview &amp; Recruitment Hub
             </h2>
-            <p className="mt-1.5 text-xs sm:text-sm text-slate-300 max-w-xl">
+            <p className="mt-1.5 max-w-xl text-xs leading-relaxed text-slate-300 sm:text-sm">
               JSS Academy of Technical Education, Bengaluru — Track recruitment metrics, publish corporate drives, evaluate applicant qualifications, and approve student job offers.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex shrink-0 flex-wrap items-center gap-2.5">
             <button
+              type="button"
               onClick={onOpenCreateDrive}
-              className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white shadow-lg shadow-blue-500/25 hover:bg-blue-500 transition active:scale-95"
+              className="cf-btn min-h-10 bg-white px-4 text-slate-900 shadow-md hover:bg-slate-100"
             >
               <Plus className="h-4 w-4" />
               <span>Create Placement Drive</span>
             </button>
             <button
+              type="button"
               onClick={onOpenCreateCompany}
-              className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-2.5 text-xs font-bold text-slate-200 hover:bg-slate-800 hover:text-white transition active:scale-95"
+              className="cf-btn min-h-10 border-white/15 bg-white/10 px-4 text-white hover:bg-white/15"
             >
               <Plus className="h-4 w-4" />
               <span>Add Recruiter Company</span>
@@ -124,217 +160,82 @@ export default function AdminOverview({
         </div>
       </div>
 
-      {/* 4 Top KPI Cards - Clickable Navigators */}
+      {/* KPI cards (each opens its module) */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {kpis.map((kpi) => {
-          const Icon = kpi.icon;
-          return (
-            <div
-              key={kpi.title}
-              onClick={() => onNavigateTab && onNavigateTab(kpi.targetTab)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onNavigateTab && onNavigateTab(kpi.targetTab);
-                }
-              }}
-              title={`Click to open ${kpi.title}`}
-              className="group relative cursor-pointer rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs transition-all duration-200 hover:-translate-y-1 hover:border-indigo-300 hover:shadow-lg active:scale-98 select-none"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500 group-hover:text-indigo-600 transition-colors">
-                  {kpi.title}
-                </span>
-                <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${kpi.color} group-hover:scale-110 transition-transform`}>
-                  <Icon className="h-5 w-5" />
-                </div>
-              </div>
-              <div className="mt-4">
-                <div className="text-3xl font-extrabold text-slate-900 tracking-tight">
-                  {kpi.value}
-                </div>
-                <div className="mt-1 flex items-center justify-between text-xs text-slate-500 font-medium">
-                  <span>{kpi.sub}</span>
-                  <span className="inline-flex items-center gap-1 font-bold text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <span>Manage</span>
-                    <ArrowRight className="h-3 w-3" />
-                  </span>
-                </div>
-              </div>
-            </div>
-          );
-        })}
+        {kpis.map((kpi) => (
+          <StatCard
+            key={kpi.title}
+            label={kpi.title}
+            value={kpi.value}
+            icon={kpi.icon}
+            tone={kpi.tone}
+            sub={kpi.sub}
+            actionLabel="Manage"
+            onClick={onNavigateTab ? () => onNavigateTab(kpi.targetTab) : undefined}
+          />
+        ))}
       </div>
 
-      {/* Funnel & Application Pipeline Breakdown */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        
-        {/* Left: Application Status Conversion Funnel */}
-        <div className="lg:col-span-7 rounded-2xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xs">
-          <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-            <div>
-              <h3 className="text-base font-bold text-slate-900">
-                Application Review Funnel
-              </h3>
-              <p className="text-xs text-slate-500">
-                Distribution across all placement drives
-              </p>
+      {/* Funnel & outcomes */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        <div className="cf-card p-5 sm:p-6 lg:col-span-7">
+          <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-4">
+            <div className="min-w-0">
+              <h3 className="text-base font-bold text-slate-900">Application Review Funnel</h3>
+              <p className="text-xs text-slate-500">Distribution across all placement drives</p>
             </div>
-            <button
-              onClick={() => onNavigateTab("applications")}
-              className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1"
-            >
+            <button type="button" onClick={() => onNavigateTab("applications")} className="cf-btn cf-btn-ghost shrink-0 text-brand-600">
               <span>Review All</span>
-              <ArrowRight className="h-3 w-3" />
+              <ArrowRight className="h-3.5 w-3.5" />
             </button>
           </div>
 
-          <div className="mt-6 space-y-4">
-            {/* Applied */}
-            <div>
-              <div className="flex justify-between text-xs font-semibold mb-1">
-                <span className="flex items-center gap-1.5 text-slate-700">
-                  <Clock className="h-3.5 w-3.5 text-blue-500" />
-                  Submitted / Under Initial Review
-                </span>
-                <span className="text-slate-900">{appStats.applied} applications</span>
-              </div>
-              <div className="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden">
-                <div
-                  className="h-full bg-blue-500 rounded-full transition-all duration-500"
-                  style={{
-                    width: `${
-                      appStats.total > 0
-                        ? Math.min(100, Math.round((appStats.applied / appStats.total) * 100))
-                        : 0
-                    }%`,
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Shortlisted */}
-            <div>
-              <div className="flex justify-between text-xs font-semibold mb-1">
-                <span className="flex items-center gap-1.5 text-slate-700">
-                  <TrendingUp className="h-3.5 w-3.5 text-amber-500" />
-                  Shortlisted for Interviews / OA
-                </span>
-                <span className="text-slate-900">{appStats.shortlisted} candidates</span>
-              </div>
-              <div className="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden">
-                <div
-                  className="h-full bg-amber-500 rounded-full transition-all duration-500"
-                  style={{
-                    width: `${
-                      appStats.total > 0
-                        ? Math.min(100, Math.round((appStats.shortlisted / appStats.total) * 100))
-                        : 0
-                    }%`,
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Selected */}
-            <div>
-              <div className="flex justify-between text-xs font-semibold mb-1">
-                <span className="flex items-center gap-1.5 text-slate-700">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                  Offers Extended / Placed
-                </span>
-                <span className="text-slate-900 font-bold text-emerald-600">
-                  {appStats.selected} offers
-                </span>
-              </div>
-              <div className="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden">
-                <div
-                  className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                  style={{
-                    width: `${
-                      appStats.total > 0
-                        ? Math.min(100, Math.round((appStats.selected / appStats.total) * 100))
-                        : 0
-                    }%`,
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Rejected */}
-            <div>
-              <div className="flex justify-between text-xs font-semibold mb-1">
-                <span className="flex items-center gap-1.5 text-slate-700">
-                  <XCircle className="h-3.5 w-3.5 text-rose-400" />
-                  Not Selected
-                </span>
-                <span className="text-slate-500">{appStats.rejected}</span>
-              </div>
-              <div className="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden">
-                <div
-                  className="h-full bg-rose-400 rounded-full transition-all duration-500"
-                  style={{
-                    width: `${
-                      appStats.total > 0
-                        ? Math.min(100, Math.round((appStats.rejected / appStats.total) * 100))
-                        : 0
-                    }%`,
-                  }}
-                />
-              </div>
-            </div>
+          <div className="mt-5 space-y-4">
+            <FunnelRow icon={Clock} iconClass="text-blue-500" label="Submitted / Under Initial Review" count={appStats.applied} unit="applications" total={appStats.total} barClass="bg-blue-500" />
+            <FunnelRow icon={TrendingUp} iconClass="text-amber-500" label="Shortlisted for Interviews / OA" count={appStats.shortlisted} unit="candidates" total={appStats.total} barClass="bg-amber-500" />
+            <FunnelRow icon={CheckCircle2} iconClass="text-emerald-500" label="Offers Extended / Placed" count={appStats.selected} unit="offers" total={appStats.total} barClass="bg-emerald-500" valueClass="font-bold text-emerald-600" />
+            <FunnelRow icon={XCircle} iconClass="text-rose-400" label="Not Selected" count={appStats.rejected} total={appStats.total} barClass="bg-rose-400" valueClass="text-slate-500" />
           </div>
         </div>
 
-        {/* Right: Quick Insights & Next Steps */}
-        <div className="lg:col-span-5 rounded-2xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xs flex flex-col justify-between">
+        <div className="cf-card flex flex-col justify-between p-5 sm:p-6 lg:col-span-5">
           <div>
-            <h3 className="text-base font-bold text-slate-900">
-              Recruitment Outcomes
-            </h3>
-            <p className="text-xs text-slate-500">
-              Current application statuses from the selected dataset
-            </p>
+            <h3 className="text-base font-bold text-slate-900">Recruitment Outcomes</h3>
+            <p className="text-xs text-slate-500">Current application statuses from the selected dataset</p>
 
-            <div className="mt-6 flex items-center gap-4 rounded-2xl bg-slate-50 p-4 border border-slate-100">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700 font-black text-xl shadow-xs">
+            <div className="mt-5 flex items-center gap-4 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white text-xl font-black text-emerald-700 shadow-xs ring-1 ring-emerald-100 tabular-nums">
                 {appStats.selected}
               </div>
-              <div>
-                <h4 className="text-sm font-bold text-slate-900">
-                  Selected applications
-                </h4>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Applications currently marked as selected.
-                </p>
+              <div className="min-w-0">
+                <h4 className="text-sm font-bold text-slate-900">Selected applications</h4>
+                <p className="mt-0.5 text-xs text-slate-500">Applications currently marked as selected.</p>
               </div>
             </div>
 
-            <div className="mt-4 space-y-2 text-xs text-slate-600">
-              <div className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50">
-                <span className="text-slate-500">Active companies:</span>
-                <span className="font-bold text-slate-800">{activeCompanies}</span>
+            <dl className="mt-4 divide-y divide-slate-100 text-xs">
+              <div className="flex items-center justify-between px-1 py-2.5">
+                <dt className="text-slate-500">Active companies</dt>
+                <dd className="font-bold text-slate-800 tabular-nums">{activeCompanies}</dd>
               </div>
-              <div className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50">
-                <span className="text-slate-500">Active drives:</span>
-                <span className="font-bold text-blue-600">{activeDrives}</span>
+              <div className="flex items-center justify-between px-1 py-2.5">
+                <dt className="text-slate-500">Active drives</dt>
+                <dd className="font-bold text-brand-600 tabular-nums">{activeDrives}</dd>
               </div>
-            </div>
+            </dl>
           </div>
 
-          <div className="mt-6 pt-4 border-t border-slate-100">
+          <div className="mt-6 border-t border-slate-100 pt-4">
             <button
+              type="button"
               onClick={() => onNavigateTab("drives")}
-              className="w-full flex items-center justify-center gap-2 rounded-xl bg-slate-900 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-slate-800 transition"
+              className="cf-btn min-h-10 w-full bg-slate-900 text-white hover:bg-slate-800"
             >
               <span>Manage Campus Placement Drives</span>
               <ArrowRight className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>
-
       </div>
     </div>
   );

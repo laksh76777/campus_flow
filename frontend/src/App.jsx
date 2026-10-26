@@ -17,22 +17,32 @@ function App() {
     <AuthProvider>
       <Toaster
         position="top-right"
+        gutter={10}
+        containerStyle={{ top: 16, right: 16, left: 16 }}
         toastOptions={{
           duration: 3500,
           style: {
             background: "#0f172a",
             color: "#f8fafc",
-            borderRadius: "1rem",
-            fontSize: "0.875rem",
+            borderRadius: "0.875rem",
+            fontSize: "0.8125rem",
+            fontWeight: 500,
+            lineHeight: 1.45,
+            padding: "10px 14px",
+            maxWidth: "420px",
+            boxShadow: "0 12px 24px -6px rgb(15 23 42 / 0.25), 0 4px 8px -2px rgb(15 23 42 / 0.12)",
           },
+          success: { iconTheme: { primary: "#34d399", secondary: "#0f172a" } },
+          error: { duration: 5000, iconTheme: { primary: "#fb7185", secondary: "#0f172a" } },
         }}
       />
       <Suspense
         fallback={
           <div
-            className="flex min-h-screen items-center justify-center text-sm font-semibold text-slate-500"
+            className="flex min-h-screen flex-col items-center justify-center gap-3 bg-canvas text-sm font-semibold text-slate-500"
             role="status"
           >
+            <span className="h-8 w-8 animate-spin rounded-full border-[3px] border-brand-100 border-t-brand-600" aria-hidden="true" />
             Loading CampusFlow…
           </div>
         }

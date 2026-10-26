@@ -1,4 +1,5 @@
 import { useState } from "react";
+import useOverlay from "../../hooks/useOverlay";
 import {
   ShieldCheck,
   Lock,
@@ -27,6 +28,8 @@ export default function ProfileLockConfirmationModal({
 }) {
   const [agreed, setAgreed] = useState(false);
 
+  useOverlay(isOpen, onClose);
+
   if (!isOpen) return null;
 
   const displayName = user.fullName || studentProfile.user?.fullName || "Student";
@@ -49,8 +52,8 @@ export default function ProfileLockConfirmationModal({
   const parentContact = formData.fatherPhone || formData.motherPhone || studentProfile.family?.parentPhone || "N/A";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl max-h-[90vh] flex flex-col bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
+    <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200">
+      <div className="relative w-full max-w-2xl max-h-[90vh] flex flex-col bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200">
         {/* Header Ribbon */}
         <div className="bg-gradient-to-r from-red-950 via-red-900 to-orange-900 text-white px-6 py-4 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
@@ -71,7 +74,7 @@ export default function ProfileLockConfirmationModal({
               </p>
             </div>
           </div>
-          <button
+          <button aria-label="Close dialog"
             onClick={onClose}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-white/70 hover:bg-white/10 hover:text-white transition"
           >

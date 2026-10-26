@@ -244,14 +244,14 @@ export default function Login() {
           {/* Form */}
           <form onSubmit={handleLogin} className="mt-3.5 space-y-3">
             <div>
-              <label className="mb-1 block text-[11px] font-semibold text-slate-700">
+              <label htmlFor="login-field-1" className="mb-1 block text-[11px] font-semibold text-slate-700">
                 {role === "student" ? "College Email or USN" : "Admin Official Email Address"}
               </label>
               <div className="relative">
                 <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
                   <Mail className="h-4 w-4" />
                 </div>
-                <input
+                <input id="login-field-1"
                   type={role === "student" ? "text" : "email"}
                   required
                   autoComplete="username"
@@ -266,7 +266,7 @@ export default function Login() {
 
             <div>
               <div className="mb-1 flex items-center justify-between">
-                <label className="text-[11px] font-semibold text-slate-700">Password</label>
+                <label htmlFor="login-field-2" className="text-[11px] font-semibold text-slate-700">Password</label>
                 <Link
                   to={`/forgot-password?role=${role}`}
                   className="text-[10px] font-medium text-orange-600 hover:text-orange-700 hover:underline cursor-pointer"
@@ -278,7 +278,7 @@ export default function Login() {
                 <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
                   <Lock className="h-4 w-4" />
                 </div>
-                <input
+                <input id="login-field-2"
                   type={showPassword ? "text" : "password"}
                   required
                   placeholder="••••••••"

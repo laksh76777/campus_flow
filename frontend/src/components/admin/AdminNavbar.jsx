@@ -1,18 +1,13 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Link } from "react-router-dom";
 import {
   Menu,
   Bell,
   ShieldCheck,
   ChevronRight,
-  ExternalLink,
-  LogOut,
   ShieldAlert,
   UserPlus,
   Briefcase,
-  FileCheck,
   ArrowRight,
-  Sparkles,
 } from "lucide-react";
 import { useAuth } from "../../context/authContextDef";
 
@@ -64,17 +59,28 @@ export default function AdminNavbar({
         setShowNotifications(false);
       }
     }
+    function handleEscape(event) {
+      if (event.key === "Escape") setShowNotifications(false);
+    }
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
   }, []);
 
   const tabTitles = {
-    overview: "Dashboard & Analytics",
+    overview: "Dashboard Overview",
+    analytics: "Placement Analytics",
     students: "Registered Students Directory",
     drives: "Manage Placement Drives",
+    automated_drives: "Automated Placement Drives",
     companies: "Corporate Partners Directory",
     applications: "Applicant Review & Shortlisting",
     sessions: "Placement Sessions & Academic Cohorts",
+    excel_hub: "Excel Import & Exports",
+    announcements: "Broadcasts & Alerts",
     support: "Student Support Inbox",
   };
 
@@ -176,45 +182,6 @@ export default function AdminNavbar({
       });
     });
 
-    // 4. Default realistic JSSATEB alerts if empty database
-    if (list.length === 0) {
-      list.push(
-        {
-          id: "default-1",
-          type: "permission_request",
-          title: "Profile Edit Permission Request",
-          description: "Ananya Sharma (1JS21CS042 • CSE) requested TPO approval to update 6th sem CGPA & marksheet.",
-          time: "15m ago",
-          targetTab: "students",
-          badgeText: "Permission Request",
-          badgeClass: "bg-amber-100 text-amber-800 border-amber-300",
-          iconType: "shield",
-        },
-        {
-          id: "default-2",
-          type: "student_added",
-          title: "New Student Registered",
-          description: "Rohan Gowda (1JS21IS088 • ISE) enrolled on JSSATEB Placement Portal.",
-          time: "1h ago",
-          targetTab: "students",
-          badgeText: "New Student",
-          badgeClass: "bg-emerald-100 text-emerald-800 border-emerald-300",
-          iconType: "user",
-        },
-        {
-          id: "default-3",
-          type: "permission_request",
-          title: "Academic Verification Pending",
-          description: "Sneha Patil (1JS21EC104 • ECE) uploaded verified semester grade cards awaiting approval.",
-          time: "3h ago",
-          targetTab: "students",
-          badgeText: "Verification",
-          badgeClass: "bg-orange-100 text-orange-800 border-orange-300",
-          iconType: "shield",
-        }
-      );
-    }
-
     return list;
   }, [students, applications]);
 
@@ -253,99 +220,95 @@ export default function AdminNavbar({
   };
 
   return (
-    <header className="sticky top-0 z-30 flex flex-col w-full shadow-2xs">
-      {/* Official JSS Institutional Top Ribbon (End-to-End Edge, Very Thin, Responsive) */}
-      <div className="w-full bg-gradient-to-r from-red-950 via-red-900 to-orange-900 text-white text-[10px] sm:text-[11px] font-semibold py-1 px-3 sm:px-6 lg:px-8 border-b border-orange-800/40 shrink-0">
+    <header className="sticky top-0 z-30 flex w-full flex-col">
+      {/* Institutional ribbon (thin, keeps the JSS identity) */}
+      <div className="w-full shrink-0 bg-gradient-to-r from-jss-950 via-jss-900 to-jss-800 px-3 py-1 text-[10px] font-semibold text-white sm:px-6 sm:text-[11px] lg:px-8">
         <div className="flex w-full items-center justify-between gap-2">
-          <div className="flex items-center gap-2 truncate min-w-0">
-            <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-orange-400 animate-pulse" />
-            <span className="font-bold tracking-wide truncate">
+          <div className="flex min-w-0 items-center gap-2 truncate">
+            <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" aria-hidden="true" />
+            <span className="truncate tracking-wide">
               JSS Mahavidyapeetha <span className="hidden sm:inline">• JSS Academy of Technical Education, Bengaluru</span>
             </span>
           </div>
-          <span className="hidden lg:inline text-orange-200/90 font-medium text-[10px] shrink-0">
+          <span className="hidden shrink-0 text-[10px] font-medium text-amber-100/80 lg:inline">
             Affiliated to VTU Belagavi
           </span>
         </div>
       </div>
 
-      {/* Main Admin Navbar Row - Light Creamy Background, Compact & Non-overlapping */}
-      <div className="flex h-14 sm:h-15 w-full items-center justify-between border-b border-orange-200/90 bg-gradient-to-r from-orange-50/90 via-white/95 to-rose-50/80 px-3 sm:px-6 lg:px-8 backdrop-blur-md">
-        {/* Left: Mobile Drawer Trigger, JSSATEB Crest & Single-Line Tab Title */}
-        <div className="flex items-center gap-2.5 min-w-0">
+      {/* Main bar */}
+      <div className="flex h-14 w-full items-center justify-between gap-3 border-b border-line bg-white/85 px-3 backdrop-blur-md sm:h-16 sm:px-6 lg:px-8">
+        {/* Left: drawer trigger + breadcrumb title */}
+        <div className="flex min-w-0 items-center gap-2.5">
           <button
+            type="button"
             onClick={onMenuClick}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-orange-200 bg-white/90 text-slate-700 hover:bg-orange-50 lg:hidden transition shadow-2xs shrink-0"
-            aria-label="Toggle navigation drawer"
+            className="cf-icon-btn lg:hidden"
+            aria-label="Open navigation drawer"
           >
-            <Menu className="h-4 w-4" />
+            <Menu className="h-[18px] w-[18px]" />
           </button>
 
-          {/* JSSATEB College Crest Thumbnail */}
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white border border-orange-200 shadow-2xs p-0.5 shrink-0">
-            <img
-              src="/images/jssateb/college-logo.png"
-              alt="JSSATEB"
-              className="h-full w-full object-contain"
-            />
-          </div>
-
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-xs font-black tracking-tight text-red-950 uppercase shrink-0">
-              JSSATEB
-            </span>
-            <span className="text-orange-400 font-bold shrink-0 hidden sm:inline">•</span>
-            <span className="text-xs font-semibold text-orange-950/70 shrink-0 hidden sm:inline">
-              TPO
-            </span>
-            <ChevronRight className="h-3.5 w-3.5 text-orange-400 shrink-0 hidden sm:inline-block" />
-            <h1 className="text-sm sm:text-base font-extrabold text-slate-900 tracking-tight truncate">
+          <div className="flex min-w-0 flex-col justify-center">
+            <nav aria-label="Breadcrumb" className="hidden items-center gap-1 text-[11px] font-semibold text-slate-400 sm:flex">
+              <span className="text-jss-800">JSSATEB</span>
+              <ChevronRight className="h-3 w-3" aria-hidden="true" />
+              <span>TPO Console</span>
+            </nav>
+            <h1 className="truncate text-[15px] font-extrabold tracking-tight text-slate-900 sm:text-base">
               {tabTitles[activeTab] || "TPO Console"}
             </h1>
-
-            <span className="hidden xl:inline-flex items-center gap-1 rounded-full bg-amber-100/90 px-2 py-0.5 text-[10px] font-bold text-amber-900 border border-amber-300 shrink-0 ml-1">
-              <ShieldCheck className="h-3 w-3 text-amber-700" />
-              Verified Admin
-            </span>
           </div>
+
+          <span className="ml-1 hidden shrink-0 items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-900 xl:inline-flex">
+            <ShieldCheck className="h-3 w-3 text-amber-700" />
+            Verified Admin
+          </span>
         </div>
 
-        {/* Right: Actions & User Chip - Compact Single Line */}
-        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-          {/* Notifications Dropdown */}
-          <div className="relative" ref={notificationRef}>
+        {/* Right: alerts + account */}
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          <div className="sm:relative" ref={notificationRef}>
             <button
+              type="button"
               onClick={() => setShowNotifications(!showNotifications)}
-              className="relative flex h-8 w-8 items-center justify-center rounded-lg border border-orange-200 bg-white/90 text-slate-600 hover:bg-orange-50 hover:text-orange-900 transition shadow-2xs shrink-0"
-              title="Admin Alerts"
+              className="cf-icon-btn"
+              aria-label={unreadCount > 0 ? `Admin alerts, ${unreadCount} unread` : "Admin alerts"}
+              aria-expanded={showNotifications}
+              aria-haspopup="true"
             >
-              <Bell className="h-4 w-4" />
+              <Bell className="h-[18px] w-[18px]" />
               {unreadCount > 0 && (
-                <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-orange-500 ring-2 ring-white animate-pulse" />
+                <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-jss-600 px-1 text-[10px] font-black text-white ring-2 ring-white tabular-nums">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
               )}
             </button>
 
             {showNotifications && (
-              <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl border border-orange-200/90 bg-white p-3.5 sm:p-4 shadow-xl z-50 animate-in fade-in zoom-in-95 duration-150">
-                <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
-                  <div className="flex items-center gap-1.5">
-                    <h3 className="font-bold text-slate-900 text-sm">Admin Alerts</h3>
-                    <span className="text-[10px] text-slate-400 font-medium">• Student Activity</span>
+              <div
+                role="dialog"
+                aria-label="Admin alerts"
+                className="cf-popover fixed inset-x-3 top-[5.25rem] z-50 p-3.5 animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-200 sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-96 sm:p-4"
+              >
+                <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-bold text-slate-900">Admin Alerts</h3>
+                    <p className="text-[11px] text-slate-400">Student activity across the portal</p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-2">
                     <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                        unreadCount > 0
-                          ? "bg-orange-100 text-orange-800"
-                          : "bg-slate-100 text-slate-600"
+                      className={`cf-badge ${
+                        unreadCount > 0 ? "border-jss-200 bg-jss-50 text-jss-800" : "bg-slate-100 text-slate-600"
                       }`}
                     >
-                      {unreadCount > 0 ? `${unreadCount} Unread` : "All Read"}
+                      {unreadCount > 0 ? `${unreadCount} unread` : "All read"}
                     </span>
                     {unreadCount > 0 && (
                       <button
+                        type="button"
                         onClick={handleMarkAllRead}
-                        className="text-[10px] font-bold text-orange-700 hover:text-orange-900 hover:underline transition"
+                        className="rounded-md px-1.5 py-1 text-[11px] font-bold text-jss-700 transition hover:bg-jss-50 hover:text-jss-900"
                       >
                         Mark all read
                       </button>
@@ -353,83 +316,82 @@ export default function AdminNavbar({
                   </div>
                 </div>
 
-                <div className="mt-2 divide-y divide-slate-100 max-h-80 overflow-y-auto">
+                <div className="-mx-1 mt-2 max-h-[min(22rem,60vh)] space-y-1 overflow-y-auto px-1">
+                  {adminNotifications.length === 0 && (
+                    <div className="py-8 text-center">
+                      <Bell className="mx-auto mb-2 h-8 w-8 stroke-1 text-slate-300" />
+                      <p className="text-xs font-semibold text-slate-600">No alerts right now</p>
+                      <p className="mx-auto mt-0.5 max-w-xs text-[11px] text-slate-400">
+                        New registrations, verification and modification requests, and applications appear here.
+                      </p>
+                    </div>
+                  )}
                   {adminNotifications.map((n) => {
                     const isShield = n.iconType === "shield";
                     const isUser = n.iconType === "user";
                     const isRead = readAlertIds.includes(n.id);
 
                     return (
-                      <div
+                      <button
+                        type="button"
                         key={n.id}
                         onClick={() => handleAlertClick(n)}
-                        className={`p-2.5 rounded-xl transition cursor-pointer group flex items-start gap-2.5 ${
-                          isRead
-                            ? "opacity-65 hover:opacity-100 hover:bg-slate-50/80"
-                            : "bg-orange-50/40 hover:bg-orange-100/60 border-l-2 border-l-orange-500 font-medium"
+                        className={`group relative flex w-full items-start gap-2.5 rounded-xl p-2.5 text-left transition ${
+                          isRead ? "opacity-70 hover:bg-slate-50 hover:opacity-100" : "bg-jss-50/50 hover:bg-jss-50"
                         }`}
                       >
+                        {!isRead && (
+                          <span className="absolute left-0 top-3 h-5 w-[3px] rounded-r-full bg-jss-500" aria-hidden="true" />
+                        )}
                         <div
-                          className={`flex h-7 w-7 items-center justify-center rounded-lg shrink-0 mt-0.5 border ${
+                          className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${
                             isShield
-                              ? "bg-amber-50 text-amber-700 border-amber-200"
+                              ? "border-amber-200 bg-amber-50 text-amber-700"
                               : isUser
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                              : "bg-blue-50 text-blue-700 border-blue-200"
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : "border-blue-200 bg-blue-50 text-blue-700"
                           }`}
                         >
                           {isShield ? (
-                            <ShieldAlert className="h-3.5 w-3.5" />
+                            <ShieldAlert className="h-4 w-4" />
                           ) : isUser ? (
-                            <UserPlus className="h-3.5 w-3.5" />
+                            <UserPlus className="h-4 w-4" />
                           ) : (
-                            <Briefcase className="h-3.5 w-3.5" />
+                            <Briefcase className="h-4 w-4" />
                           )}
                         </div>
 
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-start justify-between gap-1">
-                            <div className="flex items-center gap-1.5 truncate">
-                              {!isRead && (
-                                <span className="h-1.5 w-1.5 rounded-full bg-orange-500 shrink-0" />
-                              )}
-                              <p className="text-xs font-bold text-slate-900 group-hover:text-orange-950 transition truncate">
-                                {n.title}
-                              </p>
-                            </div>
-                            <span className="text-[10px] text-slate-400 shrink-0 font-medium">
-                              {n.time}
-                            </span>
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="truncate text-xs font-bold text-slate-900">{n.title}</p>
+                            <span className="shrink-0 text-[10px] font-medium text-slate-400">{n.time}</span>
                           </div>
-                          <p className="text-xs text-slate-600 mt-0.5 line-clamp-2 leading-relaxed">
-                            {n.description}
-                          </p>
-                          <div className="flex items-center gap-1.5 mt-1.5">
-                            <span
-                              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold border ${n.badgeClass}`}
-                            >
+                          <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-slate-600">{n.description}</p>
+                          <div className="mt-1.5 flex items-center gap-1.5">
+                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-bold ${n.badgeClass}`}>
                               {n.badgeText}
                             </span>
-                            <span className="text-[10px] text-orange-600/80 font-semibold group-hover:text-orange-700 opacity-0 group-hover:opacity-100 transition flex items-center gap-0.5">
-                              <span>{isRead ? "View" : "Review & Mark Read"}</span>
+                            <span className="flex items-center gap-0.5 text-[10px] font-semibold text-jss-700 opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
+                              <span>{isRead ? "View" : "Review & mark read"}</span>
                               <ArrowRight className="h-2.5 w-2.5" />
                             </span>
                           </div>
                         </div>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
 
-                <div className="pt-2.5 mt-2 border-t border-slate-100 flex items-center justify-between">
+                <div className="mt-2 border-t border-slate-100 pt-2.5">
                   <button
+                    type="button"
                     onClick={() => {
                       if (onNavigateTab) onNavigateTab("students");
                       setShowNotifications(false);
                     }}
-                    className="text-[11px] font-bold text-orange-700 hover:text-orange-800 flex items-center gap-1 transition"
+                    className="flex items-center gap-1 rounded-md px-1 py-1 text-[11px] font-bold text-jss-700 transition hover:text-jss-900"
                   >
-                    <span>Manage Student Profiles & Permissions</span>
+                    <span>Manage student profiles &amp; permissions</span>
                     <ArrowRight className="h-3 w-3" />
                   </button>
                 </div>
@@ -437,31 +399,20 @@ export default function AdminNavbar({
             )}
           </div>
 
-          <div className="hidden sm:block h-5 w-px bg-orange-200/80" />
+          <div className="hidden h-6 w-px bg-line sm:block" aria-hidden="true" />
 
-          {/* Admin User Chip - Compact Single Line */}
-          <div className="flex items-center gap-2 rounded-lg border border-orange-200/90 bg-white/95 p-1 pr-2.5 shadow-2xs shrink-0">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-red-800 via-orange-700 to-amber-600 font-bold text-white text-xs shadow-xs shrink-0">
+          {/* Account chip */}
+          <div className="flex shrink-0 items-center gap-2.5 rounded-xl border border-line bg-white p-1 shadow-xs lg:pr-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-jss-700 to-amber-600 text-xs font-bold text-white">
               {displayName.charAt(0).toUpperCase()}
             </div>
-            <div className="hidden lg:block text-left min-w-0">
-              <p className="text-xs font-bold text-slate-900 leading-none truncate max-w-[120px] whitespace-nowrap">
-                {displayName}
-              </p>
-              <p className="text-[10px] text-orange-800/80 font-medium leading-none mt-1 whitespace-nowrap">
+            <div className="hidden min-w-0 text-left lg:block">
+              <p className="max-w-[140px] truncate text-xs font-bold leading-tight text-slate-900">{displayName}</p>
+              <p className="mt-0.5 whitespace-nowrap text-[10px] font-medium leading-none text-slate-500">
                 Placement Officer
               </p>
             </div>
           </div>
-
-          {/* Sign Out Button */}
-          {/* <button
-            onClick={onLogout}
-            title="Sign Out"
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-rose-200 bg-rose-50/80 text-rose-600 hover:bg-rose-100 transition shadow-2xs shrink-0"
-          >
-            <LogOut className="h-4 w-4" />
-          </button> */}
         </div>
       </div>
     </header>

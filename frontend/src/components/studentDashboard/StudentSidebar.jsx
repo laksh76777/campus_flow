@@ -7,11 +7,12 @@ import {
   X,
   GraduationCap,
   ExternalLink,
-  ChevronRight,
   Bell,
   MessageCircle,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
+import { SidebarGroupLabel, SidebarNavItem } from "../ui/SidebarNav";
+import useOverlay from "../../hooks/useOverlay";
 
 export default function StudentSidebar({
   isOpen,
@@ -24,35 +25,15 @@ export default function StudentSidebar({
   unreadCount = 0,
 }) {
   const navigate = useNavigate();
+  useOverlay(isOpen, () => setIsOpen(false));
 
   const navItems = [
-    {
-      id: "overview",
-      label: "Dashboard",
-      icon: LayoutDashboard,
-    },
-    {
-      id: "drives",
-      label: "Placement Drives",
-      icon: Briefcase,
-    },
-    {
-      id: "applications",
-      label: "My Applications",
-      icon: FileCheck2,
-    },
-    {
-      id: "notifications",
-      label: "Notifications",
-      icon: Bell,
-      badge: unreadCount,
-    },
-    { id: "support", label: "Ask TPO / Support", icon: MessageCircle },
-    {
-      id: "profile",
-      label: "Academic Profile",
-      icon: User,
-    },
+    { id: "overview", label: "Dashboard", icon: LayoutDashboard },
+    { id: "drives", label: "Placement Drives", icon: Briefcase },
+    { id: "applications", label: "My Applications", icon: FileCheck2 },
+    { id: "notifications", label: "Notifications", icon: Bell, badge: unreadCount },
+    { id: "support", label: "Ask TPO / Support", icon: MessageCircle, tag: "AI" },
+    { id: "profile", label: "Academic Profile", icon: User },
   ];
 
   const displayName = user?.fullName || studentProfile?.user?.fullName || "Student";
@@ -60,27 +41,21 @@ export default function StudentSidebar({
   const branch = studentProfile?.branch || "Department not set";
   const avatarLetter = displayName.charAt(0).toUpperCase();
 
-  // Reusable sidebar navigation content
   const sidebarContent = (
     <div className="flex h-full flex-col bg-white select-none">
-      {/* Top Section */}
+      {/* Brand */}
       <div className="shrink-0">
-        {/* Brand Header */}
-        <div className="flex h-16 items-center justify-between border-b border-slate-100 px-4">
-          <Link
-            to="/"
-            aria-label="CampusFlow home"
-            className="flex items-center gap-3 group"
-          >
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20 group-hover:scale-105 transition-transform shrink-0">
+        <div className="flex h-16 items-center justify-between gap-2 border-b border-line px-4">
+          <Link to="/" aria-label="CampusFlow home" className="group flex min-w-0 items-center gap-3 rounded-xl">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-md shadow-brand-600/20 transition-transform duration-200 group-hover:scale-[1.04]">
               <GraduationCap className="h-5 w-5" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="font-extrabold tracking-tight text-slate-900 text-base leading-tight">
+                <span className="text-[15px] font-extrabold leading-tight tracking-tight text-slate-900">
                   CampusFlow
                 </span>
-                <span className="rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-600 border border-blue-100">
+                <span className="rounded-md border border-brand-100 bg-brand-50 px-1.5 py-0.5 text-[9px] font-black tracking-wider text-brand-700">
                   STUDENT
                 </span>
               </div>
@@ -88,136 +63,103 @@ export default function StudentSidebar({
             </div>
           </Link>
 
-          {/* Close button for mobile drawer */}
           <button
             type="button"
             aria-label="Close navigation drawer"
             onClick={() => setIsOpen(false)}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 lg:hidden transition"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 lg:hidden"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
-
-        {/* Student Profile Quick Card */}
-        <div className="p-3 border-b border-slate-100">
-          <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-2.5 border border-slate-100">
-            <div className="relative shrink-0">
-              {user?.avatar?.url ? (
-                <img
-                  src={user.avatar.url}
-                  alt={displayName}
-                  className="h-9 w-9 rounded-full object-cover ring-2 ring-blue-500/30"
-                />
-              ) : (
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 text-xs font-bold text-white shadow-xs">
-                  {avatarLetter}
-                </div>
-              )}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-bold text-slate-900">{displayName}</p>
-              <p className="truncate text-[10px] text-slate-400">{branch}</p>
-              <p className="truncate text-[10px] text-slate-400 font-mono">{displayEmail}</p>
-            </div>
-          </div>
-        </div>
       </div>
 
-      {/* Nav Links (Scrollable, never pushes footer out) */}
-      <nav aria-label="Student navigation" className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-1">
-        <p className="px-3 pt-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-          Menu
-        </p>
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = activeTab === item.id;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              aria-current={isActive ? "page" : undefined}
-              onClick={() => {
-                setActiveTab(item.id);
-                setIsOpen(false);
-              }}
-              className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
-                isActive
-                  ? "bg-blue-600 text-white shadow-sm shadow-blue-500/25"
-                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-              }`}
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <Icon
-                  className={`h-4 w-4 shrink-0 transition-colors ${
-                    isActive ? "text-white" : "text-slate-400 group-hover:text-blue-600"
-                  }`}
-                />
-                <span className="truncate">{item.label}</span>
-              </div>
-
-              <div className="flex items-center gap-1.5 shrink-0">
-                {item.badge > 0 && (
-                  <span
-                    className={`inline-flex items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none ${
-                      isActive
-                        ? "bg-white text-blue-600 shadow-xs"
-                        : "bg-rose-500 text-white shadow-xs"
-                    }`}
-                  >
-                    {item.badge > 99 ? "99+" : item.badge}
-                  </span>
-                )}
-                {isActive && <ChevronRight className="h-3.5 w-3.5 text-blue-200" />}
-              </div>
-            </button>
-          );
-        })}
+      {/* Navigation */}
+      <nav aria-label="Student navigation" className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-3 py-3">
+        <SidebarGroupLabel>Menu</SidebarGroupLabel>
+        {navItems.map((item) => (
+          <SidebarNavItem
+            key={item.id}
+            icon={item.icon}
+            label={item.label}
+            badge={item.badge}
+            tag={item.tag}
+            isActive={activeTab === item.id}
+            onClick={() => {
+              setActiveTab(item.id);
+              setIsOpen(false);
+            }}
+          />
+        ))}
       </nav>
 
-      {/* Bottom Footer Actions (Permanently pinned, fully visible) */}
-      <div className="shrink-0 p-3 border-t border-slate-100 space-y-1.5 bg-white">
-        <button
-          type="button"
-          onClick={() => navigate("/")}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition"
-        >
-          <ExternalLink className="h-3.5 w-3.5 text-slate-400" />
-          <span>Portal Home</span>
-        </button>
+      {/* Account + footer actions */}
+      <div className="shrink-0 space-y-2 border-t border-line p-3">
+        <div className="flex items-center gap-3 rounded-xl bg-surface-muted p-2.5 ring-1 ring-line">
+          {user?.avatar?.url ? (
+            <img
+              src={user.avatar.url}
+              alt=""
+              className="h-9 w-9 shrink-0 rounded-lg object-cover ring-1 ring-slate-200"
+            />
+          ) : (
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 text-xs font-bold text-white">
+              {avatarLetter}
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-bold text-slate-900">{displayName}</p>
+            <p className="truncate text-[11px] text-slate-500" title={`${branch} · ${displayEmail}`}>
+              {branch}
+            </p>
+          </div>
+        </div>
 
-        <button
-          type="button"
-          onClick={onLogout}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-rose-100 bg-rose-50/60 px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-100/70 transition"
-        >
-          <LogOut className="h-3.5 w-3.5" />
-          <span>Sign Out</span>
-        </button>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => navigate("/")}
+            className="flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-line bg-white px-2 py-2 text-xs font-semibold text-slate-600 transition hover:border-line-strong hover:bg-slate-50 hover:text-slate-900"
+          >
+            <ExternalLink className="h-3.5 w-3.5 text-slate-400" />
+            <span>Portal</span>
+          </button>
+          <button
+            type="button"
+            onClick={onLogout}
+            className="flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-rose-100 bg-rose-50/70 px-2 py-2 text-xs font-bold text-rose-600 transition hover:bg-rose-100/80"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            <span>Sign Out</span>
+          </button>
+        </div>
       </div>
     </div>
   );
 
   return (
     <>
-      {/* Desktop Sticky Sidebar (Flex item in normal document flow: IMPOSSIBLE to overlap main content!) */}
-      <aside className="hidden lg:flex flex-col w-64 xl:w-72 shrink-0 sticky top-0 h-screen border-r border-slate-200 bg-white z-20">
+      {/* Desktop: sticky flex child, never overlaps content */}
+      <aside className="sticky top-0 z-20 hidden h-screen w-64 shrink-0 flex-col border-r border-line bg-white lg:flex xl:w-72">
         {sidebarContent}
       </aside>
 
-      {/* Mobile Drawer (Only visible when toggled via hamburger on small screens) */}
+      {/* Mobile drawer */}
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex lg:hidden">
-          {/* Backdrop */}
+        <div
+          className="fixed inset-0 z-50 flex lg:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Student navigation"
+        >
           <button
             type="button"
             aria-label="Close student navigation drawer"
-            className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity"
+            tabIndex={-1}
+            className="cf-backdrop"
             onClick={() => setIsOpen(false)}
           />
-
-          {/* Drawer Content */}
-          <div className="relative w-72 max-w-[85vw] flex-1 shadow-2xl z-10 animate-in slide-in-from-left duration-200">
+          <div className="relative z-10 h-full w-72 max-w-[85vw] shadow-2xl animate-in slide-in-from-left duration-300">
             {sidebarContent}
           </div>
         </div>

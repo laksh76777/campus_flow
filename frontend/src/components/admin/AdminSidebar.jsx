@@ -8,15 +8,50 @@ import {
   FileCheck2,
   LogOut,
   X,
-  ShieldCheck,
   ExternalLink,
-  ChevronRight,
   Calendar,
   FileSpreadsheet,
   Bell,
   MessageCircle,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
+import { SidebarGroupLabel, SidebarNavItem } from "../ui/SidebarNav";
+import useOverlay from "../../hooks/useOverlay";
+
+// Same items and order as before, grouped under section labels for scanning.
+const NAV_GROUPS = [
+  {
+    label: "Insights",
+    items: [
+      { id: "overview", label: "Overview", icon: LayoutDashboard },
+      { id: "analytics", label: "Placement Analytics", icon: BarChart3 },
+    ],
+  },
+  {
+    label: "Placement Operations",
+    items: [
+      { id: "students", label: "Registered Students", icon: Users },
+      { id: "drives", label: "Placement Drives", icon: Briefcase },
+      { id: "automated_drives", label: "Automated Placement Drive", icon: Workflow },
+      { id: "companies", label: "Companies Directory", icon: Building2 },
+      { id: "applications", label: "Applicant Review", icon: FileCheck2 },
+    ],
+  },
+  {
+    label: "Administration",
+    items: [
+      { id: "sessions", label: "Placement Sessions", icon: Calendar },
+      { id: "excel_hub", label: "Excel Import & Exports", icon: FileSpreadsheet },
+    ],
+  },
+  {
+    label: "Communication",
+    items: [
+      { id: "announcements", label: "Broadcasts & Alerts", icon: Bell },
+      { id: "support", label: "Student Support Inbox", icon: MessageCircle, tag: "AI" },
+    ],
+  },
+];
 
 export default function AdminSidebar({
   isOpen,
@@ -27,93 +62,38 @@ export default function AdminSidebar({
   onLogout,
 }) {
   const navigate = useNavigate();
-
-  const navItems = [
-    {
-      id: "overview",
-      label: "Overview",
-      icon: LayoutDashboard,
-    },
-    {
-      id: "analytics",
-      label: "Placement Analytics",
-      icon: BarChart3,
-    },
-    {
-      id: "students",
-      label: "Registered Students",
-      icon: Users,
-    },
-    {
-      id: "drives",
-      label: "Placement Drives",
-      icon: Briefcase,
-    },
-    {
-      id: "automated_drives",
-      label: "Automated Placement Drive",
-      icon: Workflow,
-    },
-    {
-      id: "companies",
-      label: "Companies Directory",
-      icon: Building2,
-    },
-    {
-      id: "applications",
-      label: "Applicant Review",
-      icon: FileCheck2,
-    },
-    {
-      id: "sessions",
-      label: "Placement Sessions",
-      icon: Calendar,
-    },
-    {
-      id: "excel_hub",
-      label: "Excel Import & Exports",
-      icon: FileSpreadsheet,
-    },
-    {
-      id: "announcements",
-      label: "Broadcasts & Alerts",
-      icon: Bell,
-    },
-    { id: "support", label: "Student Support Inbox", icon: MessageCircle },
-  ];
+  useOverlay(isOpen, () => setIsOpen(false));
 
   const displayName = adminUser?.fullName || "Placement Administrator";
   const displayEmail = adminUser?.email || "Admin account";
 
   const sidebarContent = (
-    <div className="flex h-full flex-col bg-slate-900 text-slate-300 select-none">
-      {/* Top Header & Admin Profile */}
+    <div className="flex h-full flex-col bg-slate-950 text-slate-300 select-none">
+      {/* Brand */}
       <div className="shrink-0">
-        <div className="flex h-16 items-center justify-between border-b border-slate-800 px-4">
+        <div className="flex h-16 items-center justify-between gap-2 border-b border-white/[0.06] px-4">
           <Link
             to="/"
             aria-label="JSSATEB Placement Portal home"
-            className="flex items-center gap-3 group"
+            className="group flex min-w-0 items-center gap-3 rounded-xl"
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white p-1 border border-amber-400/30 shadow-md shadow-orange-500/10 group-hover:scale-105 transition-transform shrink-0">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white p-1 shadow-md ring-1 ring-amber-400/30 transition-transform duration-200 group-hover:scale-[1.04]">
               <img
                 src="/images/jssateb/college-logo.png"
-                alt="JSSATEB Logo"
+                alt=""
                 className="h-full w-full object-contain"
               />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="font-extrabold tracking-tight text-white text-base leading-tight">
+                <span className="text-[15px] font-extrabold leading-tight tracking-tight text-white">
                   JSSATEB
                 </span>
-                <span className="rounded-md bg-orange-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-300 border border-orange-500/30">
+                <span className="rounded-md border border-amber-400/25 bg-amber-400/10 px-1.5 py-0.5 text-[9px] font-black tracking-wider text-amber-300">
                   TPO
                 </span>
               </div>
-              <p className="text-[11px] font-medium text-amber-200/80 truncate">
-                Placement Management
-              </p>
+              <p className="truncate text-[11px] font-medium text-slate-400">Placement Management</p>
             </div>
           </Link>
 
@@ -121,110 +101,96 @@ export default function AdminSidebar({
             type="button"
             aria-label="Close navigation drawer"
             onClick={() => setIsOpen(false)}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white lg:hidden transition"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-white/10 hover:text-white lg:hidden"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
-
-        {/* Admin User Chip */}
-        <div className="p-3 border-b border-slate-800/80">
-          <div className="flex items-center gap-3 rounded-xl bg-slate-800/60 p-2.5 border border-slate-800">
-            <div className="relative shrink-0">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-red-800 via-orange-700 to-amber-600 text-xs font-bold text-white shadow-xs">
-                {displayName.charAt(0).toUpperCase()}
-              </div>
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-bold text-white">{displayName}</p>
-              <p className="truncate text-[10px] text-amber-300 font-medium">JSS Placement Officer</p>
-              <p className="truncate text-[10px] text-slate-400 font-mono">{displayEmail}</p>
-            </div>
-          </div>
-        </div>
       </div>
 
-      {/* Navigation Menu (Scrollable, never pushes footer out) */}
+      {/* Navigation (scrolls independently, footer stays pinned) */}
       <nav
         aria-label="Admin navigation"
-        className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-1 dark-scrollbar"
+        className="dark-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-3"
       >
-        <p className="px-3 pt-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-          Console Management
-        </p>
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = activeTab === item.id;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              aria-current={isActive ? "page" : undefined}
-              onClick={() => {
-                setActiveTab(item.id);
-                setIsOpen(false);
-              }}
-              className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
-                isActive
-                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                  : "text-slate-400 hover:bg-slate-800/70 hover:text-white"
-              }`}
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <Icon
-                  className={`h-4 w-4 shrink-0 transition-colors ${
-                    isActive ? "text-white" : "text-slate-400 group-hover:text-indigo-400"
-                  }`}
-                />
-                <span className="truncate">{item.label}</span>
-              </div>
-
-              <div className="flex items-center gap-1 shrink-0">
-                {isActive && <ChevronRight className="h-3.5 w-3.5 text-indigo-200" />}
-              </div>
-            </button>
-          );
-        })}
+        {NAV_GROUPS.map((group) => (
+          <div key={group.label} className="space-y-0.5">
+            <SidebarGroupLabel tone="dark">{group.label}</SidebarGroupLabel>
+            {group.items.map((item) => (
+              <SidebarNavItem
+                key={item.id}
+                tone="dark"
+                icon={item.icon}
+                label={item.label}
+                tag={item.tag}
+                isActive={activeTab === item.id}
+                onClick={() => {
+                  setActiveTab(item.id);
+                  setIsOpen(false);
+                }}
+              />
+            ))}
+          </div>
+        ))}
       </nav>
 
-      {/* Bottom Footer Actions (Permanently pinned, fully visible) */}
-      <div className="shrink-0 p-3 border-t border-slate-800/80 space-y-1.5 bg-slate-900">
-        <button
-          type="button"
-          onClick={() => navigate("/")}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-800 bg-slate-800/40 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-white transition"
-        >
-          <ExternalLink className="h-3.5 w-3.5 text-slate-400" />
-          <span>Public Portal Home</span>
-        </button>
+      {/* Account + footer actions */}
+      <div className="shrink-0 space-y-2 border-t border-white/[0.06] p-3">
+        <div className="flex items-center gap-3 rounded-xl bg-white/[0.04] p-2.5 ring-1 ring-white/[0.06]">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-jss-700 to-amber-600 text-xs font-bold text-white">
+            {displayName.charAt(0).toUpperCase()}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-bold text-white">{displayName}</p>
+            <p className="truncate text-[11px] text-slate-400" title={displayEmail}>
+              {displayEmail}
+            </p>
+          </div>
+        </div>
 
-        <button
-          type="button"
-          onClick={onLogout}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs font-bold text-rose-300 hover:bg-rose-500/20 transition"
-        >
-          <LogOut className="h-3.5 w-3.5" />
-          <span>Sign Out</span>
-        </button>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => navigate("/")}
+            className="flex min-h-9 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-semibold text-slate-300 ring-1 ring-white/[0.08] transition hover:bg-white/[0.06] hover:text-white"
+          >
+            <ExternalLink className="h-3.5 w-3.5 text-slate-400" />
+            <span>Portal</span>
+          </button>
+          <button
+            type="button"
+            onClick={onLogout}
+            className="flex min-h-9 items-center justify-center gap-1.5 rounded-lg bg-rose-500/10 px-2 py-2 text-xs font-bold text-rose-300 ring-1 ring-rose-500/20 transition hover:bg-rose-500/20 hover:text-rose-200"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            <span>Sign Out</span>
+          </button>
+        </div>
       </div>
     </div>
   );
 
   return (
     <>
-      <aside className="hidden lg:flex flex-col w-64 xl:w-72 shrink-0 sticky top-0 h-screen border-r border-slate-800 bg-slate-900 z-20">
+      <aside className="sticky top-0 z-20 hidden h-screen w-64 shrink-0 flex-col border-r border-slate-900 bg-slate-950 lg:flex xl:w-72">
         {sidebarContent}
       </aside>
 
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex lg:hidden">
+        <div
+          className="fixed inset-0 z-50 flex lg:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Admin navigation"
+        >
           <button
             type="button"
             aria-label="Close admin navigation drawer"
-            className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs transition-opacity"
+            tabIndex={-1}
+            className="cf-backdrop"
             onClick={() => setIsOpen(false)}
           />
-          <div className="relative w-72 max-w-[85vw] flex-1 shadow-2xl z-10 animate-in slide-in-from-left duration-200">
+          <div className="relative z-10 h-full w-72 max-w-[85vw] shadow-2xl animate-in slide-in-from-left duration-300">
             {sidebarContent}
           </div>
         </div>

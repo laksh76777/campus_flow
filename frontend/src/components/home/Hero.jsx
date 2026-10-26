@@ -12,7 +12,7 @@ const Hero = () => {
       </div>
 
       <div className="relative mx-auto flex min-h-[calc(100vh-64px)] max-w-7xl items-center px-4 py-16 sm:px-6 lg:px-8">
-        <div className="grid w-full items-center gap-12 lg:grid-cols-2">
+        <div className="grid grid-cols-1 w-full items-center gap-12 lg:grid-cols-2">
           
           {/* Left Content */}
           <div className="max-w-2xl">

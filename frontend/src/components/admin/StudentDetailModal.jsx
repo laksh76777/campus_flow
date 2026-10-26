@@ -160,14 +160,14 @@ export default function StudentDetailModal({ student, isOpen, onClose, onStudent
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-150">
+    <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200">
       <div
-        className="relative flex flex-col w-full max-w-3xl max-h-[90vh] bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-150"
+        className="relative flex flex-col w-full max-w-3xl max-h-[calc(100dvh-1.5rem)] bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Header Banner */}
         <div className="relative bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-950 text-white p-6 sm:p-7 shrink-0">
-          <button
+          <button aria-label="Close dossier"
             onClick={onClose}
             className="absolute top-5 right-5 h-9 w-9 flex items-center justify-center rounded-xl bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition active:scale-95"
             title="Close dossier"

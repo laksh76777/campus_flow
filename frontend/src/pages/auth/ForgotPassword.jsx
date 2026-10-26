@@ -299,14 +299,14 @@ export default function ForgotPassword() {
               </p>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label htmlFor="reset-field-1" className="block text-xs font-semibold text-slate-700 mb-1.5">
                   {role === "student" ? "Registered Student Email" : "Admin Official Email"}
                 </label>
                 <div className="relative">
                   <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
                     <Mail className="h-4 w-4" />
                   </div>
-                  <input
+                  <input id="reset-field-1"
                     type="email"
                     required
                     autoFocus
@@ -452,14 +452,14 @@ export default function ForgotPassword() {
               </p>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label htmlFor="reset-field-2" className="block text-xs font-semibold text-slate-700 mb-1.5">
                   New Password
                 </label>
                 <div className="relative">
                   <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
                     <Lock className="h-4 w-4" />
                   </div>
-                  <input
+                  <input id="reset-field-2"
                     type={showPassword ? "text" : "password"}
                     required
                     placeholder="••••••••"
@@ -478,14 +478,14 @@ export default function ForgotPassword() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label htmlFor="reset-field-3" className="block text-xs font-semibold text-slate-700 mb-1.5">
                   Confirm New Password
                 </label>
                 <div className="relative">
                   <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
                     <Lock className="h-4 w-4" />
                   </div>
-                  <input
+                  <input id="reset-field-3"
                     type={showConfirmPassword ? "text" : "password"}
                     required
                     placeholder="••••••••"

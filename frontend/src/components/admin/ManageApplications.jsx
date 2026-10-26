@@ -1140,8 +1140,8 @@ export default function ManageApplications({
 
       {/* Update Status Modal */}
       {activeModalApp && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-150 border border-slate-100">
+        <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200">
+          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 max-h-[calc(100dvh-2rem)] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-700">
@@ -1342,8 +1342,8 @@ export default function ManageApplications({
 
       {/* Company-Wise Export Hub Modal */}
       {isCompanyExportModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="w-full max-w-2xl max-h-[90vh] flex flex-col rounded-3xl bg-white shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-150 overflow-hidden">
+        <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200">
+          <div className="w-full max-w-2xl max-h-[90vh] flex flex-col rounded-3xl bg-white shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-slate-50/60 shrink-0">
               <div className="flex items-center gap-2.5">

@@ -86,7 +86,7 @@ export default function CollegeShowcase() {
         </div>
 
         {/* Institution Overview & Verified Facts */}
-        <div className="mt-12 grid items-stretch gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:gap-10">
+        <div className="mt-12 grid grid-cols-1 items-stretch gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:gap-10">
           {/* Left: Institutional Profile Card */}
           <div className="flex flex-col justify-between rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xs">
             <div>

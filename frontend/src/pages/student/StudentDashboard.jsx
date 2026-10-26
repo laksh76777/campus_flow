@@ -60,6 +60,7 @@ import {
 } from "../../services/notificationService";
 import { useAuth } from "../../context/authContextDef";
 import { getResumeViewUrl } from "../../utils/resumeHelper";
+import useOverlay from "../../hooks/useOverlay";
 
 const STUDENT_ROUTE_TABS = {
   "/student-dashboard": "overview",
@@ -179,6 +180,7 @@ export default function StudentDashboard() {
   const [loadingNotifs, setLoadingNotifs] = useState(false);
   const [notifFilter, setNotifFilter] = useState("all");
   const [selectedNotification, setSelectedNotification] = useState(null);
+  useOverlay(Boolean(selectedNotification), () => setSelectedNotification(null));
 
   useEffect(() => {
     const nextAccountId = authUser?._id;
@@ -716,7 +718,7 @@ export default function StudentDashboard() {
   const sessionName = studentProfile?.placementSession?.name || (studentProfile?.graduationYear ? `Class of ${studentProfile.graduationYear} Placement Session` : "Session Pending");
 
   return (
-    <div className="min-h-screen bg-slate-50/60 text-slate-900 flex antialiased">
+    <div className="min-h-screen bg-canvas text-slate-900 flex antialiased">
       {/* 
         Responsive Sidebar: 
         On desktop (>= 1024px), it is a normal flex child (sticky, w-64 xl:w-72), so it CANNOT overlap content!
@@ -749,7 +751,9 @@ export default function StudentDashboard() {
         />
 
         {/* Page Content Body */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 w-full max-w-7xl mx-auto">
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 w-full max-w-7xl mx-auto">
+          {/* Keyed wrapper: each tab fades in on navigation */}
+          <div key={activeTab} className="animate-page space-y-6">
           {/* TAB 1: OVERVIEW */}
           {activeTab === "overview" && (
             <div className="space-y-6">
@@ -769,10 +773,10 @@ export default function StudentDashboard() {
                       </span>
                     )}
                   </div>
-                  <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+                  <h2 className="text-2xl sm:text-[1.75rem] font-extrabold text-slate-900 tracking-tight break-words">
                     Welcome back, {studentName} 👋
                   </h2>
-                  <p className="mt-1 text-xs sm:text-sm font-medium text-slate-500">
+                  <p className="mt-1.5 text-xs sm:text-sm font-medium text-slate-500 leading-relaxed">
                     {studentProfile?.degreeType || studentProfile?.course || ""} {admissionYear ? `• Admitted: ${admissionYear}` : ""} • Expected Graduation: Class of {graduationYear} • Academic CGPA: {typeof studentCgpa === "number" ? studentCgpa.toFixed(2) : studentCgpa}
                   </p>
                 </div>
@@ -780,9 +784,11 @@ export default function StudentDashboard() {
                 {/* Top Right Action Controls */}
                 <div className="flex items-center gap-2.5">
                   <button
+                    type="button"
                     onClick={() => loadDashboardData(true)}
                     disabled={refreshing}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-xs hover:bg-slate-50 active:scale-95 disabled:opacity-60 transition"
+                    aria-busy={refreshing}
+                    className="cf-btn cf-btn-secondary"
                   >
                     <RefreshCw
                       className={`h-3.5 w-3.5 text-slate-500 ${refreshing ? "animate-spin" : ""}`}
@@ -1672,7 +1678,7 @@ export default function StudentDashboard() {
                     </button>
                   )}
 
-                  <button
+                  <button aria-label="Refresh messages"
                     type="button"
                     onClick={fetchNotifications}
                     disabled={loadingNotifs}
@@ -1809,6 +1815,7 @@ export default function StudentDashboard() {
               )}
             </div>
           )}
+          </div>
         </main>
       </div>
 
@@ -1861,10 +1868,18 @@ export default function StudentDashboard() {
 
       {/* Selected Notification Reading Modal with Full Day, Date, Time */}
       {selectedNotification && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="relative w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 sm:p-7 shadow-2xl animate-in zoom-in-95 duration-150">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Notification details"
+        >
+          <div className="cf-backdrop" aria-hidden="true" onClick={() => setSelectedNotification(null)} />
+          <div className="relative max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl border border-slate-200 bg-white p-6 sm:p-7 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
             {/* Close Button */}
             <button
+              type="button"
+              aria-label="Close notification"
               onClick={() => setSelectedNotification(null)}
               className="absolute top-5 right-5 flex h-8 w-8 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
             >

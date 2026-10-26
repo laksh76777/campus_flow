@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  AlertTriangle,
+  ArrowLeft,
   Check,
   Inbox,
-  LoaderCircle,
   MessageCircle,
-  Send,
+  RotateCcw,
   UserRound,
   Sparkles,
   Bot,
@@ -12,6 +13,11 @@ import {
   Workflow,
   ExternalLink,
   ShieldCheck,
+  FileText,
+  BarChart3,
+  Target,
+  Rocket,
+  Pencil,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
@@ -22,6 +28,35 @@ import {
   updateSupportStatus,
   sendAdminCopilotPrompt,
 } from "../../services/supportService";
+import Markdown from "../ui/Markdown";
+import ChatComposer, { TypingIndicator } from "../ui/ChatComposer";
+
+const TICKET_FILTERS = ["open", "answered", "bot_answered", "closed", "all"];
+
+const STATUS_BADGE = {
+  open: "border-amber-200 bg-amber-50 text-amber-800",
+  answered: "border-blue-200 bg-blue-50 text-blue-700",
+  bot_answered: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  closed: "border-slate-200 bg-slate-100 text-slate-600",
+};
+
+const formatTime = (value) => {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+};
+
+// Keep a scrollable chat pinned to the newest message without scrolling the page.
+function useScrollToBottom(dependency) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    el.scrollTo({ top: el.scrollHeight, behavior: reduce ? "auto" : "smooth" });
+  }, [dependency]);
+  return ref;
+}
 
 export default function AdminSupportInbox() {
   const navigate = useNavigate();
@@ -40,6 +75,7 @@ export default function AdminSupportInbox() {
   const [copilotPrompt, setCopilotPrompt] = useState("");
   const [copilotLoading, setCopilotLoading] = useState(false);
   const copilotMessageSequence = useRef(0);
+  const copilotInputRef = useRef(null);
   const [copilotHistory, setCopilotHistory] = useState([
     {
       id: "welcome",
@@ -53,7 +89,8 @@ export default function AdminSupportInbox() {
       createdAt: new Date(),
     },
   ]);
-  const copilotEndRef = useRef(null);
+  const copilotScrollRef = useScrollToBottom(`${copilotHistory.length}-${copilotLoading}-${activeMode}`);
+  const ticketScrollRef = useScrollToBottom(`${selected?._id}-${selected?.messages?.length}-${activeMode}`);
 
   // Refresh inbox
   const refresh = useCallback(async () => {
@@ -83,12 +120,6 @@ export default function AdminSupportInbox() {
     return () => clearInterval(timer);
   }, [refresh]);
 
-  useEffect(() => {
-    if (activeMode === "copilot") {
-      copilotEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [copilotHistory, activeMode]);
-
   const openTicket = async (id) => {
     try {
       const conversation = (await getSupportConversation(id)).data;
@@ -100,7 +131,7 @@ export default function AdminSupportInbox() {
   };
 
   const replyTicket = async (event) => {
-    event.preventDefault();
+    event?.preventDefault?.();
     if (!selected?._id || !draft.trim() || sending) return;
     setSending(true);
     try {
@@ -133,7 +164,7 @@ export default function AdminSupportInbox() {
 
   // Submit Copilot prompt
   const submitCopilotPrompt = async (promptText) => {
-    const textToSend = promptText || copilotPrompt;
+    const textToSend = typeof promptText === "string" ? promptText : copilotPrompt;
     if (!textToSend.trim() || copilotLoading) return;
     const messageSequence = ++copilotMessageSequence.current;
 
@@ -186,6 +217,8 @@ export default function AdminSupportInbox() {
           id: `bot_err_${messageSequence}`,
           sender: "bot",
           content: `⚠️ ${errMsg}`,
+          isError: true,
+          retryPrompt: textToSend.trim(),
           createdAt: new Date(),
         },
       ]);
@@ -197,40 +230,45 @@ export default function AdminSupportInbox() {
 
   const quickPills = [
     {
-      label: "🎯 Host Drive (Interactive)",
+      label: "Host drive (interactive)",
+      icon: Target,
       prompt: "I want to host a new placement drive, please guide me through the criteria",
     },
     {
-      label: "📄 Paste / Extract JD Criteria",
+      label: "Extract JD criteria",
+      icon: FileText,
       prompt: "I have a Job Description (JD) text from a recruiter. Can you extract the criteria and stage the drive?",
     },
     {
-      label: "⚡ Automated Drive: Google (3 Rounds)",
+      label: "Automated drive: Google (3 rounds)",
+      icon: Workflow,
       prompt: "Create an automated drive for Google with 3 rounds: Online Coding, Technical Round 1, Leadership Round, Package: 22 LPA, Min CGPA: 8.0, 0 backlogs, CSE and ISE",
     },
     {
-      label: "📊 Talent Pool & CGPA Statistics",
+      label: "Talent pool & CGPA stats",
+      icon: BarChart3,
       prompt: "How many students are verified and how many have CGPA above 8.0?",
     },
   ];
 
+  const openTicketCount = items.filter((i) => i.status === "open").length;
+  const showQuickStart = copilotHistory.length === 1 && !copilotLoading;
+
   return (
     <div className="space-y-4">
-      {/* Top Header & Mode Switcher */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-2xs">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/20">
-            {activeMode === "copilot" ? <Sparkles size={20} /> : <Inbox size={20} />}
+      {/* Header & mode switcher */}
+      <div className="cf-card flex flex-col gap-3 p-3.5 sm:flex-row sm:items-center sm:justify-between sm:p-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-md shadow-indigo-500/20">
+            {activeMode === "copilot" ? <Sparkles size={19} /> : <Inbox size={19} />}
           </div>
-          <div>
-            <div className="flex items-center gap-2">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-base font-bold text-slate-900">
                 {activeMode === "copilot" ? "TPO AI Operations Copilot" : "Student Support Inbox"}
               </h2>
               {activeMode === "copilot" && (
-                <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-black text-indigo-700 border border-indigo-200">
-                  AI Powered
-                </span>
+                <span className="cf-badge border-indigo-200 bg-indigo-50 text-indigo-700">AI Powered</span>
               )}
             </div>
             <p className="text-xs text-slate-500">
@@ -241,33 +279,43 @@ export default function AdminSupportInbox() {
           </div>
         </div>
 
-        {/* Mode Toggle Buttons */}
-        <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200 self-start sm:self-auto">
+        {/* Mode toggle */}
+        <div
+          role="tablist"
+          aria-label="Support workspace mode"
+          className="relative grid shrink-0 grid-cols-2 gap-1 self-start rounded-xl border border-line bg-slate-100/80 p-1 sm:self-auto"
+        >
+          <span
+            aria-hidden="true"
+            className={`absolute inset-y-1 left-1 w-[calc(50%-0.375rem)] rounded-lg shadow-sm transition-all duration-300 ease-out-soft ${
+              activeMode === "copilot" ? "translate-x-[calc(100%+0.25rem)] bg-indigo-600" : "translate-x-0 bg-white"
+            }`}
+          />
           <button
             type="button"
+            role="tab"
+            aria-selected={activeMode === "inbox"}
             onClick={() => setActiveMode("inbox")}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
-              activeMode === "inbox"
-                ? "bg-white text-slate-800 shadow-2xs"
-                : "text-slate-500 hover:text-slate-800"
+            className={`relative z-10 flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors duration-200 ${
+              activeMode === "inbox" ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
             }`}
           >
             <Inbox size={14} />
             <span>Student Tickets</span>
-            {items.filter((i) => i.status === "open").length > 0 && (
-              <span className="rounded-full bg-rose-500 px-1.5 py-0.2 text-[9px] font-black text-white">
-                {items.filter((i) => i.status === "open").length}
+            {openTicketCount > 0 && (
+              <span className="rounded-full bg-rose-500 px-1.5 text-[10px] font-black leading-4 text-white tabular-nums">
+                {openTicketCount}
               </span>
             )}
           </button>
 
           <button
             type="button"
+            role="tab"
+            aria-selected={activeMode === "copilot"}
             onClick={() => setActiveMode("copilot")}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
-              activeMode === "copilot"
-                ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/30"
-                : "text-slate-600 hover:text-slate-900"
+            className={`relative z-10 flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors duration-200 ${
+              activeMode === "copilot" ? "text-white" : "text-slate-500 hover:text-slate-800"
             }`}
           >
             <Sparkles size={14} />
@@ -276,284 +324,327 @@ export default function AdminSupportInbox() {
         </div>
       </div>
 
-      {/* Main Container */}
       {activeMode === "copilot" ? (
-        /* Copilot AI Workspace */
+        /* Copilot workspace */
         <section
-          className="flex h-[min(760px,calc(100vh-14rem))] min-h-[540px] w-full flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"
+          className="flex h-[min(780px,calc(100dvh-13rem))] min-h-[520px] w-full flex-col overflow-hidden rounded-3xl border border-line bg-white shadow-sm animate-in fade-in duration-300"
           aria-label="TPO AI Copilot"
         >
-          {/* Quick Action Pills */}
-          <div className="flex items-center gap-2 overflow-x-auto border-b border-slate-100 bg-slate-50/80 px-4 py-2.5 scrollbar-none">
-            <span className="shrink-0 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-              Quick Prompts:
-            </span>
-            {quickPills.map((pill, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => submitCopilotPrompt(pill.prompt)}
-                disabled={copilotLoading}
-                className="shrink-0 rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:border-indigo-300 hover:bg-indigo-50/50 hover:text-indigo-600 transition disabled:opacity-50"
-              >
-                {pill.label}
-              </button>
-            ))}
-          </div>
+          {/* Quick prompts (always available; shown as cards on a fresh conversation) */}
+          {!showQuickStart && (
+            <div className="scrollbar-none flex items-center gap-2 overflow-x-auto border-b border-line bg-surface-muted/80 px-4 py-2.5">
+              <span className="cf-eyebrow shrink-0 text-[10px]!">Quick prompts</span>
+              {quickPills.map((pill) => {
+                const Icon = pill.icon;
+                return (
+                  <button
+                    key={pill.label}
+                    type="button"
+                    onClick={() => submitCopilotPrompt(pill.prompt)}
+                    disabled={copilotLoading}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-line bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-indigo-300 hover:bg-indigo-50/60 hover:text-indigo-700 disabled:opacity-50"
+                  >
+                    <Icon size={13} className="text-indigo-500" />
+                    {pill.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
-          {/* Conversation Area */}
-          <div className="flex-1 space-y-4 overflow-y-auto bg-slate-50/50 p-4 sm:p-6" aria-live="polite">
-            {copilotHistory.map((msg) => (
-              <div
-                key={msg.id}
-                className={`flex ${msg.sender === "admin" ? "justify-end" : "justify-start"}`}
-              >
-                <div
-                  className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-6 ${
-                    msg.sender === "admin"
-                      ? "rounded-br-md bg-indigo-600 text-white shadow-xs"
-                      : "rounded-bl-md border border-slate-200 bg-white text-slate-800 shadow-2xs"
-                  }`}
-                >
-                  <div className="flex items-center gap-2 mb-1.5">
-                    {msg.sender === "bot" ? (
-                      <div className="flex h-5 w-5 items-center justify-center rounded-md bg-indigo-100 text-indigo-700">
-                        <Bot size={12} />
+          {/* Conversation */}
+          <div
+            ref={copilotScrollRef}
+            className="min-h-0 flex-1 overflow-y-auto bg-gradient-to-b from-surface-muted/60 to-white"
+            aria-live="polite"
+          >
+            <div className="mx-auto w-full max-w-4xl space-y-5 px-4 py-5 sm:px-6 sm:py-6">
+              {copilotHistory.map((msg) =>
+                msg.sender === "admin" ? (
+                  <div key={msg.id} className="flex justify-end animate-message">
+                    <div className="max-w-[min(85%,36rem)]">
+                      <div className="rounded-2xl rounded-br-md bg-indigo-600 px-4 py-2.5 text-sm leading-6 text-white shadow-sm">
+                        <p className="whitespace-pre-wrap break-words">{msg.content}</p>
                       </div>
-                    ) : (
-                      <div className="flex h-5 w-5 items-center justify-center rounded-md bg-indigo-500 text-white">
-                        <ShieldCheck size={12} />
-                      </div>
-                    )}
-                    <span
-                      className={`text-[10px] font-bold ${
-                        msg.sender === "admin" ? "text-indigo-100" : "text-slate-400"
-                      }`}
-                    >
-                      {msg.sender === "admin" ? "Placement Officer" : "TPO AI Copilot"}
-                    </span>
+                      <p className="mt-1 flex items-center justify-end gap-1 text-[10px] font-semibold text-slate-400">
+                        <ShieldCheck size={11} /> Placement Officer · {formatTime(msg.createdAt)}
+                      </p>
+                    </div>
                   </div>
+                ) : (
+                  <div key={msg.id} className="flex items-start gap-3 animate-message">
+                    <div
+                      className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-white shadow-sm ${
+                        msg.isError ? "bg-rose-500" : "bg-gradient-to-br from-indigo-500 to-violet-600"
+                      }`}
+                      aria-hidden="true"
+                    >
+                      {msg.isError ? <AlertTriangle size={15} /> : <Bot size={16} />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="mb-1 text-[11px] font-bold text-slate-500">
+                        TPO AI Copilot
+                        <span className="ml-1.5 font-medium text-slate-400">{formatTime(msg.createdAt)}</span>
+                      </p>
 
-                  <div className="whitespace-pre-wrap break-words">{msg.content}</div>
+                      {msg.isError ? (
+                        <div className="rounded-2xl rounded-tl-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+                          <p className="font-semibold">The copilot couldn’t complete this request.</p>
+                          <p className="mt-0.5 break-words text-rose-700">{msg.content.replace(/^⚠️\s*/, "")}</p>
+                          {msg.retryPrompt && (
+                            <button
+                              type="button"
+                              onClick={() => submitCopilotPrompt(msg.retryPrompt)}
+                              disabled={copilotLoading}
+                              className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-2.5 py-1.5 text-xs font-bold text-rose-700 transition hover:bg-rose-100 disabled:opacity-50"
+                            >
+                              <RotateCcw size={13} /> Try again
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="rounded-2xl rounded-tl-md border border-line bg-white px-4 py-3 shadow-xs sm:px-5">
+                          <Markdown content={msg.content} />
+                        </div>
+                      )}
 
-                  {/* Staged Placement Drive - Ready for Admin Confirmation */}
-                  {msg.action === "DRIVE_READY" && msg.driveParams && (
-                    <div className="mt-3 rounded-2xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50/90 via-white to-violet-50/70 p-4 text-slate-800 shadow-xs">
-                      <div className="flex items-center justify-between gap-2 border-b border-indigo-100 pb-2.5 mb-3">
-                        <div className="flex items-center gap-2">
-                          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-xs">
-                            <Briefcase size={15} />
-                          </span>
-                          <div>
-                            <h4 className="text-sm font-extrabold text-slate-900">
-                              {msg.driveParams.companyName || "Corporate Partner"}
-                            </h4>
-                            <p className="text-xs text-indigo-700 font-semibold">
-                              {msg.driveParams.jobTitle || "Software Engineer"}
-                            </p>
-                          </div>
-                        </div>
-                        <span className="rounded-full bg-indigo-100 px-2.5 py-1 text-[10px] font-black text-indigo-800 border border-indigo-300">
-                          ⚡ Staged · Awaiting Approval
-                        </span>
-                      </div>
-
-                      {/* Criteria Grid */}
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs mb-3">
-                        <div className="bg-white/80 p-2 rounded-xl border border-indigo-100/80">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Package (CTC)</span>
-                          <span className="text-xs font-black text-emerald-700">₹{msg.driveParams.package} LPA</span>
-                        </div>
-                        <div className="bg-white/80 p-2 rounded-xl border border-indigo-100/80">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">CGPA Cutoff</span>
-                          <span className="text-xs font-black text-slate-800">≥ {msg.driveParams.minimumCGPA}</span>
-                        </div>
-                        <div className="bg-white/80 p-2 rounded-xl border border-indigo-100/80">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Max Backlogs</span>
-                          <span className="text-xs font-black text-slate-800">≤ {msg.driveParams.maximumBacklogs}</span>
-                        </div>
-                        <div className="col-span-2 sm:col-span-3 bg-white/80 p-2 rounded-xl border border-indigo-100/80">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Target Programs</span>
-                          <span className="text-xs font-medium text-slate-700">
-                            {Array.isArray(msg.driveParams.eligibleBranches)
-                              ? msg.driveParams.eligibleBranches.join(", ")
-                              : msg.driveParams.eligibleBranches || "Not specified"}
-                          </span>
-                        </div>
-                        {Array.isArray(msg.driveParams.rounds) && msg.driveParams.rounds.length > 0 && (
-                          <div className="col-span-2 sm:col-span-3 bg-white/80 p-2 rounded-xl border border-indigo-100/80">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Selection Pipeline</span>
-                            <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                              {msg.driveParams.rounds.map((r, i) => (
-                                <span key={i} className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700 border border-indigo-200">
-                                  <span>{r.roundNumber || i + 1}.</span> {r.roundName}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        <div className="col-span-2 sm:col-span-3 grid gap-2 sm:grid-cols-3">
-                          {[
-                            ["Applications open", msg.driveParams.applicationStartDate],
-                            ["Application deadline", msg.driveParams.applicationDeadline],
-                            ["Drive date", msg.driveParams.driveDate],
-                          ].map(([label, value]) => (
-                            <div key={label} className="rounded-xl border border-indigo-100/80 bg-white/80 p-2">
-                              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</span>
-                              <span className="text-xs font-semibold text-slate-800">
-                                {value && !Number.isNaN(new Date(value).getTime())
-                                  ? new Date(value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
-                                  : "Not set"}
+                      {/* Staged placement drive awaiting confirmation */}
+                      {msg.action === "DRIVE_READY" && msg.driveParams && (
+                        <div className="mt-3 overflow-hidden rounded-2xl border border-indigo-200 bg-white shadow-sm">
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-indigo-100 bg-gradient-to-r from-indigo-50 to-violet-50/60 px-4 py-3">
+                            <div className="flex min-w-0 items-center gap-2.5">
+                              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-xs">
+                                <Briefcase size={15} />
                               </span>
+                              <div className="min-w-0">
+                                <h4 className="truncate text-sm font-extrabold text-slate-900">
+                                  {msg.driveParams.companyName || "Corporate Partner"}
+                                </h4>
+                                <p className="truncate text-xs font-semibold text-indigo-700">
+                                  {msg.driveParams.jobTitle || "Software Engineer"}
+                                </p>
+                              </div>
                             </div>
-                          ))}
-                        </div>
-                        <div className="col-span-2 sm:col-span-3 rounded-xl border border-amber-200 bg-amber-50 p-2 text-[11px] leading-5 text-amber-900">
-                          These are the portal’s default dates. Review them before publishing; the drive date is four days after the default ten-day application window.
-                        </div>
-                        {msg.driveParams.eligibleCount !== null && msg.driveParams.eligibleCount !== undefined && (
-                          <div className="col-span-2 sm:col-span-3 bg-emerald-50/80 p-2 rounded-xl border border-emerald-200">
-                            <span className="text-xs font-bold text-emerald-800 flex items-center gap-1">
-                              🎯 <strong>{msg.driveParams.eligibleCount} verified students</strong> meet these criteria and qualify immediately.
+                            <span className="cf-badge border-indigo-200 bg-white text-indigo-700">
+                              <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" aria-hidden="true" />
+                              Staged · Awaiting approval
                             </span>
                           </div>
-                        )}
-                      </div>
 
-                      {/* Action Confirmation Buttons */}
-                      <div className="flex flex-wrap items-center gap-2 pt-1">
-                        <button
-                          type="button"
-                          onClick={() => submitCopilotPrompt("Yes, confirm and publish this drive live!")}
-                          disabled={copilotLoading}
-                          className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-3.5 py-2 text-xs font-black text-white hover:from-indigo-700 hover:to-violet-700 shadow-sm shadow-indigo-600/30 transition disabled:opacity-50"
-                        >
-                          <span>🚀 Confirm & Publish Drive Live</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCopilotPrompt(`Change criteria for ${msg.driveParams.companyName || "the drive"}: `);
-                          }}
-                          className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition"
-                        >
-                          <span>✏️ Adjust Criteria</span>
-                        </button>
-                      </div>
+                          <div className="grid grid-cols-2 gap-2 p-4 text-xs sm:grid-cols-3">
+                            <div className="rounded-xl border border-line bg-surface-muted p-2.5">
+                              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Package (CTC)</span>
+                              <span className="text-sm font-black text-emerald-700 tabular-nums">₹{msg.driveParams.package} LPA</span>
+                            </div>
+                            <div className="rounded-xl border border-line bg-surface-muted p-2.5">
+                              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">CGPA Cutoff</span>
+                              <span className="text-sm font-black text-slate-800 tabular-nums">≥ {msg.driveParams.minimumCGPA}</span>
+                            </div>
+                            <div className="rounded-xl border border-line bg-surface-muted p-2.5">
+                              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Max Backlogs</span>
+                              <span className="text-sm font-black text-slate-800 tabular-nums">≤ {msg.driveParams.maximumBacklogs}</span>
+                            </div>
+                            <div className="col-span-2 rounded-xl border border-line bg-surface-muted p-2.5 sm:col-span-3">
+                              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Target Programs</span>
+                              <span className="text-xs font-medium text-slate-700">
+                                {Array.isArray(msg.driveParams.eligibleBranches)
+                                  ? msg.driveParams.eligibleBranches.join(", ")
+                                  : msg.driveParams.eligibleBranches || "Not specified"}
+                              </span>
+                            </div>
+                            {Array.isArray(msg.driveParams.rounds) && msg.driveParams.rounds.length > 0 && (
+                              <div className="col-span-2 rounded-xl border border-line bg-surface-muted p-2.5 sm:col-span-3">
+                                <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Selection Pipeline</span>
+                                <ol className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                                  {msg.driveParams.rounds.map((r, i) => (
+                                    <li
+                                      key={i}
+                                      className="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-white px-2 py-0.5 text-[11px] font-bold text-indigo-700"
+                                    >
+                                      <span className="text-indigo-400">{r.roundNumber || i + 1}.</span> {r.roundName}
+                                    </li>
+                                  ))}
+                                </ol>
+                              </div>
+                            )}
+                            <div className="col-span-2 grid grid-cols-1 gap-2 sm:col-span-3 sm:grid-cols-3">
+                              {[
+                                ["Applications open", msg.driveParams.applicationStartDate],
+                                ["Application deadline", msg.driveParams.applicationDeadline],
+                                ["Drive date", msg.driveParams.driveDate],
+                              ].map(([label, value]) => (
+                                <div key={label} className="rounded-xl border border-line bg-surface-muted p-2.5">
+                                  <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</span>
+                                  <span className="text-xs font-semibold text-slate-800">
+                                    {value && !Number.isNaN(new Date(value).getTime())
+                                      ? new Date(value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
+                                      : "Not set"}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="col-span-2 flex gap-2 rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-[11px] leading-5 text-amber-900 sm:col-span-3">
+                              <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-600" />
+                              <span>
+                                These are the portal’s default dates. Review them before publishing; the drive date is four days after the default ten-day application window.
+                              </span>
+                            </div>
+                            {msg.driveParams.eligibleCount !== null && msg.driveParams.eligibleCount !== undefined && (
+                              <div className="col-span-2 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-2.5 text-xs font-semibold text-emerald-800 sm:col-span-3">
+                                <Target size={14} className="shrink-0 text-emerald-600" />
+                                <span>
+                                  <strong className="tabular-nums">{msg.driveParams.eligibleCount} verified students</strong> meet these criteria and qualify immediately.
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2 border-t border-line bg-surface-muted/60 px-4 py-3">
+                            <button
+                              type="button"
+                              onClick={() => submitCopilotPrompt("Yes, confirm and publish this drive live!")}
+                              disabled={copilotLoading}
+                              className="cf-btn bg-indigo-600 text-white shadow-sm shadow-indigo-600/25 hover:bg-indigo-700"
+                            >
+                              <Rocket size={14} />
+                              <span>Confirm &amp; Publish Drive Live</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCopilotPrompt(`Change criteria for ${msg.driveParams.companyName || "the drive"}: `);
+                                copilotInputRef.current?.focus();
+                              }}
+                              className="cf-btn cf-btn-secondary"
+                            >
+                              <Pencil size={13} />
+                              <span>Adjust Criteria</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Drive created via copilot */}
+                      {msg.action === "DRIVE_CREATED" && msg.driveId && (
+                        <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3.5">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="flex min-w-0 items-center gap-1.5 text-sm font-bold text-emerald-900">
+                              <Briefcase size={14} className="shrink-0" />
+                              <span className="truncate">{msg.driveTitle || "New Placement Drive"}</span>
+                            </span>
+                            <span className="cf-badge border-emerald-300 bg-emerald-100 text-emerald-800">
+                              <Check size={11} /> Live &amp; Published
+                            </span>
+                          </div>
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => navigate("/admin/drives")}
+                              className="cf-btn bg-emerald-700 text-white hover:bg-emerald-800"
+                            >
+                              <ExternalLink size={13} />
+                              <span>Manage Drive</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => navigate("/admin/automated-placement-drives")}
+                              className="cf-btn border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-50"
+                            >
+                              <Workflow size={13} />
+                              <span>View Pipeline</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </div>
+                )
+              )}
 
-                  {/* If a Placement Drive was created via Copilot */}
-                  {msg.action === "DRIVE_CREATED" && msg.driveId && (
-                    <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-slate-800">
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <span className="flex items-center gap-1.5 text-xs font-black text-emerald-800">
-                          <Briefcase size={14} />
-                          <span>{msg.driveTitle || "New Placement Drive"}</span>
+              {/* Starter cards on a fresh conversation */}
+              {showQuickStart && (
+                <div className="grid grid-cols-1 gap-2.5 pl-0 sm:grid-cols-2 sm:pl-11">
+                  {quickPills.map((pill) => {
+                    const Icon = pill.icon;
+                    return (
+                      <button
+                        key={pill.label}
+                        type="button"
+                        onClick={() => submitCopilotPrompt(pill.prompt)}
+                        className="cf-card cf-card-interactive group flex items-start gap-3 p-3.5 text-left animate-message"
+                      >
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 transition group-hover:bg-indigo-600 group-hover:text-white">
+                          <Icon size={15} />
                         </span>
-                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-black text-emerald-800 border border-emerald-300">
-                          Live & Published
+                        <span className="min-w-0">
+                          <span className="block text-xs font-bold text-slate-900">{pill.label}</span>
+                          <span className="mt-0.5 line-clamp-2 block text-[11px] leading-relaxed text-slate-500">{pill.prompt}</span>
                         </span>
-                      </div>
-
-                      <div className="flex items-center gap-2 mt-2">
-                        <button
-                          type="button"
-                          onClick={() => navigate("/admin/drives")}
-                          className="flex items-center gap-1 rounded-lg bg-emerald-700 px-2.5 py-1 text-xs font-bold text-white hover:bg-emerald-800 transition"
-                        >
-                          <ExternalLink size={12} />
-                          <span>Manage Drive</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => navigate("/admin/automated-placement-drives")}
-                          className="flex items-center gap-1 rounded-lg border border-emerald-300 bg-white px-2.5 py-1 text-xs font-bold text-emerald-800 hover:bg-emerald-50 transition"
-                        >
-                          <Workflow size={12} />
-                          <span>View Pipeline</span>
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                      </button>
+                    );
+                  })}
                 </div>
-              </div>
-            ))}
+              )}
 
-            {copilotLoading && (
-              <div className="flex justify-start">
-                <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs font-semibold text-slate-500 shadow-2xs">
-                  <LoaderCircle size={16} className="animate-spin text-indigo-600" />
-                  <span>AI Copilot is processing drive specifications and data...</span>
+              {copilotLoading && (
+                <div className="flex items-start gap-3 animate-message">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-sm">
+                    <Bot size={16} />
+                  </div>
+                  <div className="rounded-2xl rounded-tl-md border border-line bg-white px-4 py-3 shadow-xs">
+                    <TypingIndicator label="Copilot is processing drive specifications and data…" />
+                  </div>
                 </div>
-              </div>
-            )}
-            <div ref={copilotEndRef} />
+              )}
+            </div>
           </div>
 
-          {/* Prompt Input Form */}
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              submitCopilotPrompt();
-            }}
-            className="flex items-end gap-2 border-t border-slate-200 bg-white p-3 sm:p-4"
-          >
-            <textarea
-              aria-label="TPO prompt input"
-              rows={2}
-              maxLength={4000}
-              value={copilotPrompt}
-              onChange={(e) => setCopilotPrompt(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  submitCopilotPrompt();
-                }
-              }}
-              placeholder="Ask anything about students, or type 'Host a drive for [Company] with [Role], [Package] LPA, [Cutoff] CGPA'…"
-              className="min-h-12 flex-1 resize-y rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-indigo-400 focus:bg-white"
-            />
-            <button
-              type="submit"
-              disabled={!copilotPrompt.trim() || copilotLoading}
-              className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-slate-300 transition"
-              aria-label="Send prompt to Copilot"
-            >
-              {copilotLoading ? <LoaderCircle size={18} className="animate-spin" /> : <Send size={17} />}
-            </button>
-          </form>
+          <ChatComposer
+            inputRef={copilotInputRef}
+            tone="violet"
+            label="TPO prompt input"
+            sendLabel="Send prompt to Copilot"
+            value={copilotPrompt}
+            onChange={setCopilotPrompt}
+            onSubmit={() => submitCopilotPrompt()}
+            busy={copilotLoading}
+            placeholder="Ask about students, or type “Host a drive for [Company], [Role], [Package] LPA, [Cutoff] CGPA”…"
+          />
         </section>
       ) : (
-        /* Student Support Tickets View */
+        /* Student support tickets */
         <section
-          className="flex h-[min(760px,calc(100vh-14rem))] min-h-[540px] w-full flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm lg:flex-row"
+          className="flex h-[min(780px,calc(100dvh-13rem))] min-h-[560px] w-full flex-col overflow-hidden rounded-3xl border border-line bg-white shadow-sm animate-in fade-in duration-300 lg:flex-row"
           aria-label="Student support inbox"
         >
-          {/* Left Tickets List */}
-          <aside className="flex w-full flex-col border-b border-slate-200 bg-slate-50/70 lg:w-96 lg:border-b-0 lg:border-r shrink-0">
-            <div className="flex items-center gap-3 p-4 border-b border-slate-200/80">
+          {/* Ticket list */}
+          <aside
+            className={`flex min-h-0 w-full shrink-0 flex-col border-line bg-surface-muted/70 lg:w-96 lg:border-r ${
+              selected ? "hidden lg:flex" : "flex flex-1 lg:flex-none"
+            }`}
+          >
+            <div className="flex items-center gap-3 border-b border-line p-4">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
                 <Inbox size={18} />
               </div>
               <div>
-                <h3 className="font-bold text-sm text-slate-900">Student Tickets</h3>
+                <h3 className="text-sm font-bold text-slate-900">Student Tickets</h3>
                 <p className="text-[11px] text-slate-500">Student escalations and TPO queries</p>
               </div>
             </div>
 
-            {/* Filter Tabs */}
-            <div className="flex gap-1 p-2.5 overflow-x-auto">
-              {["open", "answered", "bot_answered", "closed", "all"].map((status) => (
+            <div className="scrollbar-none flex gap-1 overflow-x-auto p-2.5" role="tablist" aria-label="Ticket status filter">
+              {TICKET_FILTERS.map((status) => (
                 <button
                   key={status}
                   type="button"
+                  role="tab"
+                  aria-selected={filter === status}
                   onClick={() => setFilter(status)}
-                  className={`rounded-lg px-2.5 py-1 text-[11px] font-bold capitalize transition shrink-0 ${
+                  className={`shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-bold capitalize transition ${
                     filter === status
-                      ? "bg-indigo-600 text-white shadow-2xs"
-                      : "bg-white text-slate-500 hover:bg-slate-100"
+                      ? "bg-indigo-600 text-white shadow-xs"
+                      : "bg-white text-slate-500 ring-1 ring-line hover:bg-slate-50 hover:text-slate-800"
                   }`}
                 >
                   {status.replace("_", " ")}
@@ -561,64 +652,86 @@ export default function AdminSupportInbox() {
               ))}
             </div>
 
-            {/* Tickets Scroll List */}
-            <div className="min-h-0 flex-1 overflow-y-auto px-2.5 pb-2.5">
+            <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-2.5 pb-2.5">
               {loading ? (
-                <p className="p-4 text-sm text-slate-500">Loading inbox…</p>
+                <div className="space-y-2 p-1" role="status" aria-label="Loading inbox">
+                  {[0, 1, 2].map((n) => (
+                    <div key={n} className="rounded-2xl bg-white p-3 ring-1 ring-line">
+                      <div className="cf-skeleton h-3.5 w-1/2" />
+                      <div className="cf-skeleton mt-2 h-3 w-3/4" />
+                      <div className="cf-skeleton mt-2 h-3 w-2/3" />
+                    </div>
+                  ))}
+                </div>
               ) : items.length === 0 ? (
-                <div className="p-5 text-center text-sm text-slate-500">
-                  No conversations found in this view.
+                <div className="px-5 py-10 text-center">
+                  <Inbox size={26} className="mx-auto mb-2 text-slate-300" />
+                  <p className="text-sm font-semibold text-slate-600">No conversations here</p>
+                  <p className="mt-0.5 text-xs text-slate-400">Try another status filter.</p>
                 </div>
               ) : (
-                items.map((item) => (
-                  <button
-                    key={item._id}
-                    type="button"
-                    onClick={() => openTicket(item._id)}
-                    className={`mb-2 w-full rounded-2xl border p-3 text-left transition ${
-                      selected?._id === item._id
-                        ? "border-indigo-200 bg-indigo-50"
-                        : "border-transparent bg-white hover:border-slate-200"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-sm font-bold text-slate-800">
-                        {item.student?.fullName || "Student"}
-                      </span>
-                      {item.unreadCount > 0 && (
-                        <span className="rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-black text-white">
-                          {item.unreadCount}
+                items.map((item) => {
+                  const isSelected = selected?._id === item._id;
+                  return (
+                    <button
+                      key={item._id}
+                      type="button"
+                      onClick={() => openTicket(item._id)}
+                      aria-current={isSelected ? "true" : undefined}
+                      className={`w-full rounded-2xl border p-3 text-left transition ${
+                        isSelected
+                          ? "border-indigo-200 bg-indigo-50 shadow-xs"
+                          : "border-transparent bg-white hover:border-line-strong hover:shadow-xs"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate text-sm font-bold text-slate-800">
+                          {item.student?.fullName || "Student"}
                         </span>
-                      )}
-                    </div>
-                    <span className="mt-0.5 block truncate text-xs text-slate-500">
-                      {item.student?.email || "Student account"}
-                    </span>
-                    <span className="mt-1.5 block truncate text-xs font-semibold text-slate-700">
-                      {item.subject}
-                    </span>
-                    <div className="mt-1 flex justify-between gap-2">
-                      <span className="truncate text-[11px] text-slate-500">
-                        {item.lastMessage?.content}
+                        {item.unreadCount > 0 && (
+                          <span className="rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-black text-white tabular-nums">
+                            {item.unreadCount}
+                          </span>
+                        )}
+                      </div>
+                      <span className="mt-0.5 block truncate text-xs text-slate-500">
+                        {item.student?.email || "Student account"}
                       </span>
-                      <span className="shrink-0 text-[10px] capitalize text-slate-400">
-                        {item.status.replace("_", " ")}
-                      </span>
-                    </div>
-                  </button>
-                ))
+                      <span className="mt-1.5 block truncate text-xs font-semibold text-slate-700">{item.subject}</span>
+                      <div className="mt-1.5 flex items-center justify-between gap-2">
+                        <span className="truncate text-[11px] text-slate-500">{item.lastMessage?.content}</span>
+                        <span className={`cf-badge shrink-0 text-[10px]! capitalize ${STATUS_BADGE[item.status] || STATUS_BADGE.closed}`}>
+                          {item.status.replace("_", " ")}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })
               )}
             </div>
           </aside>
 
-          {/* Right Ticket Detail & Reply */}
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <header className="flex items-center gap-3 border-b border-slate-100 px-5 py-3.5 shrink-0">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+          {/* Ticket detail & reply */}
+          <div className={`min-h-0 min-w-0 flex-1 flex-col ${selected ? "flex" : "hidden lg:flex"}`}>
+            <header className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-3 sm:px-5">
+              {selected && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    selectedIdRef.current = null;
+                    setSelected(null);
+                  }}
+                  className="cf-icon-btn lg:hidden"
+                  aria-label="Back to ticket list"
+                >
+                  <ArrowLeft size={16} />
+                </button>
+              )}
+              <div className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 lg:flex">
                 <MessageCircle size={18} />
               </div>
               <div className="min-w-0 flex-1">
-                <h3 className="truncate font-bold text-sm text-slate-900">
+                <h3 className="truncate text-sm font-bold text-slate-900">
                   {selected?.subject || "Select a student question"}
                 </h3>
                 <p className="truncate text-xs text-slate-500">
@@ -626,79 +739,83 @@ export default function AdminSupportInbox() {
                 </p>
               </div>
               {selected && (
-                <button
-                  type="button"
-                  onClick={toggleTicketStatus}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
-                >
-                  {selected.status === "closed" ? "Reopen" : <><Check size={14} /> Close Ticket</>}
+                <button type="button" onClick={toggleTicketStatus} className="cf-btn cf-btn-secondary">
+                  {selected.status === "closed" ? (
+                    "Reopen"
+                  ) : (
+                    <>
+                      <Check size={14} /> Close Ticket
+                    </>
+                  )}
                 </button>
               )}
             </header>
 
-            <div className="flex-1 space-y-4 overflow-y-auto bg-slate-50/60 p-4 sm:p-6" aria-live="polite">
-              {!selected ? (
-                <div className="mx-auto mt-12 max-w-sm text-center text-sm leading-6 text-slate-500">
-                  <UserRound size={28} className="mx-auto mb-3 text-slate-300" />
-                  Choose a ticket from the list to review the assistant context and reply to the student.
-                </div>
-              ) : (
-                selected.messages?.map((message) => (
-                  <div
-                    key={message._id}
-                    className={`flex ${message.senderRole === "student" ? "justify-end" : "justify-start"}`}
-                  >
-                    <div
-                      className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-6 ${
-                        message.senderRole === "student"
-                          ? "rounded-br-md bg-indigo-600 text-white"
-                          : "rounded-bl-md border border-slate-200 bg-white text-slate-700 shadow-2xs"
-                      }`}
-                    >
-                      <p className="whitespace-pre-wrap break-words">{message.content}</p>
-                      <span
-                        className={`mt-2 block text-[10px] font-semibold ${
-                          message.senderRole === "student" ? "text-indigo-100" : "text-slate-400"
-                        }`}
-                      >
-                        {message.senderRole === "assistant"
-                          ? `CampusFlow assistant${
-                              message.confidence != null ? ` · ${Math.round(message.confidence * 100)}% confidence` : ""
-                            }`
-                          : message.senderRole === "admin"
-                          ? "TPO administrator"
-                          : "Student"}
-                        {message.handoffRecommended ? " · Escalated to TPO" : ""}
-                      </span>
-                    </div>
+            <div ref={ticketScrollRef} className="min-h-0 flex-1 overflow-y-auto bg-surface-muted/60" aria-live="polite">
+              <div className="mx-auto w-full max-w-3xl space-y-4 p-4 sm:p-6">
+                {!selected ? (
+                  <div className="mx-auto mt-14 max-w-sm text-center">
+                    <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-slate-300 ring-1 ring-line">
+                      <UserRound size={24} />
+                    </span>
+                    <p className="text-sm font-semibold text-slate-600">No ticket selected</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      Choose a ticket from the list to review the assistant context and reply to the student.
+                    </p>
                   </div>
-                ))
-              )}
+                ) : (
+                  selected.messages?.map((message) => {
+                    const fromStudent = message.senderRole === "student";
+                    const fromAssistant = message.senderRole === "assistant";
+                    return (
+                      <div key={message._id} className={`flex animate-message ${fromStudent ? "justify-end" : "justify-start"}`}>
+                        <div
+                          className={`max-w-[min(88%,40rem)] rounded-2xl px-4 py-3 text-sm leading-6 ${
+                            fromStudent
+                              ? "rounded-br-md bg-indigo-600 text-white shadow-sm"
+                              : "rounded-bl-md border border-line bg-white text-slate-700 shadow-xs"
+                          }`}
+                        >
+                          {fromAssistant ? (
+                            <Markdown content={message.content} />
+                          ) : (
+                            <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                          )}
+                          <span
+                            className={`mt-2 flex flex-wrap items-center gap-1 text-[10px] font-semibold ${
+                              fromStudent ? "text-indigo-100" : "text-slate-400"
+                            }`}
+                          >
+                            {fromAssistant && <Sparkles size={11} className="text-indigo-400" />}
+                            {fromAssistant
+                              ? `CampusFlow assistant${
+                                  message.confidence != null ? ` · ${Math.round(message.confidence * 100)}% confidence` : ""
+                                }`
+                              : message.senderRole === "admin"
+                              ? "TPO administrator"
+                              : "Student"}
+                            {message.handoffRecommended && <span className="font-bold text-amber-600"> · Escalated to TPO</span>}
+                            {message.createdAt && <span className="font-medium opacity-80">· {formatTime(message.createdAt)}</span>}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
 
             {selected && selected.status !== "closed" && (
-              <form
+              <ChatComposer
+                tone="violet"
+                label="Administrator reply"
+                sendLabel="Send reply"
+                value={draft}
+                onChange={setDraft}
                 onSubmit={replyTicket}
-                className="flex items-end gap-2 border-t border-slate-200 bg-white p-3 sm:p-4 shrink-0"
-              >
-                <textarea
-                  aria-label="Administrator reply"
-                  rows={2}
-                  maxLength={4000}
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  placeholder="Write an official confirmed answer for the student…"
-                  className="min-h-12 flex-1 resize-y rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-indigo-400 focus:bg-white"
-                />
-                <button
-                  type="submit"
-                  disabled={!draft.trim() || sending}
-                  className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-slate-300"
-                  aria-label="Send reply"
-                >
-                  {sending ? <LoaderCircle size={18} className="animate-spin" /> : <Send size={17} />}
-                </button>
-              </form>
+                busy={sending}
+                placeholder="Write an official confirmed answer for the student…"
+              />
             )}
           </div>
         </section>

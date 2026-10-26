@@ -484,14 +484,14 @@ export default function Signup() {
 
                 {/* Full Name */}
                 <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                  <label htmlFor="signup-field-1" className="mb-1.5 block text-xs font-semibold text-slate-700">
                     Full Name <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative">
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
                       <User className="h-4 w-4" />
                     </div>
-                    <input
+                    <input id="signup-field-1"
                       type="text"
                       name="fullName"
                       required
@@ -506,14 +506,14 @@ export default function Signup() {
                 {/* Institutional Email & USN Grid */}
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                    <label htmlFor="signup-field-2" className="mb-1.5 block text-xs font-semibold text-slate-700">
                       Institutional Email <span className="text-rose-500">*</span>
                     </label>
                     <div className="relative">
                       <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
                         <Mail className="h-4 w-4" />
                       </div>
-                      <input
+                      <input id="signup-field-2"
                         type="email"
                         name="email"
                         required
@@ -526,14 +526,14 @@ export default function Signup() {
                   </div>
 
                   <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                    <label htmlFor="signup-field-3" className="mb-1.5 block text-xs font-semibold text-slate-700">
                       USN / Roll Number <span className="text-rose-500">*</span>
                     </label>
                     <div className="relative">
                       <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
                         <FileCheck2 className="h-4 w-4" />
                       </div>
-                      <input
+                      <input id="signup-field-3"
                         type="text"
                         name="usn"
                         required
@@ -549,14 +549,14 @@ export default function Signup() {
                 {/* Personal Email & Phone Grid */}
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                    <label htmlFor="signup-field-4" className="mb-1.5 block text-xs font-semibold text-slate-700">
                       Personal Email <span className="text-slate-400">(Optional)</span>
                     </label>
                     <div className="relative">
                       <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
                         <Mail className="h-4 w-4" />
                       </div>
-                      <input
+                      <input id="signup-field-4"
                         type="email"
                         name="personalEmail"
                         placeholder="personal@gmail.com"
@@ -568,14 +568,14 @@ export default function Signup() {
                   </div>
 
                   <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                    <label htmlFor="signup-field-5" className="mb-1.5 block text-xs font-semibold text-slate-700">
                       Mobile Number
                     </label>
                     <div className="relative">
                       <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
                         <Phone className="h-4 w-4" />
                       </div>
-                      <input
+                      <input id="signup-field-5"
                         type="tel"
                         name="phone"
                         placeholder="+91 98765 43210"
@@ -590,14 +590,14 @@ export default function Signup() {
                 {/* Password & Confirm Password */}
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                    <label htmlFor="signup-field-6" className="mb-1.5 block text-xs font-semibold text-slate-700">
                       Password <span className="text-rose-500">*</span>
                     </label>
                     <div className="relative">
                       <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
                         <Lock className="h-4 w-4" />
                       </div>
-                      <input
+                      <input id="signup-field-6"
                         type={showPassword ? "text" : "password"}
                         name="password"
                         required
@@ -610,14 +610,14 @@ export default function Signup() {
                   </div>
 
                   <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                    <label htmlFor="signup-field-7" className="mb-1.5 block text-xs font-semibold text-slate-700">
                       Confirm Password <span className="text-rose-500">*</span>
                     </label>
                     <div className="relative">
                       <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
                         <CheckCircle2 className="h-4 w-4" />
                       </div>
-                      <input
+                      <input id="signup-field-7"
                         type={showPassword ? "text" : "password"}
                         name="confirmPassword"
                         required
@@ -650,14 +650,14 @@ export default function Signup() {
               <div className="space-y-4 animate-in fade-in-50">
                 {/* Program level and approved program */}
                 <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                  <label htmlFor="signup-field-8" className="mb-1.5 block text-xs font-semibold text-slate-700">
                     Program Level <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative">
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
                       <GraduationCap className="h-4 w-4" />
                     </div>
-                    <select
+                    <select id="signup-field-8"
                       name="programLevel"
                       value={formData.programLevel}
                       onChange={handleChange}
@@ -672,7 +672,7 @@ export default function Signup() {
 
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-semibold text-slate-700">
+                    <label htmlFor="signup-field-9" className="block text-xs font-semibold text-slate-700">
                       Academic Program <span className="text-rose-500">*</span>
                     </label>
                   </div>
@@ -680,7 +680,7 @@ export default function Signup() {
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
                       <Layers className="h-4 w-4" />
                     </div>
-                    <select
+                    <select id="signup-field-9"
                       name="programCode"
                       value={formData.programCode}
                       onChange={handleChange}
@@ -703,14 +703,14 @@ export default function Signup() {
                 {/* Admission Year & Current Semester Grid */}
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                    <label htmlFor="signup-field-10" className="mb-1.5 block text-xs font-semibold text-slate-700">
                       Admission Year <span className="text-rose-500">*</span>
                     </label>
                     <div className="relative">
                       <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
                         <Calendar className="h-4 w-4" />
                       </div>
-                      <select
+                      <select id="signup-field-10"
                         name="admissionYear"
                         value={formData.admissionYear || ""}
                         onChange={handleChange}
@@ -727,14 +727,14 @@ export default function Signup() {
                   </div>
 
                   <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                    <label htmlFor="signup-field-11" className="mb-1.5 block text-xs font-semibold text-slate-700">
                       Current Semester <span className="text-rose-500">*</span>
                     </label>
                     <div className="relative">
                       <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
                         <BookOpen className="h-4 w-4" />
                       </div>
-                      <select
+                      <select id="signup-field-11"
                         name="currentSemester"
                         value={formData.currentSemester}
                         onChange={handleChange}
@@ -848,10 +848,10 @@ export default function Signup() {
                 {/* Optional DOB & Gender */}
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                    <label htmlFor="signup-field-12" className="mb-1.5 block text-xs font-semibold text-slate-700">
                       Date of Birth <span className="text-slate-400">(Optional)</span>
                     </label>
-                    <input
+                    <input id="signup-field-12"
                       type="date"
                       name="dob"
                       value={formData.dob}
@@ -861,10 +861,10 @@ export default function Signup() {
                   </div>
 
                   <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                    <label htmlFor="signup-field-13" className="mb-1.5 block text-xs font-semibold text-slate-700">
                       Gender
                     </label>
-                    <select
+                    <select id="signup-field-13"
                       name="gender"
                       value={formData.gender}
                       onChange={handleChange}

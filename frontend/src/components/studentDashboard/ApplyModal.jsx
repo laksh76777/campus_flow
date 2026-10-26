@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import useOverlay from "../../hooks/useOverlay";
 import {
   X,
   CheckCircle2,
@@ -75,6 +76,8 @@ export default function ApplyModal({
       isMounted = false;
     };
   }, [isOpen, drive?._id]);
+
+  useOverlay(isOpen, onClose);
 
   if (!isOpen || !drive) return null;
 
@@ -174,10 +177,10 @@ export default function ApplyModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="relative w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-3xl border border-slate-200 bg-white p-6 sm:p-7 shadow-2xl animate-in zoom-in-95 duration-150">
+    <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200">
+      <div className="relative w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-3xl border border-slate-200 bg-white p-6 sm:p-7 shadow-2xl animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200">
         {/* Close Button */}
-        <button
+        <button aria-label="Close dialog"
           onClick={onClose}
           className="absolute top-5 right-5 flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
         >

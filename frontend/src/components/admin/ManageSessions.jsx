@@ -309,7 +309,7 @@ export default function ManageSessions({ onSessionChanged }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-          <button
+          <button aria-label="Refresh sessions"
             onClick={fetchSessions}
             disabled={loading}
             className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 transition active:scale-95"
@@ -507,8 +507,8 @@ export default function ManageSessions({ onSessionChanged }) {
 
       {/* Inspect Session Details Modal */}
       {inspectedSession && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl space-y-4">
+        <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 max-h-[calc(100dvh-2rem)] overflow-y-auto">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <GraduationCap className="h-5 w-5 text-blue-600" />
@@ -563,8 +563,8 @@ export default function ManageSessions({ onSessionChanged }) {
 
       {/* Migration / Backfill Audit Modal */}
       {isBackfillOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="w-full max-w-xl rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl space-y-5 max-h-[85vh] flex flex-col">
+        <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200">
+          <div className="w-full max-w-xl rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl space-y-5 max-h-[85vh] flex flex-col animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200">
             <div className="flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="h-10 w-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
@@ -673,8 +673,8 @@ export default function ManageSessions({ onSessionChanged }) {
 
       {/* Create Session Modal */}
       {isCreateOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="relative w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 sm:p-7 shadow-2xl animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+        <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200">
+          <div className="relative w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 sm:p-7 shadow-2xl max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200">
             <button
               onClick={() => setIsCreateOpen(false)}
               className="absolute top-5 right-5 h-8 w-8 flex items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"

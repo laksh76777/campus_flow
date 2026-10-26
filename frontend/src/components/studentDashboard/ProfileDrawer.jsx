@@ -1099,8 +1099,8 @@ export default function ProfileDrawer({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/50 backdrop-blur-xs transition-opacity animate-in fade-in duration-200">
-      <div className="relative flex h-full w-full max-w-2xl flex-col bg-white shadow-2xl animate-in slide-in-from-right duration-200 overflow-hidden">
+    <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex justify-end bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200">
+      <div className="relative flex h-full w-full max-w-2xl flex-col bg-white shadow-2xl slide-in-from-right overflow-hidden animate-in duration-300">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 bg-white shrink-0">
           <div className="flex items-center gap-3">
@@ -1125,7 +1125,7 @@ export default function ProfileDrawer({
               <p className="text-xs text-slate-500 font-medium">Verified candidate profile</p>
             </div>
           </div>
-          <button
+          <button aria-label="Close profile"
             onClick={onClose}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
           >
@@ -2161,15 +2161,15 @@ export default function ProfileDrawer({
                       const isRecorded = sgpaVal !== undefined && sgpaVal !== null;
                       return (
                         <div key={sem} className="rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-black text-slate-800">Semester {sem}</span>
+                          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                            <span className="whitespace-nowrap text-xs font-black text-slate-800">Semester {sem}</span>
                             {isRecorded ? (
-                              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                              <CheckCircle2 className="h-4 w-4 text-emerald-500" aria-label="Recorded" />
                             ) : (
-                              <span className="text-[10px] text-slate-400 font-bold">Pending</span>
+                              <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">Pending</span>
                             )}
                           </div>
-                          <p className={`text-xl font-black font-mono ${isRecorded ? "text-blue-600" : "text-slate-300"}`}>
+                          <p className={`font-black font-mono tabular-nums ${isRecorded ? "text-xl text-blue-600" : "text-sm text-slate-300"}`}>
                             {isRecorded ? Number(sgpaVal).toFixed(2) : "Not entered"}
                           </p>
                           <button
@@ -2645,8 +2645,8 @@ export default function ProfileDrawer({
 
       {/* MODAL: SINGLE SEMESTER SGPA EDIT */}
       {editingSem && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl space-y-4">
+        <div role="dialog" aria-modal="true" className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 max-h-[calc(100dvh-2rem)] overflow-y-auto">
             <h4 className="text-sm font-black text-slate-900">Record Semester {editingSem.semester} SGPA</h4>
             <form onSubmit={handleSaveSingleSemester} className="space-y-4">
               <div>
@@ -2685,8 +2685,8 @@ export default function ProfileDrawer({
 
       {/* MODAL: ADD BACKLOG RECORD */}
       {isAddBacklogOpen && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl space-y-4">
+        <div role="dialog" aria-modal="true" className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 max-h-[calc(100dvh-2rem)] overflow-y-auto">
             <h4 className="text-sm font-black text-slate-900">Record Arrear / Backlog</h4>
             <form onSubmit={handleAddBacklog} className="space-y-3">
               <div>
@@ -2756,8 +2756,8 @@ export default function ProfileDrawer({
 
       {/* MODAL: ADD EDUCATION GAP */}
       {isAddGapOpen && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl space-y-4">
+        <div role="dialog" aria-modal="true" className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 max-h-[calc(100dvh-2rem)] overflow-y-auto">
             <h4 className="text-sm font-black text-slate-900">Add Education Gap Record</h4>
             <form onSubmit={handleAddGapRecord} className="space-y-3">
               <div>
@@ -2827,8 +2827,8 @@ export default function ProfileDrawer({
       )}
       {/* MODAL: ADD CERTIFICATE / CREDENTIAL */}
       {isAddCertOpen && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+        <div role="dialog" aria-modal="true" className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-purple-50 text-purple-600">

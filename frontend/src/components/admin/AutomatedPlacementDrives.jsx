@@ -808,8 +808,8 @@ export default function AutomatedPlacementDrives({
 
       {/* Interactive Drive Workspace Modal */}
       {activeDriveWorkspace && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="relative w-full max-w-5xl max-h-[92vh] flex flex-col rounded-3xl bg-white shadow-2xl border border-slate-100 overflow-hidden">
+        <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200">
+          <div className="relative w-full max-w-5xl max-h-[92vh] flex flex-col rounded-3xl bg-white shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200">
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 bg-slate-50/70">
               <div className="flex items-center gap-3">
@@ -880,7 +880,7 @@ export default function AutomatedPlacementDrives({
                   <span>{exportingRoster ? "Exporting..." : "Export Company Roster"}</span>
                 </button>
 
-                <button
+                <button aria-label="Close workspace"
                   type="button"
                   onClick={handleCloseWorkspace}
                   className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 transition cursor-pointer"
@@ -1683,8 +1683,8 @@ export default function AutomatedPlacementDrives({
 
       {/* Manual Update Application Status Modal */}
       {activeModalApp && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-150 border border-slate-100">
+        <div role="dialog" aria-modal="true" className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200">
+          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 max-h-[calc(100dvh-2rem)] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700">

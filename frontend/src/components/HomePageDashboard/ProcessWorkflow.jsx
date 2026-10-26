@@ -27,7 +27,7 @@ export default function ProcessWorkflow() {
             CampusFlow brings student and Training &amp; Placement activities together while keeping access role-based.
           </p>
         </div>
-        <ol className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <ol className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {steps.map(({ title, description, icon: Icon }, index) => (
             <li key={title} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-5 transition hover:border-blue-200 hover:bg-white hover:shadow-md">
               <div className="flex items-center justify-between">

@@ -73,7 +73,7 @@ export default function Home() {
       </div>
 
       {/* Main 2-Column Hero Section */}
-      <div className="mx-auto grid max-w-7xl items-center gap-12 lg:gap-14 px-4 sm:px-6 lg:grid-cols-2 lg:px-8">
+      <div className="mx-auto grid grid-cols-1 max-w-7xl items-center gap-12 lg:gap-14 px-4 sm:px-6 lg:grid-cols-2 lg:px-8">
         {/* Left Column: Heading, Value Proposition & Actions */}
         <div className="text-center lg:text-left">
           <h1 className="text-4xl font-extrabold tracking-tight text-slate-950 sm:text-5xl lg:text-6xl">
@@ -153,7 +153,7 @@ export default function Home() {
             </div>
 
             {/* Modules Grid */}
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
               {workspaceItems.map(({ icon: Icon, label, color }) => (
                 <div key={label} className="flex min-h-24 items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-4 transition hover:bg-slate-50 hover:border-slate-200">
                   <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${color}`}>

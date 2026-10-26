@@ -25,7 +25,7 @@ export default function PlatformFeatures() {
           <h2 className="mt-4 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">The tools behind the workflow</h2>
           <p className="mt-3 text-sm leading-6 text-slate-600">A role-based workspace for the core tasks involved in coordinating campus recruitment.</p>
         </div>
-        <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {features.map(({ icon: Icon, title, description }) => (
             <article key={title} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
               <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-700">

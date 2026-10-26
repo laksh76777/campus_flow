@@ -80,8 +80,15 @@ export default function StudentNavbar({
         setShowNotifications(false);
       }
     }
+    function handleEscape(event) {
+      if (event.key === "Escape") setShowNotifications(false);
+    }
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
   }, []);
 
   const handleMarkAllRead = async () => {
@@ -193,59 +200,59 @@ export default function StudentNavbar({
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-18 w-full items-center justify-between border-b border-slate-200/80 bg-white/90 px-4 sm:px-6 lg:px-8 backdrop-blur-md">
-      {/* Left: Mobile Drawer Trigger & Breadcrumb */}
-      <div className="flex items-center gap-3">
+    <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between gap-3 border-b border-line bg-white/85 px-4 backdrop-blur-md sm:px-6 lg:px-8">
+      {/* Left: drawer trigger + breadcrumb title */}
+      <div className="flex min-w-0 items-center gap-3">
         <button
+          type="button"
           onClick={onMenuClick}
-          className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 hover:text-slate-900 lg:hidden transition"
-          aria-label="Toggle navigation drawer"
+          className="cf-icon-btn lg:hidden"
+          aria-label="Open navigation drawer"
         >
-          <Menu className="h-5 w-5" />
+          <Menu className="h-[18px] w-[18px]" />
         </button>
 
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-slate-400 hidden sm:inline-block">
-            Portal
-          </span>
-          <ChevronRight className="h-3.5 w-3.5 text-slate-300 hidden sm:inline-block" />
-          <h1 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
+        <div className="flex min-w-0 flex-col justify-center">
+          <nav aria-label="Breadcrumb" className="hidden items-center gap-1 text-[11px] font-semibold text-slate-400 sm:flex">
+            <span>Student Portal</span>
+            <ChevronRight className="h-3 w-3" aria-hidden="true" />
+            <span className="text-slate-500">Placement workspace</span>
+          </nav>
+          <h1 className="truncate text-[15px] font-extrabold tracking-tight text-slate-900 sm:text-base">
             {tabTitles[activeTab] || "Dashboard Overview"}
           </h1>
-
-          <span className="hidden md:inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-semibold text-blue-700 border border-blue-100 ml-2">
-            <Sparkles className="h-3 w-3 text-blue-500" />
-            Placement workspace
-          </span>
         </div>
       </div>
 
-      {/* Right: Notifications & Profile */}
-      <div className="flex items-center gap-3">
-        {/* Notification Bell Dropdown */}
-        <div className="relative" ref={notificationRef}>
+      {/* Right: notifications + profile */}
+      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+        <div className="sm:relative" ref={notificationRef}>
           <button
+            type="button"
             onClick={() => {
               const nextState = !showNotifications;
               setShowNotifications(nextState);
               if (nextState) fetchNotifications();
             }}
-            className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-blue-600 transition active:scale-95"
-            aria-label="Notifications"
+            className="cf-icon-btn"
+            aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
+            aria-expanded={showNotifications}
+            aria-haspopup="true"
           >
-            <Bell className="h-4 w-4" />
+            <Bell className="h-[18px] w-[18px]" />
             {unreadCount > 0 && (
-              <>
-                <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-black text-white shadow-xs animate-pulse">
-                  {unreadCount > 9 ? "9+" : unreadCount}
-                </span>
-                <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white" />
-              </>
+              <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-black text-white ring-2 ring-white tabular-nums">
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
             )}
           </button>
 
           {showNotifications && (
-            <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl z-50 animate-in fade-in zoom-in-95 duration-150">
+            <div
+              role="dialog"
+              aria-label="Notifications"
+              className="cf-popover fixed inset-x-3 top-[4.5rem] z-50 p-3.5 animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-200 sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-96 sm:p-4"
+            >
               <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                 <div className="flex items-center gap-2">
                   <h3 className="font-bold text-slate-900 text-sm">Notifications</h3>
@@ -280,7 +287,7 @@ export default function StudentNavbar({
                 </div>
               </div>
 
-              <div className="mt-2 divide-y divide-slate-100 max-h-80 overflow-y-auto">
+              <div className="mt-2 max-h-[min(22rem,60vh)] overflow-y-auto">
                 {notifications.length === 0 && loadingNotifs ? (
                   <div className="py-8 text-center text-slate-500" role="status">
                     <span className="mx-auto mb-2 block h-5 w-5 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
@@ -309,11 +316,19 @@ export default function StudentNavbar({
                   notifications.map((n) => (
                     <div
                       key={n._id}
+                      role="button"
+                      tabIndex={0}
                       onClick={() => handleNotificationClick(n)}
-                      className={`p-3 rounded-xl transition cursor-pointer my-1 ${
+                      onKeyDown={(e) => {
+                        if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+                          e.preventDefault();
+                          handleNotificationClick(n);
+                        }
+                      }}
+                      className={`my-1 cursor-pointer rounded-xl border p-3 transition ${
                         !n.isRead
-                          ? "bg-blue-50/60 border border-blue-100 shadow-xs"
-                          : "hover:bg-slate-50"
+                          ? "border-brand-100 bg-brand-50/60 hover:bg-brand-50"
+                          : "border-transparent hover:bg-slate-50"
                       }`}
                     >
                       <div className="flex items-start gap-2.5">
@@ -336,8 +351,9 @@ export default function StudentNavbar({
                               <button
                                 type="button"
                                 onClick={(e) => handleDeleteOne(e, n._id)}
-                                className="text-slate-300 hover:text-rose-600 p-0.5 rounded hover:bg-rose-50 transition"
+                                className="rounded-md p-1 text-slate-300 transition hover:bg-rose-50 hover:text-rose-600"
                                 title="Delete notification"
+                                aria-label="Delete notification"
                               >
                                 <Trash2 className="h-3 w-3" />
                               </button>
@@ -401,12 +417,14 @@ export default function StudentNavbar({
           )}
         </div>
 
-        <div className="hidden sm:block h-6 w-px bg-slate-200" />
+        <div className="hidden h-6 w-px bg-line sm:block" aria-hidden="true" />
 
-        {/* Profile Pill */}
+        {/* Profile pill */}
         <button
+          type="button"
           onClick={onOpenProfile}
-          className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white p-1 pr-3 hover:border-slate-300 hover:shadow-xs transition"
+          aria-label={`Open profile for ${displayName}`}
+          className="flex items-center gap-2.5 rounded-xl border border-line bg-white p-1 shadow-xs transition hover:border-line-strong hover:shadow-sm active:scale-[0.98] sm:pr-3"
         >
           {user?.avatar?.url ? (
             <img
@@ -415,12 +433,12 @@ export default function StudentNavbar({
               className="h-8 w-8 rounded-lg object-cover ring-1 ring-slate-100"
             />
           ) : (
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 font-bold text-white text-xs shadow-xs">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 text-xs font-bold text-white">
               {avatarLetter}
             </div>
           )}
           <div className="hidden sm:block text-left">
-            <p className="text-xs font-bold text-slate-900 leading-tight line-clamp-1">
+            <p className="max-w-[150px] truncate text-xs font-bold leading-tight text-slate-900">
               {displayName}
             </p>
             <p className="text-[10px] text-slate-400 font-medium">
