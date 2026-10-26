@@ -315,56 +315,58 @@ export default function AdminDashboard({ initialTab = "overview" }) {
 
           {/* Page Body */}
           <main className="flex-1 min-h-[calc(100vh-5rem)] p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6">
-          {/* Global Cohort Scope & Sync Banner */}
-          <div className="cf-card flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
-            {/* Session Filter Dropdown */}
-            <div className="flex min-w-0 items-center gap-2.5">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-brand-100 bg-brand-50 text-brand-600">
-                <Calendar className="h-4 w-4" />
+          {/* Global Cohort Scope & Sync Banner (Main Dashboard Overview Only) */}
+          {activeTab === "overview" && (
+            <div className="cf-card flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
+              {/* Session Filter Dropdown */}
+              <div className="flex min-w-0 items-center gap-2.5">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-brand-100 bg-brand-50 text-brand-600">
+                  <Calendar className="h-4 w-4" />
+                </div>
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <label htmlFor="cohort-scope" className="cf-eyebrow hidden sm:inline">
+                    Cohort scope
+                  </label>
+                  <select
+                    id="cohort-scope"
+                    aria-label="Cohort scope"
+                    value={selectedSessionId}
+                    onChange={(e) => setSelectedSessionId(e.target.value)}
+                    className="min-h-9 max-w-full cursor-pointer rounded-xl border border-line bg-surface-muted px-3 py-1.5 text-xs font-bold text-slate-800 outline-none transition hover:border-line-strong focus:border-brand-400 focus:bg-white"
+                  >
+                    <option value="all">All Cohorts (Unfiltered)</option>
+                    {sessions.map((sess) => (
+                      <option key={sess._id} value={sess._id}>
+                        {sess.academicYear ? `${sess.academicYear} Session` : `Class of ${sess.sessionYear}`} {sess.isActive ? "• Active" : sess.isClosed ? "• Closed" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  {activeSessionObj && (
+                    <span className="cf-badge hidden border-emerald-200 bg-emerald-50 text-emerald-700 md:inline-flex">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
+                      Isolated to {activeSessionObj.sessionYear}
+                    </span>
+                  )}
+                </div>
               </div>
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <label htmlFor="cohort-scope" className="cf-eyebrow hidden sm:inline">
-                  Cohort scope
-                </label>
-                <select
-                  id="cohort-scope"
-                  aria-label="Cohort scope"
-                  value={selectedSessionId}
-                  onChange={(e) => setSelectedSessionId(e.target.value)}
-                  className="min-h-9 max-w-full cursor-pointer rounded-xl border border-line bg-surface-muted px-3 py-1.5 text-xs font-bold text-slate-800 outline-none transition hover:border-line-strong focus:border-brand-400 focus:bg-white"
-                >
-                  <option value="all">All Cohorts (Unfiltered)</option>
-                  {sessions.map((sess) => (
-                    <option key={sess._id} value={sess._id}>
-                      {sess.academicYear ? `${sess.academicYear} Session` : `Class of ${sess.sessionYear}`} {sess.isActive ? "• Active" : sess.isClosed ? "• Closed" : ""}
-                    </option>
-                  ))}
-                </select>
-                {activeSessionObj && (
-                  <span className="cf-badge hidden border-emerald-200 bg-emerald-50 text-emerald-700 md:inline-flex">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
-                    Isolated to {activeSessionObj.sessionYear}
-                  </span>
-                )}
-              </div>
-            </div>
 
-            {/* Sync Live Data Button */}
-            <div className="flex items-center gap-2 self-end sm:self-auto">
-              <button
-                type="button"
-                onClick={() => loadDashboardData(true)}
-                disabled={refreshing}
-                aria-busy={refreshing}
-                className="cf-btn cf-btn-secondary"
-              >
-                <RefreshCw
-                  className={`h-3.5 w-3.5 text-slate-500 ${refreshing ? "animate-spin" : ""}`}
-                />
-                <span>{refreshing ? "Syncing…" : "Sync Live Data"}</span>
-              </button>
+              {/* Sync Live Data Button */}
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => loadDashboardData(true)}
+                  disabled={refreshing}
+                  aria-busy={refreshing}
+                  className="cf-btn cf-btn-secondary"
+                >
+                  <RefreshCw
+                    className={`h-3.5 w-3.5 text-slate-500 ${refreshing ? "animate-spin" : ""}`}
+                  />
+                  <span>{refreshing ? "Syncing…" : "Sync Live Data"}</span>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Active Tab View with Scoped Datasets (keyed so each tab fades in) */}
           <div key={activeTab} className="animate-page space-y-6">
