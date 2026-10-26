@@ -46,6 +46,16 @@ const reminderJobSchema = new Schema(
             type: Boolean,
             default: false,
         },
+        // Per-recipient delivery ledger so retries and crash recovery never
+        // send the same reminder twice to one student.
+        notifiedStudentIds: {
+            type: [Schema.Types.ObjectId],
+            default: [],
+        },
+        emailedStudentIds: {
+            type: [Schema.Types.ObjectId],
+            default: [],
+        },
         attempts: {
             type: Number,
             default: 0,

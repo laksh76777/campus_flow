@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { verifyJWT, verifyAdmin } from "../middlewares/auth.middleware.js";
-import { upload } from "../middlewares/multer.middleware.js";
+import { upload, validateResumeUpload } from "../middlewares/multer.middleware.js";
 import {
     createStudentProfile,
     getCurrentStudentProfile,
@@ -34,6 +34,7 @@ router
     .post(
         verifyJWT,
         upload.single("resume"),
+        validateResumeUpload,
         createStudentProfile
     );
 router
@@ -41,7 +42,7 @@ router
     .get(verifyJWT, getCurrentStudentProfile);
 
 router.route("/update-profile").patch(verifyJWT, updateStudentProfile);
-router.route("/update-resume").patch(verifyJWT, upload.single("resume"), updateStudentResume);
+router.route("/update-resume").patch(verifyJWT, upload.single("resume"), validateResumeUpload, updateStudentResume);
 router.route("/delete-resume").delete(verifyJWT, deleteStudentResume);
 router.route("/semester-result").post(verifyJWT, addSemesterResult);
 router.route("/backlog-record").post(verifyJWT, addBacklogRecord);

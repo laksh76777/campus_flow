@@ -609,13 +609,23 @@ studentProfileSchema.pre("save", async function () {
         this.clearedBacklogsCount = cleared;
         this.historicalBacklogs = this.backlogDetails.length;
         this.backlogs = active; // maintain legacy backlogs field
-    } else if (Array.isArray(this.backlogDetails) && this.backlogDetails.length === 0) {
+    } else if (Array.isArray(this.backlogDetails) && this.backlogDetails.length === 0 && this.isModified("backlogDetails") && !this.isNew) {
+        // Itemized backlog records were explicitly cleared
         this.activeBacklogs = 0;
         this.clearedBacklogsCount = 0;
         this.historicalBacklogs = 0;
         this.backlogs = 0;
-    } else if (this.backlogs !== undefined) {
-        this.activeBacklogs = this.backlogs;
+    } else {
+        // No itemized records: keep the recorded counts (profile form, TPO edits and
+        // Excel/CSV imports store counts only). Never reset them to zero here, which
+        // would silently make students with backlogs eligible.
+        if (this.isModified("activeBacklogs") && this.activeBacklogs != null) {
+            this.backlogs = this.activeBacklogs;
+        } else if (this.backlogs != null && this.activeBacklogs == null) {
+            this.activeBacklogs = this.backlogs;
+        } else if (this.backlogs != null && this.isModified("backlogs")) {
+            this.activeBacklogs = this.backlogs;
+        }
     }
 
     // 5. Profile completeness percentage calculation

@@ -13,6 +13,7 @@ import { Notification } from "../models/notification.model.js";
 import { sanitizeFormula } from "./excelImportExport.service.js";
 
 import { ApiError } from "../utils/ApiError.js";
+import { syncDriveReminders } from "./reminderScheduler.service.js";
 
 // Legal status transitions state machine
 export const LEGAL_TRANSITIONS = {
@@ -1315,6 +1316,13 @@ export const commitRoundResults = async ({
             }
         }
         throw new ApiError(400, `Failed to commit round results: ${procErr.message}. Batch processing halted; no partial outcomes committed.`);
+    }
+
+    // A completed (closed) drive must stop sending application-deadline reminders
+    if (drive.isPlacementCompleted) {
+        await syncDriveReminders(drive._id).catch((err) =>
+            console.error("[ReminderScheduler] Could not cancel reminders for completed drive:", err.message)
+        );
     }
 
     // Safely dispatch notifications without duplicates

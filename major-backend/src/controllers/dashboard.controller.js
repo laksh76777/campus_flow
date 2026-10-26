@@ -6,13 +6,16 @@ import { PlacementDrive } from "../models/placementDrive.model.js";
 import { StudentProfile } from "../models/studentProfile.model.js";
 import { Application } from "../models/application.model.js";
 import { resolveStudentProgram } from "../constants/programCatalog.js";
-import { studentMatchesDriveProgram } from "../services/programTargeting.service.js";
+import { EligibilityService } from "../services/eligibility.service.js";
 
 /**
  * Enhanced Admin Dashboard Analytics
  * Calculates aggregate stats, branch placement distribution, salary brackets,
  * recruitment funnel, and corporate recruiter rankings.
  */
+// A student is placed once selected, offered, or after accepting the offer
+const PLACED_STATUSES = ["selected", "offer_received", "offer_accepted"];
+
 const getDashboardStats = asyncHandler(async (req, res) => {
     const { sessionId, placementSession } = req.query;
     const targetSessionId = sessionId || placementSession;
@@ -54,14 +57,14 @@ const getDashboardStats = asyncHandler(async (req, res) => {
         Application.countDocuments({ ...appFilter, status: "shortlisted" }),
         Application.countDocuments({ ...appFilter, status: "interview" }),
         Application.countDocuments({ ...appFilter, status: "rejected" }),
-        Application.countDocuments({ ...appFilter, status: "selected" }),
+        Application.countDocuments({ ...appFilter, status: { $in: PLACED_STATUSES } }),
         Application.countDocuments({ ...appFilter, status: "withdrawn" }),
 
         // Profiles with branch info
         StudentProfile.find(studentFilter).select("programCode programLevel degreeType course branch department cgpa"),
 
         // Selected applications with populated placement drive and company for salary/company analytics
-        Application.find({ ...appFilter, status: "selected" })
+        Application.find({ ...appFilter, status: { $in: PLACED_STATUSES } })
             .populate({
                 path: "placementDrive",
                 populate: {
@@ -278,7 +281,7 @@ const getStudentDashboardStats = asyncHandler(async (req, res) => {
         Application.countDocuments({ student: studentId, status: "applied" }),
         Application.countDocuments({ student: studentId, status: "shortlisted" }),
         Application.countDocuments({ student: studentId, status: "interview" }),
-        Application.countDocuments({ student: studentId, status: "selected" }),
+        Application.countDocuments({ student: studentId, status: { $in: PLACED_STATUSES } }),
         Application.countDocuments({ student: studentId, status: "rejected" }),
         Application.countDocuments({ student: studentId, status: "withdrawn" }),
 
@@ -311,21 +314,14 @@ const getStudentDashboardStats = asyncHandler(async (req, res) => {
             .limit(5),
 
         // Active placement drives
-        PlacementDrive.find({ isActive: true })
+        PlacementDrive.find({ isActive: true, isDeleted: { $ne: true } })
             .populate("company", "companyName companyLogo isActive")
     ]);
 
-    // 3. Filter drives where the student is eligible
+    // 3. Filter drives where the student is eligible (same engine as the drive list and apply flow)
     const eligibleDrives = allPlacementDrives.filter((drive) => {
         if (!drive.company || !drive.company.isActive) return false;
-
-        const branchEligible = studentMatchesDriveProgram(student, drive);
-
-        const cgpaEligible = Number(student.cgpa) >= Number(drive.minimumCGPA);
-        const backlogEligible = Number(student.backlogs) <= Number(drive.maximumBacklogs);
-        const graduationEligible = Number(student.graduationYear) === Number(drive.graduationYear);
-
-        return branchEligible && cgpaEligible && backlogEligible && graduationEligible;
+        return EligibilityService.evaluate(student, drive).isEligible;
     });
 
     const activeEligibleDrives = eligibleDrives.filter((drive) => {
@@ -342,8 +338,8 @@ const getStudentDashboardStats = asyncHandler(async (req, res) => {
     // 4. Offer Celebration Data (if selected in any drive)
     const selectedApp = await Application.findOne({
         student: studentId,
-        status: "selected"
-    }).populate({
+        status: { $in: PLACED_STATUSES }
+    }).sort({ statusUpdatedAt: -1, updatedAt: -1 }).populate({
         path: "placementDrive",
         populate: {
             path: "company",
@@ -354,8 +350,11 @@ const getStudentDashboardStats = asyncHandler(async (req, res) => {
 
     const offerDetails = selectedApp
         ? {
-            companyName: selectedApp.placementDrive?.company?.companyName || "Corporate Partner",
-            jobTitle: selectedApp.placementDrive?.jobTitle || "Software Engineer",
+            // The offer banner's Accept/Decline actions need the application id and status
+            applicationId: selectedApp._id,
+            status: selectedApp.status,
+            companyName: selectedApp.placementDrive?.company?.companyName || selectedApp.archivedDriveSnapshot?.companyName || "Company not recorded",
+            jobTitle: selectedApp.placementDrive?.jobTitle || selectedApp.archivedDriveSnapshot?.jobTitle || "Role not recorded",
             package: selectedApp.offeredPackage || selectedApp.placementDrive?.package,
             selectedAt: selectedApp.statusUpdatedAt || selectedApp.updatedAt
         }

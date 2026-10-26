@@ -9,6 +9,8 @@ class InMemoryRateLimiter {
         this.windowMs = options.windowMs || 60 * 1000; // default 1 minute
         this.max = options.max || 100; // max hits per window
         this.message = options.message || "Too many requests, please try again later.";
+        // Optional custom bucket key (e.g. per authenticated user instead of per IP)
+        this.keyGenerator = typeof options.keyGenerator === "function" ? options.keyGenerator : null;
         this.hits = new Map();
 
         // Periodically purge expired entries every 5 minutes
@@ -31,17 +33,18 @@ class InMemoryRateLimiter {
                 req.socket?.remoteAddress ||
                 "unknown_ip";
 
+            const bucketKey = (this.keyGenerator && this.keyGenerator(req)) || clientIp;
             const now = Date.now();
-            const record = this.hits.get(clientIp);
+            const record = this.hits.get(bucketKey);
 
             if (!record) {
-                this.hits.set(clientIp, { count: 1, startTime: now });
+                this.hits.set(bucketKey, { count: 1, startTime: now });
                 return next();
             }
 
             // Window has expired, reset window
             if (now - record.startTime > this.windowMs) {
-                this.hits.set(clientIp, { count: 1, startTime: now });
+                this.hits.set(bucketKey, { count: 1, startTime: now });
                 return next();
             }
 
@@ -79,7 +82,8 @@ export const generalApiLimiter = new InMemoryRateLimiter({
 export const applyRateLimiter = new InMemoryRateLimiter({
     windowMs: 60 * 1000,
     max: 15,
-    message: "Too many application requests submitted. Please slow down."
+    message: "Too many application requests submitted. Please slow down.",
+    keyGenerator: (req) => (req.user?._id ? `user:${req.user._id}` : null)
 }).middleware();
 
 // Password reset request limiter (max 5 OTP requests per 15 minutes per IP)
@@ -107,7 +111,8 @@ export const certificateValidationLimiter = new InMemoryRateLimiter({
 export const supportAssistantLimiter = new InMemoryRateLimiter({
     windowMs: 5 * 60 * 1000,
     max: 20,
-    message: "Too many support messages. Please wait a few minutes before trying again."
+    message: "Too many support messages. Please wait a few minutes before trying again.",
+    keyGenerator: (req) => (req.user?._id ? `user:${req.user._id}` : null)
 }).middleware();
 
 /**

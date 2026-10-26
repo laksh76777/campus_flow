@@ -3,6 +3,7 @@ import net from "net";
 import crypto from "crypto";
 import { PDFParse } from "pdf-parse";
 import { StudentProfile } from "../models/studentProfile.model.js";
+import { getGroqApiKey } from "./groqClient.service.js";
 
 export const escapeRegex = (string) => (string || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -970,11 +971,7 @@ export const analyzeWebpageWithGroq = async ({
     studentName,
     url
 }) => {
-    const apiKey =
-        process.env.GROQ_API_KEY ||
-        process.env.grog_API_KEY ||
-        process.env.GEMINI_API_KEY ||
-        process.env.GOOGLE_API_KEY;
+    const apiKey = getGroqApiKey();
     if (!apiKey || !webpageText) return null;
 
     const sanitizedHtml = webpageText
@@ -1080,11 +1077,7 @@ export const analyzeWithGroq = async ({
     fileBase64,
     fileMimeType
 }) => {
-    const apiKey =
-        process.env.GROQ_API_KEY ||
-        process.env.grog_API_KEY ||
-        process.env.GEMINI_API_KEY ||
-        process.env.GOOGLE_API_KEY;
+    const apiKey = getGroqApiKey();
     if (!apiKey) {
         return {
             used: false,

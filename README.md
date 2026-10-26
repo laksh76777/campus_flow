@@ -316,10 +316,16 @@ Visit [`http://localhost:5173`](http://localhost:5173) in your browser.
 
 CampusFlow V2 includes comprehensive automated tests covering configuration, authentication boundaries, program catalogs, Excel formula sanitization, and background reminder persistence:
 
+Integration tests (reminder lifecycle, drive editing, application resumes, AI assistants, dashboard statistics) run against an **in-memory MongoDB** (`mongodb-memory-server`, downloaded on first run). They never touch the database in `.env`; email, Cloudinary and Groq are replaced with test fakes, so no live provider is called.
+
 ```powershell
-# Run backend test suite (44 passing native node:test unit & regression tests)
+# Run the backend test suite (unit + in-memory integration tests)
 cd major-backend
 npm test
+
+# Live SMTP/API workflow test: uses the MONGODB_URI from .env and real credentials.
+# Only run it against a disposable test database.
+npm run test:live
 
 # Run frontend lint verification (0 errors)
 cd ../frontend
@@ -385,8 +391,9 @@ CampusFlow V2 is architected for zero-downtime production deployment with the fr
    | `REFRESH_TOKEN_SECRET` | Strong random 256-bit string |
    | `REFRESH_TOKEN_EXPIRY` | `10d` |
    | `ADMIN_SECRET_KEY` | Your secure TPO administrative signup passkey |
-| `GEMINI_API_KEY` | *(Optional; required for AI student support)* Server-side Google Gemini API key. Never put this key in a `VITE_` frontend variable. |
-| `GEMINI_MODEL` | *(Optional)* Model ID for support responses; defaults to `gemini-3.8-flash` |
+| `GROQ_API_KEY` | *(Required for the AI student assistant and TPO copilot)* Server-side Groq API key. Never put this key in a `VITE_` frontend variable. Without it, the assistants clearly report that AI is not configured. |
+| `GROQ_MODEL` | *(Optional)* Groq model tried first; `GROQ_FALLBACK_MODELS` (comma-separated) are tried if it is unavailable |
+| `APP_TIMEZONE` | *(Optional)* Timezone for dates in emails, reminders and AI answers; defaults to `Asia/Kolkata` |
    | `CORS_ORIGIN` | Your Vercel frontend URL (e.g. `https://campus-flow.vercel.app`, set once Vercel is deployed) |
    | `CLOUDINARY_*` | *(Optional)* Cloudinary CDN keys if document storage is enabled |
    | `RESEND_API_KEY` | *(Recommended for Render free services)* Resend API key for transactional email over HTTPS |
@@ -436,11 +443,11 @@ CampusFlow V2 is architected for zero-downtime production deployment with the fr
 - [ ] Test admin sign in and verify the TPO analytics dashboard loads live statistics.
 - [ ] In Automated Placement Drives, open an active drive workspace and verify candidate pipeline and roster export.
 - [ ] Preview a company result file, resolve every identity mismatch and missing outcome, then confirm the round commit.
-- [ ] Configure a student-only support question and administrator reply from both dashboards; confirm Gemini fallback still creates a TPO inbox item when unavailable.
+- [ ] Configure a student-only support question and administrator reply from both dashboards; confirm that when Groq is unavailable the reply is labelled as standard guidance and "Request TPO reply" still creates a TPO inbox item.
 - [ ] Test direct URL refresh on a nested route (e.g., `/student` or `/admin`) to confirm SPA routing works without 404s.
 
 ### AI Student Support
-Student questions use Gemini's Interactions API from the backend only. The assistant receives general active-drive facts, is instructed to hand off private eligibility or administrator decisions, and sends requests with `store: false`; this is prompt-grounded behavior rather than fine-tuning. Configure `GEMINI_API_KEY` on Render to enable it. If Gemini is unavailable, students can still save the question and request a TPO reply.
+Student questions and the TPO copilot use Groq (OpenAI-compatible chat completions) from the backend only. Each request retrieves only the data the caller may see: a student's own profile, eligibility verdicts, applications and notifications; for the TPO, only the students (by USN, email or name) and drives named in the question. Values that are not recorded are labelled as such so the model does not invent them. Configure `GROQ_API_KEY` on Render to enable it. If Groq is unavailable, the student receives clearly labelled standard guidance and can request a TPO reply, and the copilot reports that no changes were made.
 
 ---
 

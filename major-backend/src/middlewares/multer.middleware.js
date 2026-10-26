@@ -47,9 +47,51 @@ export const validateJobDescriptionPdf = async (req, res, next) => {
             }
         }
 
-        if (!hasPdfName || !isPdfMime || !hasPdfSignature) {
+        if (!isPdfName || !isPdfMime || !hasPdfSignature) {
             await fs.promises.unlink(req.file.path).catch(() => {});
             return next(new ApiError(400, "The job description attachment must be a valid PDF file."));
+        }
+        return next();
+    } catch (error) {
+        await fs.promises.unlink(req.file.path).catch(() => {});
+        return next(error);
+    }
+};
+
+// Resume documents: PDF, DOCX or legacy DOC, verified by file signature (not just
+// the extension or client-supplied MIME type), max 5 MB.
+export const RESUME_MAX_BYTES = 5 * 1024 * 1024;
+const RESUME_SIGNATURES = {
+    ".pdf": [0x25, 0x50, 0x44, 0x46, 0x2d], // %PDF-
+    ".docx": [0x50, 0x4b, 0x03, 0x04], // ZIP container
+    ".doc": [0xd0, 0xcf, 0x11, 0xe0], // OLE compound file
+};
+
+export const validateResumeFile = async (file) => {
+    const ext = path.extname(file?.originalname || "").toLowerCase();
+    const expected = RESUME_SIGNATURES[ext];
+    if (!expected) return "Resume must be a PDF, DOCX or DOC file.";
+    if (file.size > RESUME_MAX_BYTES) return "Resume file must be 5 MB or smaller.";
+    const handle = await fs.promises.open(file.path, "r");
+    try {
+        const header = Buffer.alloc(expected.length);
+        const { bytesRead } = await handle.read(header, 0, expected.length, 0);
+        if (bytesRead !== expected.length || !expected.every((byte, i) => header[i] === byte)) {
+            return "The resume file appears to be corrupted or is not the file type its name suggests.";
+        }
+    } finally {
+        await handle.close();
+    }
+    return null;
+};
+
+export const validateResumeUpload = async (req, res, next) => {
+    if (!req.file) return next();
+    try {
+        const problem = await validateResumeFile(req.file);
+        if (problem) {
+            await fs.promises.unlink(req.file.path).catch(() => {});
+            return next(new ApiError(400, problem));
         }
         return next();
     } catch (error) {

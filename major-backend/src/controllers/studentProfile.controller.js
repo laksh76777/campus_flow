@@ -6,6 +6,7 @@ import { StudentProfile } from "../models/studentProfile.model.js";
 import { User } from "../models/user.models.js";
 import { PlacementSession } from "../models/placementSession.model.js";
 import { Notification } from "../models/notification.model.js";
+import { Application } from "../models/application.model.js";
 import { uploadOnCloudinary, deleteFromCloudinary } from "../utils/cloudinary.js";
 import { resolveStudentProgram } from "../constants/programCatalog.js";
 import { ensureProfileEditable } from "../services/studentProfilePermissions.service.js";
@@ -707,6 +708,16 @@ const safeMigrateExistingProfiles = asyncHandler(async (req, res) => {
 // @desc    Update student resume
 // @route   PATCH /api/v1/studentprofile/update-resume
 // @access  Student
+// Submitted applications keep a reference to the resume they were sent with.
+// Only delete the stored file when no application still points at it.
+const deleteProfileResumeAssetIfUnused = async (publicId) => {
+    if (!publicId) return;
+    const stillReferenced = await Application.exists({ "submittedSnapshot.resume.publicId": publicId });
+    if (!stillReferenced) {
+        await deleteFromCloudinary(publicId, "image");
+    }
+};
+
 const updateStudentResume = asyncHandler(async (req, res) => {
     const resumeLocalPath = req.file?.path;
 
@@ -734,7 +745,7 @@ const updateStudentResume = asyncHandler(async (req, res) => {
 
     // Safely delete old resume from Cloudinary if existed
     if (studentProfile.resume?.publicId) {
-        await deleteFromCloudinary(studentProfile.resume.publicId, "image");
+        await deleteProfileResumeAssetIfUnused(studentProfile.resume.publicId);
     }
 
     studentProfile.resume = {
@@ -763,7 +774,7 @@ const deleteStudentResume = asyncHandler(async (req, res) => {
     ensureProfileEditable(studentProfile, req.user);
 
     if (studentProfile.resume?.publicId) {
-        await deleteFromCloudinary(studentProfile.resume.publicId, "image");
+        await deleteProfileResumeAssetIfUnused(studentProfile.resume.publicId);
     }
 
     studentProfile.resume = {

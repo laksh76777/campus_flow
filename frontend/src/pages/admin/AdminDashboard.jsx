@@ -24,6 +24,7 @@ import {
   getAllCompanies,
   getAllPlacementDrives,
   createPlacementDrive,
+  updatePlacementDrive,
   deactivatePlacementDrive,
   reactivatePlacementDrive,
   deletePlacementDrive,
@@ -197,6 +198,17 @@ export default function AdminDashboard({ initialTab = "overview" }) {
       setDrives((prev) => [created, ...prev]);
       return created;
     }
+  };
+
+  // Save edits and replace the drive with the server's confirmed copy
+  const handleUpdateDrive = async (driveId, changes) => {
+    const res = await updatePlacementDrive(driveId, changes);
+    const saved = res?.data;
+    if (!saved?._id) {
+      throw new Error("The server did not return the updated drive.");
+    }
+    setDrives((prev) => prev.map((d) => (d._id === saved._id ? saved : d)));
+    return saved;
   };
 
   const handleToggleDriveStatus = async (driveId, currentActive) => {
@@ -401,6 +413,7 @@ export default function AdminDashboard({ initialTab = "overview" }) {
               drives={scopedDrives}
               companies={companies}
               onCreateDrive={handleCreateDrive}
+              onUpdateDrive={handleUpdateDrive}
               onToggleDriveStatus={handleToggleDriveStatus}
               onDeleteDrive={handleDeletePlacementDrive}
               onViewApplicants={handleViewApplicants}

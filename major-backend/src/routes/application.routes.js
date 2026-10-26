@@ -2,7 +2,7 @@ import { Router } from "express";
 import { verifyAdmin, verifyJWT, verifyStudent } from "../middlewares/auth.middleware.js";
 import { applyRateLimiter } from "../middlewares/security.middleware.js";
 import { validateApplicationStatus } from "../middlewares/validation.middleware.js";
-import { upload } from "../middlewares/multer.middleware.js";
+import { upload, validateResumeUpload } from "../middlewares/multer.middleware.js";
 import {
     applyForPlacement,
     getMyApplications,
@@ -32,6 +32,7 @@ router.route("/:driveId/apply").post(
     verifyStudent,
     applyRateLimiter,
     upload.single("resume"),
+    validateResumeUpload,
     applyForPlacement
 );
 

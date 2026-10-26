@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   HelpCircle,
   Sparkles,
+  Pencil,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { getPublicDepartments } from "../../services/authService";
@@ -73,7 +74,7 @@ const DEFAULT_FIELDS = [
   { fieldKey: "tenthPercentage", label: "Class 10 Percentage", category: "academic", requiredToApply: true, visibleToTpo: true, shareWithCompany: true },
   { fieldKey: "twelfthOrDiploma", label: "Class 12 / Diploma Percentage", category: "academic", requiredToApply: true, visibleToTpo: true, shareWithCompany: true },
   { fieldKey: "educationGaps", label: "Education Gap Declaration", category: "academic", requiredToApply: false, visibleToTpo: true, shareWithCompany: false },
-  { fieldKey: "resume", label: "Master Resume Document", category: "documents", requiredToApply: true, visibleToTpo: true, shareWithCompany: true, documentRequired: true },
+  { fieldKey: "resume", label: "Resume (profile or uploaded with the application)", category: "documents", requiredToApply: true, visibleToTpo: true, shareWithCompany: true, documentRequired: true },
   { fieldKey: "tenthMarksheet", label: "Class 10 Marksheet", category: "documents", requiredToApply: false, visibleToTpo: true, shareWithCompany: false, documentRequired: true },
   { fieldKey: "twelfthMarksheet", label: "Class 12 / Diploma Marksheet", category: "documents", requiredToApply: false, visibleToTpo: true, shareWithCompany: false, documentRequired: true },
   { fieldKey: "currentAddress", label: "Current Address", category: "family_address", requiredToApply: false, visibleToTpo: true, shareWithCompany: false },
@@ -122,10 +123,75 @@ const getDefaultFormData = () => {
   };
 };
 
+// Local calendar date (YYYY-MM-DD) for <input type="date">
+const toDateInput = (value) => {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+
+// Prefill the drive form from a saved drive
+const driveToFormData = (drive) => {
+  const defaults = getDefaultFormData();
+  const idOf = (value) => (value && typeof value === "object" ? value._id : value) || "";
+  return {
+    ...defaults,
+    company: idOf(drive.company),
+    jobTitle: drive.jobTitle || "",
+    jobType: drive.jobType || "full-time",
+    internshipType: drive.internshipType || "not_applicable",
+    stipend: drive.stipend || "",
+    internshipDuration: drive.internshipDuration || "",
+    jdUrl: drive.jdPdf?.url || "",
+    package: drive.package != null ? String(drive.package) : "",
+    location: drive.location || "",
+    checkCgpa: drive.checkCgpa !== false,
+    minimumCGPA: drive.minimumCGPA != null ? String(drive.minimumCGPA) : "0",
+    checkBacklogs: drive.checkBacklogs !== false,
+    maximumBacklogs: drive.maximumBacklogs != null ? String(drive.maximumBacklogs) : "0",
+    checkTenthMarks: Boolean(drive.checkTenthMarks),
+    minimumTenthPercentage: String(drive.minimumTenthPercentage ?? defaults.minimumTenthPercentage),
+    checkTwelfthMarks: Boolean(drive.checkTwelfthMarks),
+    minimumTwelfthPercentage: String(drive.minimumTwelfthPercentage ?? defaults.minimumTwelfthPercentage),
+    checkEducationGaps: Boolean(drive.checkEducationGaps),
+    allowEducationGaps: drive.allowEducationGaps !== false,
+    maxEducationGapYears: String(drive.maxEducationGapYears ?? 0),
+    customQuestions: Array.isArray(drive.customQuestions) ? drive.customQuestions.map((q) => ({ ...q })) : [],
+    graduationYear: drive.graduationYear != null ? String(drive.graduationYear) : "",
+    placementSession: idOf(drive.placementSession),
+    eligibleProgramCodes: Array.isArray(drive.eligibleProgramCodes) ? [...drive.eligibleProgramCodes] : [],
+    applicationStartDate: toDateInput(drive.applicationStartDate),
+    applicationDeadline: toDateInput(drive.applicationDeadline),
+    driveDate: toDateInput(drive.driveDate),
+    venue: drive.venue || "",
+    jobDescription: drive.jobDescription || "",
+    reminderSettings: {
+      remindersEnabled: drive.reminderSettings?.remindersEnabled !== false,
+      reminderOffsetsHours: drive.reminderSettings?.reminderOffsetsHours?.length ? [...drive.reminderSettings.reminderOffsetsHours] : [6],
+      channels: drive.reminderSettings?.channels?.length ? [...drive.reminderSettings.channels] : ["in_app", "email"],
+    },
+    studentRequirements: Array.isArray(drive.studentRequirements) && drive.studentRequirements.length
+      ? drive.studentRequirements.map((r) => ({ ...r }))
+      : DEFAULT_FIELDS.map((f) => ({ ...f })),
+  };
+};
+
+// Only the fields the admin actually changed are sent, so untouched values
+// (e.g. an exact deadline time) are never overwritten by the form's date-only inputs.
+const changedFields = (initial, current) => {
+  const changes = {};
+  for (const key of Object.keys(current)) {
+    if (JSON.stringify(current[key]) !== JSON.stringify(initial[key])) changes[key] = current[key];
+  }
+  return changes;
+};
+
 export default function ManageDrives({
   drives = [],
   companies = [],
   onCreateDrive,
+  onUpdateDrive,
   onToggleDriveStatus,
   onDeleteDrive,
   onViewApplicants,
@@ -140,6 +206,9 @@ export default function ManageDrives({
   const [programs, setPrograms] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [jdFile, setJdFile] = useState(null);
+  // Drive being edited (null = creating a new drive) and the form state it was opened with
+  const [editingDrive, setEditingDrive] = useState(null);
+  const [editBaseline, setEditBaseline] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -161,6 +230,32 @@ export default function ManageDrives({
   const setModalVisible = setIsCreateModalOpen || setInternalModalOpen;
 
   const [formData, setFormData] = useState(getDefaultFormData);
+
+  const closeModal = () => {
+    setModalVisible(false);
+    if (editingDrive) {
+      setEditingDrive(null);
+      setEditBaseline(null);
+      setFormData(getDefaultFormData());
+      setJdFile(null);
+    }
+  };
+
+  const openEditDrive = (drive) => {
+    const prefilled = driveToFormData(drive);
+    setEditingDrive(drive);
+    setEditBaseline(prefilled);
+    setFormData(prefilled);
+    setJdFile(null);
+    setModalVisible(true);
+  };
+
+  // A drive's own (possibly closed) session must remain selectable while editing it
+  const sessionOptions = useMemo(() => {
+    const current = editingDrive?.placementSession;
+    if (!current || typeof current !== "object" || sessions.some((s) => s._id === current._id)) return sessions;
+    return [...sessions, current];
+  }, [sessions, editingDrive]);
 
   const toggleProgram = (programCode) => {
     setFormData((prev) => {
@@ -277,6 +372,11 @@ export default function ManageDrives({
       return;
     }
 
+    if (editingDrive) {
+      await submitEdit();
+      return;
+    }
+
     try {
       setSubmitting(true);
       const payload = {
@@ -328,6 +428,61 @@ export default function ManageDrives({
     }
   };
 
+  const submitEdit = async () => {
+    const changes = changedFields(editBaseline, formData);
+    if (Object.keys(changes).length === 0 && !jdFile) {
+      toast("No changes to save");
+      return;
+    }
+
+    // Normalize changed values to the API's types
+    const numeric = ["package", "minimumCGPA", "maximumBacklogs", "minimumTenthPercentage", "minimumTwelfthPercentage", "maxEducationGapYears", "graduationYear"];
+    const payload = {};
+    for (const [key, value] of Object.entries(changes)) {
+      if (key === "jdUrl") continue;
+      if (numeric.includes(key)) payload[key] = Number(value);
+      else if (key === "customQuestions") payload[key] = (value || []).filter((q) => q.question && q.question.trim());
+      else if (["applicationStartDate", "applicationDeadline", "driveDate"].includes(key)) {
+        // Keep the original time of day when only the date changes
+        const original = new Date(editingDrive[key]);
+        const [y, m, d] = String(value).split("-").map(Number);
+        const next = new Date(original);
+        next.setFullYear(y, m - 1, d);
+        payload[key] = next.toISOString();
+      } else payload[key] = value;
+    }
+    if (changes.eligibleProgramCodes) {
+      payload.eligibleBranches = formData.eligibleProgramCodes.map(
+        (code) => programs.find((program) => program.code === code)?.name || code
+      );
+    }
+    if (changes.jdUrl !== undefined && changes.jdUrl) payload.jdUrl = changes.jdUrl;
+
+    try {
+      setSubmitting(true);
+      let body = payload;
+      if (jdFile) {
+        body = new FormData();
+        Object.entries(payload).forEach(([key, val]) => {
+          if (val === undefined || val === null) return;
+          body.append(key, typeof val === "object" ? JSON.stringify(val) : val);
+        });
+        body.append("jdPdf", jdFile);
+      }
+      await onUpdateDrive(editingDrive._id, body);
+      toast.success("Placement drive updated");
+      setModalVisible(false);
+      setEditingDrive(null);
+      setEditBaseline(null);
+      setFormData(getDefaultFormData());
+      setJdFile(null);
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Could not update the placement drive");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header Bar */}
@@ -348,6 +503,13 @@ export default function ManageDrives({
 
         <button
           onClick={() => {
+            if (editingDrive) {
+              setEditingDrive(null);
+              setEditBaseline(null);
+              setFormData({ ...getDefaultFormData(), company: companies[0]?._id || "" });
+              setModalVisible(true);
+              return;
+            }
             // Default company to first available if not set
             if (!formData.company && companies.length > 0) {
               setFormData((prev) => ({ ...prev, company: companies[0]._id }));
@@ -617,6 +779,17 @@ export default function ManageDrives({
                   </button>
 
                   <div className="flex items-center gap-1.5">
+                    {onUpdateDrive && !d.isPlacementCompleted && (
+                      <button
+                        type="button"
+                        onClick={() => openEditDrive(d)}
+                        className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700 transition hover:bg-blue-100"
+                        aria-label={`Edit ${compName} ${d.jobTitle}`}
+                      >
+                        <Pencil className="h-3 w-3" />
+                        Edit
+                      </button>
+                    )}
                     <button
                       onClick={() => onToggleDriveStatus(d._id, isActive)}
                       className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition ${
@@ -660,15 +833,19 @@ export default function ManageDrives({
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-slate-900">
-                    Publish New Placement Drive
+                    {editingDrive ? "Edit Placement Drive" : "Publish New Placement Drive"}
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Set up role criteria, salary packages, and deadlines for eligible students
+                    {editingDrive
+                      ? "Only the fields you change are saved. Existing applications are preserved, and reminders are rescheduled if the deadline changes."
+                      : "Set up role criteria, salary packages, and deadlines for eligible students"}
                   </p>
                 </div>
               </div>
               <button
-                onClick={() => setModalVisible(false)}
+                type="button"
+                aria-label="Close drive form"
+                onClick={closeModal}
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
               >
                 <X className="h-4 w-4" />
@@ -835,7 +1012,7 @@ export default function ManageDrives({
                   required
                   value={formData.placementSession}
                   onChange={(e) => {
-                    const session = sessions.find((item) => item._id === e.target.value);
+                    const session = sessionOptions.find((item) => item._id === e.target.value);
                     setFormData({
                       ...formData,
                       placementSession: e.target.value,
@@ -845,7 +1022,7 @@ export default function ManageDrives({
                   className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs focus:border-blue-500 focus:outline-none"
                 >
                   <option value="">-- Select configured placement session --</option>
-                  {sessions.map((session) => (
+                  {sessionOptions.map((session) => (
                     <option key={session._id} value={session._id}>
                       {session.name || `Class of ${session.sessionYear}`} ({session.academicYear})
                     </option>
@@ -1627,7 +1804,7 @@ export default function ManageDrives({
               <div className="mt-5 flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setModalVisible(false)}
+                  onClick={closeModal}
                   className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
                 >
                   Cancel
@@ -1635,9 +1812,12 @@ export default function ManageDrives({
                 <button
                   type="submit"
                   disabled={submitting}
+                  aria-busy={submitting}
                   className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-500 transition disabled:opacity-50"
                 >
-                  {submitting ? "Publishing..." : "Publish Drive"}
+                  {editingDrive
+                    ? (submitting ? "Saving..." : "Save Changes")
+                    : (submitting ? "Publishing..." : "Publish Drive")}
                 </button>
               </div>
             </form>

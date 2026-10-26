@@ -638,8 +638,8 @@ export default function StudentDashboard() {
       applicationId: selectedApp._id,
       status: selectedApp.status,
       companyName: company,
-      jobTitle: drive.jobTitle || "Software Engineer",
-      package: selectedApp.offeredPackage || drive.package || 18,
+      jobTitle: drive.jobTitle || "Role not recorded",
+      package: selectedApp.offeredPackage ?? drive.package ?? "—",
       selectedAt: selectedApp.statusUpdatedAt || selectedApp.updatedAt,
     };
   }, [dashboardStats, applications]);
