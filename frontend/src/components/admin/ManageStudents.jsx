@@ -362,27 +362,125 @@ export default function ManageStudents({
       </section>
 
       {/* Search and Filters Toolbar */}
-      <div className="space-y-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-        <div className="relative min-w-0 flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <input
-            type="text"
-            aria-label="Search students"
-            placeholder="Search by name, USN, email, phone, or department…"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50/70 py-3 pl-10 pr-10 text-sm text-slate-800 placeholder-slate-400 transition focus:border-indigo-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10"
-          />
-          {searchQuery && <button type="button" onClick={() => setSearchQuery("")} aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700"><X className="h-4 w-4"/></button>}
+      <div className="space-y-3.5 rounded-3xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-xs">
+        {/* Top Controls: Search Input + View Mode Switcher + Density + Export */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          {/* Search Box - Prominent, Spacious, Never Squished */}
+          <div className="relative flex-1 max-w-xl w-full">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <input
+              type="text"
+              aria-label="Search students"
+              placeholder="Search by name, USN, email, phone, or department..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50/70 py-2.5 pl-10 pr-10 text-xs sm:text-sm text-slate-800 placeholder-slate-400 transition focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-3 focus:ring-indigo-500/10 shadow-2xs"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                aria-label="Clear search"
+                className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Action Buttons & View Toggles */}
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
+            {/* View Mode Toggle: Department View vs Table */}
+            <div className="flex items-center rounded-xl border border-slate-200 bg-slate-100 p-1">
+              <button
+                type="button"
+                onClick={() => setViewMode("hierarchical")}
+                className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition flex items-center gap-1.5 ${
+                  viewMode === "hierarchical"
+                    ? "bg-white text-indigo-700 shadow-xs font-extrabold"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <Layers className="h-3.5 w-3.5" />
+                <span>Department View</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("table")}
+                className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition flex items-center gap-1.5 ${
+                  viewMode === "table"
+                    ? "bg-white text-indigo-700 shadow-xs font-extrabold"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5" />
+                <span>Table View</span>
+              </button>
+            </div>
+
+            {/* Density / Line-Width Toggle */}
+            <button
+              type="button"
+              onClick={() => setDensityMode(isCompact ? "comfortable" : "compact")}
+              className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold transition shadow-2xs ${
+                isCompact
+                  ? "border-indigo-600 bg-indigo-600 text-white hover:bg-indigo-700"
+                  : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
+              }`}
+              title={
+                isCompact
+                  ? "Currently in Compact Line View (ideal for 300+ records). Click to switch to Comfortable."
+                  : "Currently in Comfortable View. Click to switch to Compact Line View."
+              }
+            >
+              {isCompact ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+              <span>{isCompact ? "Compact Lines" : "Comfortable"}</span>
+            </button>
+
+            {/* Table Page Size Selector (Available in Table View) */}
+            {viewMode === "table" && (
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 shrink-0">
+                <span className="hidden sm:inline">Rows:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="rounded-xl border border-slate-200 bg-slate-50/70 px-2.5 py-2 text-xs font-bold text-slate-700 focus:border-indigo-500 focus:bg-white focus:outline-none transition shadow-2xs"
+                >
+                  <option value="all">All ({filteredStudents.length})</option>
+                  <option value="50">50 / page</option>
+                  <option value="100">100 / page</option>
+                  <option value="250">250 / page</option>
+                </select>
+              </div>
+            )}
+
+            {/* Export Cohort CSV Button */}
+            <button
+              type="button"
+              onClick={handleExportCSV}
+              title="Download CSV spreadsheet of current student records"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-300/80 bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 text-xs font-bold transition active:scale-95 shadow-xs"
+            >
+              <Download className="h-3.5 w-3.5" />
+              <span>Export CSV</span>
+            </button>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0">
+        {/* Filter Selectors Strip */}
+        <div className="flex items-center gap-2 flex-wrap pt-3 border-t border-slate-100">
+          <div className="text-xs font-bold text-slate-500 mr-1 hidden sm:inline-block">
+            Filter:
+          </div>
+
           {/* Placement Session Filter */}
           <select
             value={internalSessionFilter}
             onChange={handleSessionChange}
-            className="min-w-44 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/10"
+            className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2 text-xs font-semibold text-slate-700 focus:border-indigo-500 focus:bg-white focus:outline-none transition shadow-2xs min-w-44"
           >
             <option value="all">All Placement Sessions</option>
             {sessions.map((sess) => (
@@ -396,7 +494,7 @@ export default function ManageStudents({
           <select
             value={branchFilter}
             onChange={(e) => setBranchFilter(e.target.value)}
-            className="min-w-40 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/10"
+            className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2 text-xs font-semibold text-slate-700 focus:border-indigo-500 focus:bg-white focus:outline-none transition shadow-2xs min-w-40"
           >
             <option value="all">All Departments</option>
             {programs.map((program) => (
@@ -413,7 +511,7 @@ export default function ManageStudents({
           <select
             value={backlogFilter}
             onChange={(e) => setBacklogFilter(e.target.value)}
-            className="min-w-36 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/10"
+            className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2 text-xs font-semibold text-slate-700 focus:border-indigo-500 focus:bg-white focus:outline-none transition shadow-2xs min-w-36"
           >
             <option value="all">All Standing</option>
             <option value="zero">Zero Backlogs</option>
@@ -424,94 +522,34 @@ export default function ManageStudents({
           <select
             value={placedFilter}
             onChange={(e) => setPlacedFilter(e.target.value)}
-            className="min-w-32 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/10"
+            className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2 text-xs font-semibold text-slate-700 focus:border-indigo-500 focus:bg-white focus:outline-none transition shadow-2xs min-w-32"
           >
             <option value="all">All Status</option>
             <option value="placed">✓ Placed</option>
             <option value="unplaced">⏳ Unplaced</option>
           </select>
 
-          {/* View Mode Toggle: Hierarchical vs Table */}
-          <div className="flex items-center rounded-xl border border-slate-200 bg-slate-100 p-1">
+          {/* Active Filter Clear Button */}
+          {activeFilterCount > 0 && (
             <button
               type="button"
-              onClick={() => setViewMode("hierarchical")}
-              className={`rounded-lg px-2.5 py-1 text-xs font-bold transition flex items-center gap-1.5 ${
-                viewMode === "hierarchical"
-                  ? "bg-white text-blue-700 shadow-2xs"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
+              onClick={clearFilters}
+              className="inline-flex items-center gap-1 rounded-xl bg-indigo-50 border border-indigo-200 px-2.5 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100 transition sm:ml-auto"
             >
-              <Layers className="h-3.5 w-3.5" />
-              <span>Department View</span>
+              <X className="h-3.5 w-3.5" />
+              <span>Clear filters ({activeFilterCount})</span>
             </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("table")}
-              className={`rounded-lg px-2.5 py-1 text-xs font-bold transition flex items-center gap-1.5 ${
-                viewMode === "table"
-                  ? "bg-white text-blue-700 shadow-2xs"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <FileSpreadsheet className="h-3.5 w-3.5" />
-              <span>Table View</span>
-            </button>
-          </div>
-
-          {/* Density / Line-Width Toggle (Flexible view for 300+ records) */}
-          <div className="flex items-center rounded-xl border border-slate-200 bg-slate-100 p-1">
-            <button
-              type="button"
-              onClick={() => setDensityMode(isCompact ? "comfortable" : "compact")}
-              className={`rounded-lg px-2.5 py-1 text-xs font-bold transition flex items-center gap-1.5 ${
-                isCompact
-                  ? "bg-indigo-600 text-white shadow-2xs"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-              title={
-                isCompact
-                  ? "Currently in Compact Line View (ideal for 300+ records). Click to switch to Comfortable."
-                  : "Currently in Comfortable View. Click to switch to Compact Line View."
-              }
-            >
-              {isCompact ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-              <span>{isCompact ? "Compact Lines (300+)" : "Comfortable"}</span>
-            </button>
-          </div>
-
-          {/* Table Page Size Selector (Available in Table View) */}
-          {viewMode === "table" && (
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 shrink-0">
-              <span className="hidden sm:inline">Rows:</span>
-              <select
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-xs font-bold text-slate-700 focus:border-blue-500 focus:outline-hidden"
-              >
-                <option value="all">All ({filteredStudents.length})</option>
-                <option value="50">50 / page</option>
-                <option value="100">100 / page</option>
-                <option value="250">250 / page</option>
-              </select>
-            </div>
           )}
+        </div>
 
-          {/* Export Cohort CSV Button */}
-          <button
-            onClick={handleExportCSV}
-            title="Download CSV spreadsheet of current student records"
-            className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 px-3.5 py-2 text-xs font-bold transition active:scale-95 shadow-2xs"
-          >
-            <Download className="h-3.5 w-3.5 text-emerald-600" />
-            <span>Export CSV</span>
-          </button>
-        </div>
-        {activeFilterCount > 0 && <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 text-xs"><span className="font-medium text-slate-500"><strong className="text-slate-700">{activeFilterCount}</strong> active filter{activeFilterCount === 1 ? "" : "s"} · {filteredStudents.length.toLocaleString()} matching student{filteredStudents.length === 1 ? "" : "s"}</span><button type="button" onClick={clearFilters} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 font-bold text-indigo-700 transition hover:bg-indigo-50"><X className="h-3.5 w-3.5"/>Clear all filters</button></div>}
-        </div>
+        {/* Active Filter Results Info */}
+        {activeFilterCount > 0 && (
+          <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+            <span>
+              Showing <strong className="text-slate-800 font-bold">{filteredStudents.length.toLocaleString()}</strong> of <strong className="text-slate-800 font-bold">{students.length.toLocaleString()}</strong> registered students
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Empty State */}
