@@ -52,17 +52,17 @@ export default function ProfileLockConfirmationModal({
   const parentContact = formData.fatherPhone || formData.motherPhone || studentProfile.family?.parentPhone || "N/A";
 
   return (
-    <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl max-h-[90vh] flex flex-col bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200">
+    <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-2 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200 sm:items-center sm:p-4">
+      <div className="relative my-auto flex w-full max-w-2xl max-h-[calc(100dvh-1rem)] flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 sm:max-h-[calc(100dvh-2rem)]">
         {/* Header Ribbon */}
-        <div className="bg-gradient-to-r from-red-950 via-red-900 to-orange-900 text-white px-6 py-4 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
+        <div className="bg-gradient-to-r from-red-950 via-red-900 to-orange-900 text-white px-4 py-3 flex items-center justify-between shrink-0 sm:px-6 sm:py-4">
+          <div className="flex min-w-0 items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-orange-200 border border-white/20">
               <Lock className="h-5 w-5" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="font-extrabold text-base tracking-tight text-white">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="font-extrabold text-sm tracking-tight text-white sm:text-base">
                   Institutional Profile Verification & Lock
                 </h3>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-orange-400 text-slate-950">
@@ -83,7 +83,7 @@ export default function ProfileLockConfirmationModal({
         </div>
 
         {/* Scrollable Verification Summary */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
           {/* Important Lock Notice Alert */}
           <div className="rounded-2xl border border-amber-300 bg-amber-50/90 p-4 text-amber-900 flex items-start gap-3">
             <AlertTriangle className="h-5 w-5 text-amber-700 shrink-0 mt-0.5" />

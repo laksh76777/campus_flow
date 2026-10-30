@@ -134,6 +134,11 @@ export const getStudentProfileById = async (studentId) => {
   return response.data;
 };
 
+export const getStudentResumeDownloadUrl = async (studentId) => {
+  const response = await api.get(`/studentprofile/${studentId}/resume-download`);
+  return response.data;
+};
+
 // 6. Drive Eligibility Preview & Authorized Overrides (Phase 4 & 5)
 export const getDriveEligibilityPreview = async (driveId) => {
   const response = await api.get(`/placementdrive/${driveId}/eligibility-preview`);

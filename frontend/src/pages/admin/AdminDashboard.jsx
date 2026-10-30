@@ -369,7 +369,7 @@ export default function AdminDashboard({ initialTab = "overview" }) {
           )}
 
           {/* Active Tab View with Scoped Datasets (keyed so each tab fades in) */}
-          <div key={activeTab} className="animate-page space-y-6">
+          <div key={activeTab} className="space-y-6">
           {activeTab === "overview" && (
             <AdminOverview
               stats={stats}

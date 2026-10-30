@@ -1145,8 +1145,8 @@ export default function ManageApplications({
 
       {/* Update Status Modal */}
       {activeModalApp && (
-        <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200">
-          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 max-h-[calc(100dvh-2rem)] overflow-y-auto">
+        <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-2 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200 sm:items-center sm:p-4">
+          <div className="my-auto w-full max-w-lg max-h-[calc(100dvh-1rem)] overflow-y-auto rounded-3xl border border-slate-100 bg-white p-4 shadow-2xl animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 sm:max-h-[calc(100dvh-2rem)] sm:p-6">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-700">
@@ -1347,8 +1347,8 @@ export default function ManageApplications({
 
       {/* Company-Wise Export Hub Modal */}
       {isCompanyExportModalOpen && (
-        <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200">
-          <div className="w-full max-w-2xl max-h-[90vh] flex flex-col rounded-3xl bg-white shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200">
+        <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-2 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200 sm:items-center sm:p-4">
+          <div className="my-auto w-full max-w-2xl max-h-[calc(100dvh-1rem)] flex flex-col rounded-3xl bg-white shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 sm:max-h-[calc(100dvh-2rem)]">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-slate-50/60 shrink-0">
               <div className="flex items-center gap-2.5">

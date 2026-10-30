@@ -95,8 +95,8 @@ export default function ModificationReviewModal({
   };
 
   return (
-    <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200">
-      <div className="relative w-full max-w-xl max-h-[90vh] flex flex-col bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200">
+    <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-2 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200 sm:items-center sm:p-4">
+      <div className="relative my-auto w-full max-w-xl max-h-[calc(100dvh-1rem)] flex flex-col bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 sm:max-h-[calc(100dvh-2rem)]">
         {/* Institutional Top Bar */}
         <div className="bg-gradient-to-r from-red-950 via-red-900 to-orange-900 text-white px-6 py-4 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">

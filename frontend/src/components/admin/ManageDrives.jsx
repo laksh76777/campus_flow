@@ -824,8 +824,8 @@ export default function ManageDrives({
 
       {/* Create Drive Modal */}
       {isModalVisible && (
-        <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200">
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200">
+        <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-2 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200 sm:items-center sm:p-4">
+          <div className="my-auto w-full max-w-2xl max-h-[calc(100dvh-1rem)] overflow-y-auto rounded-3xl bg-white p-4 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 sm:max-h-[calc(100dvh-2rem)] sm:p-6">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
@@ -1801,7 +1801,7 @@ export default function ManageDrives({
               </div>
 
               {/* Modal Buttons */}
-              <div className="mt-5 flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+              <div className="mt-5 flex flex-col-reverse items-stretch justify-end gap-2.5 pt-3 border-t border-slate-100 sm:flex-row sm:items-center">
                 <button
                   type="button"
                   onClick={closeModal}

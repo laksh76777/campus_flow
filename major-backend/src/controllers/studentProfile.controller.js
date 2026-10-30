@@ -7,7 +7,7 @@ import { User } from "../models/user.models.js";
 import { PlacementSession } from "../models/placementSession.model.js";
 import { Notification } from "../models/notification.model.js";
 import { Application } from "../models/application.model.js";
-import { uploadOnCloudinary, deleteFromCloudinary } from "../utils/cloudinary.js";
+import { cloudinary, isCloudinaryConfigured, uploadOnCloudinary, deleteFromCloudinary } from "../utils/cloudinary.js";
 import { resolveStudentProgram } from "../constants/programCatalog.js";
 import { ensureProfileEditable } from "../services/studentProfilePermissions.service.js";
 import { verifyCertificatePipeline, cleanCertificateTitle, computeFileHash, checkCrossStudentDuplicate } from "../services/certificateVerification.service.js";
@@ -933,6 +933,73 @@ const getStudentProfileById = asyncHandler(async (req, res) => {
     );
 });
 
+const getStudentResumeDownloadUrl = asyncHandler(async (req, res) => {
+    const student = await StudentProfile.findById(req.params.studentId).select("resume resumeUrl");
+    if (!student) {
+        throw new ApiError(404, "Student profile not found");
+    }
+
+    const resumeUrl = student.resume?.url || student.resumeUrl;
+    if (!resumeUrl) {
+        throw new ApiError(404, "This student has not uploaded a resume");
+    }
+    if (!isCloudinaryConfigured()) {
+        throw new ApiError(503, "Resume downloads are temporarily unavailable");
+    }
+
+    let parsedUrl;
+    try {
+        parsedUrl = new URL(resumeUrl);
+    } catch {
+        throw new ApiError(400, "The stored resume URL is invalid");
+    }
+
+    const pathSegments = parsedUrl.pathname.split("/").filter(Boolean);
+    const uploadIndex = pathSegments.indexOf("upload");
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+    const resourceType = pathSegments[uploadIndex - 1];
+    if (
+        parsedUrl.hostname !== "res.cloudinary.com" ||
+        pathSegments[0] !== cloudName ||
+        uploadIndex < 2 ||
+        !["image", "raw"].includes(resourceType)
+    ) {
+        throw new ApiError(400, "The stored resume is not a supported Cloudinary asset");
+    }
+
+    const assetSegments = pathSegments.slice(uploadIndex + 1);
+    if (/^v\d+$/.test(assetSegments[0] || "")) {
+        assetSegments.shift();
+    }
+    let urlPublicId;
+    try {
+        urlPublicId = assetSegments.map((segment) => decodeURIComponent(segment)).join("/");
+    } catch {
+        throw new ApiError(400, "The stored resume URL is invalid");
+    }
+
+    const publicId = student.resume?.publicId || urlPublicId;
+    const format = urlPublicId.split(".").pop()?.toLowerCase();
+    if (
+        !publicId ||
+        publicId.startsWith("/") ||
+        publicId.split("/").some((segment) => segment === "." || segment === "..") ||
+        !/^[a-z0-9]{2,5}$/.test(format || "")
+    ) {
+        throw new ApiError(400, "The stored resume asset details are invalid");
+    }
+
+    const url = cloudinary.utils.private_download_url(publicId, format, {
+        resource_type: resourceType,
+        type: "upload",
+        expires_at: Math.floor(Date.now() / 1000) + 300
+    });
+
+    return res.status(200).json(
+        new ApiResponse(200, { url }, "Temporary resume download link generated")
+    );
+});
+
 // @desc    Lock student profile after student verifies details
 // @route   POST /api/v1/studentprofile/lock-profile
 // @access  Student / Admin
@@ -1548,6 +1615,7 @@ export {
     deleteStudentResume,
     getAllStudentProfiles,
     getStudentProfileById,
+    getStudentResumeDownloadUrl,
     addSemesterResult,
     addBacklogRecord,
     deleteBacklogRecord,

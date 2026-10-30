@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import {
   X,
   Mail,
@@ -21,6 +22,7 @@ import {
 import toast from "react-hot-toast";
 import { getResumeViewUrl } from "../../utils/resumeHelper";
 import { verifyStudentProfile, deleteBacklogRecord, reviewCertificate } from "../../services/studentService";
+import { getStudentResumeDownloadUrl } from "../../services/adminService";
 
 export default function StudentDetailModal({ student, isOpen, onClose, onStudentVerified }) {
   const [verifying, setVerifying] = useState(false);
@@ -100,6 +102,27 @@ export default function StudentDetailModal({ student, isOpen, onClose, onStudent
   const certificates = Array.isArray(student.certificates) ? student.certificates : [];
   const rawResumeUrl = student.resume?.url || student.resumeUrl;
   const resumeUrl = getResumeViewUrl(rawResumeUrl);
+  const isCloudinaryResume = rawResumeUrl?.includes("res.cloudinary.com");
+
+  const handleOpenResume = async () => {
+    const resumeWindow = window.open("about:blank", "_blank");
+    if (!resumeWindow) {
+      toast.error("Allow pop-ups to open the student resume");
+      return;
+    }
+
+    try {
+      const response = await getStudentResumeDownloadUrl(student._id);
+      const downloadUrl = response?.data?.url;
+      if (!downloadUrl) {
+        throw new Error("The resume download link was not returned");
+      }
+      resumeWindow.location.replace(downloadUrl);
+    } catch (error) {
+      resumeWindow.close();
+      toast.error(error.response?.data?.message || error.message || "Could not open the student resume");
+    }
+  };
   const semesterResults = Array.isArray(student.semesterResults)
     ? student.semesterResults
     : [];
@@ -159,7 +182,7 @@ export default function StudentDetailModal({ student, isOpen, onClose, onStudent
     }
   };
 
-  return (
+  return createPortal(
     <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200">
       <div
         className="relative flex flex-col w-full max-w-3xl max-h-[calc(100dvh-1.5rem)] bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200"
@@ -271,16 +294,28 @@ export default function StudentDetailModal({ student, isOpen, onClose, onStudent
             </div>
 
             {resumeUrl && (
-              <a
-                href={resumeUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 shadow-xs transition"
-              >
+              isCloudinaryResume ? (
+                <button
+                  type="button"
+                  onClick={handleOpenResume}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 shadow-xs transition"
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  <span>Open Resume</span>
+                  <ExternalLink className="h-3 w-3" />
+                </button>
+              ) : (
+                <a
+                  href={resumeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 shadow-xs transition"
+                >
                 <FileText className="h-3.5 w-3.5" />
                 <span>Open Resume</span>
                 <ExternalLink className="h-3 w-3" />
-              </a>
+                </a>
+              )
             )}
           </div>
 
@@ -622,6 +657,7 @@ export default function StudentDetailModal({ student, isOpen, onClose, onStudent
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

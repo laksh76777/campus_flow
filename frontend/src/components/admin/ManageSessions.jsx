@@ -507,8 +507,8 @@ export default function ManageSessions({ onSessionChanged }) {
 
       {/* Inspect Session Details Modal */}
       {inspectedSession && (
-        <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200">
-          <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 max-h-[calc(100dvh-2rem)] overflow-y-auto">
+        <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-2 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200 sm:items-center sm:p-4">
+          <div className="my-auto w-full max-w-md rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 max-h-[calc(100dvh-1rem)] overflow-y-auto sm:max-h-[calc(100dvh-2rem)] sm:p-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <GraduationCap className="h-5 w-5 text-blue-600" />
@@ -563,8 +563,8 @@ export default function ManageSessions({ onSessionChanged }) {
 
       {/* Migration / Backfill Audit Modal */}
       {isBackfillOpen && (
-        <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200">
-          <div className="w-full max-w-xl rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl space-y-5 max-h-[85vh] flex flex-col animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200">
+        <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-2 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200 sm:items-center sm:p-4">
+          <div className="my-auto w-full max-w-xl rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl space-y-5 max-h-[calc(100dvh-1rem)] flex flex-col animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 overflow-y-auto sm:max-h-[calc(100dvh-2rem)] sm:p-6">
             <div className="flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="h-10 w-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
@@ -647,9 +647,9 @@ export default function ManageSessions({ onSessionChanged }) {
               ) : null}
             </div>
 
-            <div className="p-4 border-t border-slate-200 bg-slate-50 -mx-6 -mb-6 rounded-b-3xl flex items-center justify-between shrink-0">
+            <div className="-mx-4 -mb-4 flex shrink-0 flex-col gap-3 rounded-b-3xl border-t border-slate-200 bg-slate-50 p-4 sm:-mx-6 sm:-mb-6 sm:flex-row sm:items-center sm:justify-between">
               <span className="text-[11px] text-slate-400 font-medium">Safe dry-run preview enabled</span>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsBackfillOpen(false)}
@@ -673,8 +673,8 @@ export default function ManageSessions({ onSessionChanged }) {
 
       {/* Create Session Modal */}
       {isCreateOpen && (
-        <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200">
-          <div className="relative w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 sm:p-7 shadow-2xl max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200">
+        <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-2 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200 sm:items-center sm:p-4">
+          <div className="relative my-auto w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl max-h-[calc(100dvh-1rem)] overflow-y-auto animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 sm:max-h-[calc(100dvh-2rem)] sm:p-7">
             <button
               onClick={() => setIsCreateOpen(false)}
               className="absolute top-5 right-5 h-8 w-8 flex items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
@@ -922,7 +922,7 @@ export default function ManageSessions({ onSessionChanged }) {
                 </label>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+              <div className="flex flex-col-reverse items-stretch gap-2 pt-3 border-t border-slate-100 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
                 <button
                   type="button"
                   onClick={() => setIsCreateOpen(false)}

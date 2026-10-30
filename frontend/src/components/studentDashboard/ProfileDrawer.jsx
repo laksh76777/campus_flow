@@ -2827,8 +2827,8 @@ export default function ProfileDrawer({
       )}
       {/* MODAL: ADD CERTIFICATE / CREDENTIAL */}
       {isAddCertOpen && (
-        <div role="dialog" aria-modal="true" className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200">
-          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200">
+        <div role="dialog" aria-modal="true" className="fixed inset-0 z-60 flex items-start justify-center overflow-y-auto p-2 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200 sm:items-center sm:p-4">
+          <div className="my-auto w-full max-w-md max-h-[calc(100dvh-1rem)] overflow-y-auto rounded-2xl bg-white p-4 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 sm:max-h-[calc(100dvh-2rem)] sm:p-5">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-purple-50 text-purple-600">

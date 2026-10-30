@@ -124,7 +124,7 @@ export default function StudentSupportChat() {
   };
 
   return (
-    <section className="mx-auto flex h-[min(780px,calc(100dvh-9rem))] min-h-[560px] max-w-6xl flex-col overflow-hidden rounded-3xl border border-line bg-white shadow-sm lg:flex-row" aria-label="Student support chat">
+    <section className="mx-auto flex h-[min(780px,calc(100dvh-9rem))] min-h-[min(560px,calc(100dvh-9rem))] max-w-6xl flex-col overflow-hidden rounded-3xl border border-line bg-white shadow-sm lg:flex-row" aria-label="Student support chat">
       {/* Conversation list */}
       <aside className="flex max-h-52 w-full shrink-0 flex-col border-b border-line bg-surface-muted/70 lg:max-h-none lg:w-80 lg:border-b-0 lg:border-r">
         <div className="flex items-center justify-between gap-3 px-4 py-3 lg:p-5">

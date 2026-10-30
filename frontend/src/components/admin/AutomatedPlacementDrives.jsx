@@ -808,21 +808,21 @@ export default function AutomatedPlacementDrives({
 
       {/* Interactive Drive Workspace Modal */}
       {activeDriveWorkspace && (
-        <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200">
-          <div className="relative w-full max-w-5xl max-h-[92vh] flex flex-col rounded-3xl bg-white shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200">
+        <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-2 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200 sm:p-5">
+          <div className="relative my-auto flex min-h-0 w-full max-w-5xl max-h-[calc(100dvh-1rem)] flex-col rounded-3xl bg-white shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 sm:max-h-[calc(100dvh-2.5rem)]">
             {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 bg-slate-50/70">
-              <div className="flex items-center gap-3">
+            <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/70 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
+              <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-600 text-white font-black text-lg shadow-sm">
                   {activeDriveWorkspace.company?.companyName?.charAt(0) || "C"}
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-black text-slate-900 text-base sm:text-lg">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="break-words font-black text-slate-900 text-base sm:text-lg">
                       {activeDriveWorkspace.company?.companyName || "Recruiter"}
                     </h3>
                     <span className="text-xs text-slate-400 font-semibold">•</span>
-                    <span className="text-xs font-bold text-indigo-700">
+                    <span className="break-words text-xs font-bold text-indigo-700">
                       {activeDriveWorkspace.jobTitle}
                     </span>
                     {activeDriveWorkspace.isPlacementCompleted && (
@@ -837,7 +837,7 @@ export default function AutomatedPlacementDrives({
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
                 {onDeleteDrive && (
                   <button
                     type="button"
@@ -891,8 +891,8 @@ export default function AutomatedPlacementDrives({
             </div>
 
             {/* Workspace Navigation Tabs */}
-            <div className="flex items-center justify-between border-b border-slate-100 px-6 bg-white">
-              <div className="flex items-center gap-6 text-xs font-bold">
+            <div className="flex min-w-0 items-center justify-between gap-3 overflow-x-auto border-b border-slate-100 px-3 bg-white sm:px-6">
+              <div className="flex min-w-max items-center gap-6 text-xs font-bold">
                 <button
                   type="button"
                   onClick={() => setActiveWorkspaceTab("pipeline")}
@@ -943,7 +943,7 @@ export default function AutomatedPlacementDrives({
             </div>
 
             {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            <div className="min-h-0 flex-1 overflow-y-auto p-3 space-y-6 sm:p-6">
               {loadingWorkspace ? (
                 <div className="py-16 text-center text-xs font-semibold text-slate-400 animate-pulse">
                   Loading recruitment pipeline & candidate records...
@@ -1090,8 +1090,8 @@ export default function AutomatedPlacementDrives({
                     </div>
 
                     {/* Candidate Table */}
-                    <div className="rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-                      <table className="w-full text-left text-xs">
+                    <div className="rounded-2xl border border-slate-200 overflow-x-auto shadow-xs">
+                      <table className="w-full min-w-[900px] text-left text-xs">
                         <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
                           <tr>
                             <th className="py-3 px-4">USN / Roll No</th>
@@ -1683,8 +1683,8 @@ export default function AutomatedPlacementDrives({
 
       {/* Manual Update Application Status Modal */}
       {activeModalApp && (
-        <div role="dialog" aria-modal="true" className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200">
-          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 max-h-[calc(100dvh-2rem)] overflow-y-auto">
+        <div role="dialog" aria-modal="true" className="fixed inset-0 z-60 flex items-start justify-center overflow-y-auto p-2 bg-slate-950/55 backdrop-blur-[2px] animate-in fade-in duration-200 sm:items-center sm:p-4">
+          <div className="my-auto w-full max-w-lg rounded-3xl bg-white p-4 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 max-h-[calc(100dvh-1rem)] overflow-y-auto sm:max-h-[calc(100dvh-2rem)] sm:p-6">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700">

@@ -9,6 +9,7 @@ import {
     deleteStudentResume,
     getAllStudentProfiles,
     getStudentProfileById,
+    getStudentResumeDownloadUrl,
     addSemesterResult,
     addBacklogRecord,
     deleteBacklogRecord,
@@ -64,6 +65,7 @@ router.route("/certificates/:certId").delete(verifyJWT, deleteCertificate);
 
 // Admin-accessible batch & audit routes
 router.route("/all-students").get(verifyJWT, verifyAdmin, getAllStudentProfiles);
+router.route("/:studentId/resume-download").get(verifyJWT, verifyAdmin, getStudentResumeDownloadUrl);
 router.route("/migrate-profiles").post(verifyJWT, verifyAdmin, safeMigrateExistingProfiles);
 router.route("/modification-requests").get(verifyJWT, verifyAdmin, getModificationRequests);
 router.route("/modification-requests/:requestId/review").post(verifyJWT, verifyAdmin, reviewModificationRequest);

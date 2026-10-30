@@ -327,7 +327,7 @@ export default function AdminSupportInbox() {
       {activeMode === "copilot" ? (
         /* Copilot workspace */
         <section
-          className="flex h-[min(780px,calc(100dvh-13rem))] min-h-[520px] w-full flex-col overflow-hidden rounded-3xl border border-line bg-white shadow-sm animate-in fade-in duration-300"
+          className="flex h-[min(780px,calc(100dvh-13rem))] min-h-[min(520px,calc(100dvh-13rem))] w-full flex-col overflow-hidden rounded-3xl border border-line bg-white shadow-sm animate-in fade-in duration-300"
           aria-label="TPO AI Copilot"
         >
           {/* Quick prompts (always available; shown as cards on a fresh conversation) */}
@@ -614,7 +614,7 @@ export default function AdminSupportInbox() {
       ) : (
         /* Student support tickets */
         <section
-          className="flex h-[min(780px,calc(100dvh-13rem))] min-h-[560px] w-full flex-col overflow-hidden rounded-3xl border border-line bg-white shadow-sm animate-in fade-in duration-300 lg:flex-row"
+          className="flex h-[min(780px,calc(100dvh-13rem))] min-h-[min(560px,calc(100dvh-13rem))] w-full flex-col overflow-hidden rounded-3xl border border-line bg-white shadow-sm animate-in fade-in duration-300 lg:flex-row"
           aria-label="Student support inbox"
         >
           {/* Ticket list */}
